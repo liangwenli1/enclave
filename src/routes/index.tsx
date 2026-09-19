@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Plus, Play, Square, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Dialog, DialogContent, Field, Input, Select, StatusDot } from "@/components/ui";
-import { startEnv, stopEnv } from "@/lib/host";
+import { startEnv, stopEnv, trashEnv, purgeEnv } from "@/lib/host";
 import { t, runtimeLabel } from "@/lib/i18n";
 import { KERNEL_PIN, TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
 import { defaultPlatformVersion, platformLabel } from "@/lib/os";
@@ -160,7 +160,7 @@ function EnvironmentsPage() {
                             <Button onClick={() => useEnclave.getState().restoreEnv(env.id)}>
                               {t(locale, "restore")}
                             </Button>
-                            <Button variant="danger" onClick={() => useEnclave.getState().destroyEnv(env.id)}>
+                            <Button variant="danger" onClick={() => void purgeEnv(env.id)}>
                               {t(locale, "destroy")}
                             </Button>
                           </>
@@ -180,7 +180,7 @@ function EnvironmentsPage() {
                             <Button
                               variant="ghost"
                               onClick={() => {
-                                useEnclave.getState().removeEnv(env.id);
+                                void trashEnv(env.id);
                               }}
                             >
                               <Trash2 className="size-3.5" />

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { getKernelStatusFn } from "@/lib/kernel/functions";
+import { stopEnv } from "@/lib/host";
 import { t, type Locale } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
 import { Onboarding } from "@/components/onboarding";
@@ -203,7 +204,14 @@ function HostSync() {
             sha256?: string;
           }
         > = {};
+        const known = new Set(
+          useEnclave.getState().environments.filter((e) => !e.deletedAt).map((e) => e.id),
+        );
         for (const r of data.runtimes) {
+          if (!known.has(r.envId)) {
+            void stopEnv(r.envId);
+            continue;
+          }
           live[r.envId] = {
             envId: r.envId,
             pid: r.pid,

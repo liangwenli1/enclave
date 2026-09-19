@@ -144,7 +144,11 @@ export async function startEnv(env: Environment) {
 }
 
 export async function stopEnv(envId: string) {
-  await stopEnvFn({ data: { envId } });
+  try {
+    await stopEnvFn({ data: { envId } });
+  } catch {
+    /* host down */
+  }
   const store = useEnclave.getState();
   store.setRuntime(envId, null);
   store.patchEnv(envId, {}, {
@@ -154,6 +158,16 @@ export async function stopEnv(envId: string) {
     level: "info",
   });
   store.addAudit({ action: "stop", target: envId, level: "info", detail: "stopped" });
+}
+
+export async function trashEnv(envId: string) {
+  await stopEnv(envId);
+  useEnclave.getState().removeEnv(envId);
+}
+
+export async function purgeEnv(envId: string) {
+  await stopEnv(envId);
+  useEnclave.getState().destroyEnv(envId);
 }
 
 export async function collectEnvCdp(envId: string) {
