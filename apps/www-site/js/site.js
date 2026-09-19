@@ -12,15 +12,22 @@ function here() {
 }
 
 function injectChrome() {
+  document.body.classList.add("www");
   const header = document.createElement("header");
-  header.innerHTML = `<div class="bar">
-    <a class="brand" href="index.html"><span class="mark"><i></i></span>Enclave</a>
-    <nav>${NAV.map(([href, label]) => `<a href="${href}" class="${here() === href ? "on" : ""}">${label}</a>`).join("")}</nav>
+  header.className = "www-header";
+  const current = here();
+  header.innerHTML = `<div class="www-bar">
+    <a class="www-brand" href="index.html"><span class="www-mark"><i></i></span>Enclave</a>
+    <nav class="www-nav">${NAV.map(
+      ([href, label]) =>
+        `<a href="${href}" data-active="${current === href ? "true" : "false"}">${label}</a>`,
+    ).join("")}</nav>
   </div>`;
   const footer = document.createElement("footer");
-  footer.innerHTML = `<div class="foot">
-    <div>内核 BSD-3-Clause · Ungoogled Chromium · fingerprint-chromium · <a href="legal.html">安全与法律</a></div>
-    <div>安装包不收费。功能靠账号额度解锁。不宣传过某站风控。</div>
+  footer.className = "www-footer";
+  footer.innerHTML = `<div class="www-foot">
+    <div>内核 BSD-3-Clause · fingerprint-chromium · <a href="legal.html">安全与法律</a></div>
+    <div>安装包不收费。功能靠账号额度解锁。</div>
   </div>`;
   document.body.prepend(header);
   document.body.append(footer);
@@ -29,10 +36,18 @@ function injectChrome() {
 const KEY = "enclave.site.account";
 const account = {
   read() {
-    try { return JSON.parse(localStorage.getItem(KEY) || "null"); } catch { return null; }
+    try {
+      return JSON.parse(localStorage.getItem(KEY) || "null");
+    } catch {
+      return null;
+    }
   },
-  write(v) { localStorage.setItem(KEY, JSON.stringify(v)); },
-  clear() { localStorage.removeItem(KEY); },
+  write(v) {
+    localStorage.setItem(KEY, JSON.stringify(v));
+  },
+  clear() {
+    localStorage.removeItem(KEY);
+  },
 };
 
 document.addEventListener("DOMContentLoaded", injectChrome);

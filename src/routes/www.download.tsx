@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { WwwShell, WwwWrap } from "@/components/www-shell";
+import { WwwMain, WwwShell } from "@/components/www-shell";
 import { APP_INSTALLERS, KERNEL_HASHES } from "@/lib/kernel-hashes";
 
 export const Route = createFileRoute("/www/download")({
@@ -10,64 +10,67 @@ export const Route = createFileRoute("/www/download")({
 function WwwDownload() {
   return (
     <WwwShell>
-      <WwwWrap>
-        <h1 className="text-[28px] font-semibold tracking-tight">下载与 SHA256</h1>
-        <p className="mt-2 max-w-2xl text-[14px] text-subtle">
-          1.0 客户下的是签过名的工作台安装包，再由内核管理器校验 fingerprint-chromium。下面两项必须分开看：安装包还没签发；内核哈希来自官方 GitHub Release，已经公示。
+      <WwwMain>
+        <p className="www-kicker">Download</p>
+        <h1>先核哈希，再安装。</h1>
+        <p className="www-lead">
+          客户下的是签过名的工作台安装包。内核由工作台按清单校验。安装包尚未签发，所以没有下载按钮。内核哈希来自官方 GitHub Release，可以先对照。
         </p>
 
-        <h2 className="mt-10 text-[15px] font-medium">工作台安装包</h2>
-        <div className="mt-3 overflow-x-auto rounded-lg border border-line">
-          <table className="w-full min-w-[640px] text-left text-[13px]">
-            <thead className="bg-surface-2 text-[11px] uppercase text-subtle">
-              <tr>
-                <th className="px-3 py-2">平台</th>
-                <th className="px-3 py-2">文件</th>
-                <th className="px-3 py-2">SHA256</th>
-                <th className="px-3 py-2">状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {APP_INSTALLERS.map((row) => (
-                <tr key={row.file} className="border-t border-line">
-                  <td className="px-3 py-2">{row.platform}</td>
-                  <td className="px-3 py-2 font-mono text-[12px]">{row.file}</td>
-                  <td className="px-3 py-2 font-mono text-[12px] text-subtle">—</td>
-                  <td className="px-3 py-2 text-warn">{row.status}</td>
+        <section className="www-section">
+          <h2>工作台安装包</h2>
+          <div className="www-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>平台</th>
+                  <th>文件</th>
+                  <th>SHA256</th>
+                  <th>状态</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-2 text-[12px] text-subtle">没有哈希的安装包不会开放下载按钮。不提供未签名包。</p>
+              </thead>
+              <tbody>
+                {APP_INSTALLERS.map((row) => (
+                  <tr key={row.file}>
+                    <td>{row.platform}</td>
+                    <td className="www-mono">{row.file}</td>
+                    <td>—</td>
+                    <td className="www-warn">{row.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="www-hint">没有哈希的包不会开放下载。不提供未签名安装包。</p>
+        </section>
 
-        <h2 className="mt-10 text-[15px] font-medium">已准入 / 候选内核</h2>
-        <div className="mt-3 overflow-x-auto rounded-lg border border-line">
-          <table className="w-full min-w-[720px] text-left text-[13px]">
-            <thead className="bg-surface-2 text-[11px] uppercase text-subtle">
-              <tr>
-                <th className="px-3 py-2">平台</th>
-                <th className="px-3 py-2">通道</th>
-                <th className="px-3 py-2">SHA256</th>
-                <th className="px-3 py-2">bytes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {KERNEL_HASHES.map((row) => (
-                <tr key={row.platform} className="border-t border-line">
-                  <td className="px-3 py-2">{row.platform}</td>
-                  <td className="px-3 py-2">{row.channel}</td>
-                  <td className="px-3 py-2 font-mono text-[11px]">{row.sha256}</td>
-                  <td className="px-3 py-2 font-mono text-[12px]">{row.bytes}</td>
+        <section className="www-section">
+          <h2>内核 148.0.7778.215</h2>
+          <div className="www-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>平台</th>
+                  <th>通道</th>
+                  <th>SHA256</th>
+                  <th>bytes</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-2 text-[12px] text-subtle">
-          linux-x64 为 stable。win / mac 为 candidate：哈希来自 GitHub Release digest，未在对应系统完成 spawn 基线前不得进 stable。
-        </p>
-      </WwwWrap>
+              </thead>
+              <tbody>
+                {KERNEL_HASHES.map((row) => (
+                  <tr key={row.platform}>
+                    <td>{row.platform}</td>
+                    <td>{row.channel}</td>
+                    <td className="www-mono">{row.sha256}</td>
+                    <td className="www-mono">{row.bytes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="www-hint">linux-x64 为 stable。win / mac 为 candidate，未在对应系统完成 spawn 基线前不得进 stable。</p>
+        </section>
+      </WwwMain>
     </WwwShell>
   );
 }

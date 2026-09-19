@@ -7,10 +7,11 @@
   <link rel="stylesheet" href="css/site.css" />
 </head>
 <body>
-  <main class="wrap" style="max-width:560px">
-    <h1>账号</h1>
-    <p class="lead">厂商许可证 API 还没接。此页是官网注册结构，账号存在你的浏览器本机。不是付费通道。</p>
-    <div id="panel" class="card" style="margin-top:24px"></div>
+  <main class="www-main">
+    <p class="www-kicker">Account</p>
+    <h1>账号在本机演示。</h1>
+    <p class="www-lead">厂商许可证 API 还没接。这里只保存邮箱和档位到浏览器。不是付费通道。</p>
+    <div id="panel" class="www-card www-card-narrow"></div>
   </main>
   <script src="js/site.js"></script>
   <script>
@@ -19,15 +20,15 @@
       const el = document.getElementById("panel");
       const a = account.read();
       if (a) {
-        el.innerHTML = `<p>已登录（本机演示）</p><h3>${a.email}</h3><p class="mono">${PLANS[a.plan] || a.plan}</p>
-          <p><button class="btn ghost" type="button" id="out">退出</button></p>`;
+        el.innerHTML = `<p class="www-kicker">已登录</p><h3>${a.email}</h3><p class="www-mono">${PLANS[a.plan] || a.plan}</p>
+          <div class="www-actions"><button class="www-btn www-btn-ghost" type="button" id="out">退出</button></div>`;
         document.getElementById("out").onclick = () => { account.clear(); render(); };
         return;
       }
-      el.innerHTML = `<form id="reg">
+      el.innerHTML = `<form class="www-form" id="reg">
         <label>邮箱<input type="email" name="email" required placeholder="you@company.com" /></label>
         <label>档位<select name="plan"><option value="free">Solo Free</option><option value="solo">Solo</option><option value="pro">Pro</option></select></label>
-        <button class="btn primary" type="submit">注册</button>
+        <button class="www-btn www-btn-primary" type="submit">注册</button>
       </form>`;
       document.getElementById("reg").onsubmit = (e) => {
         e.preventDefault();

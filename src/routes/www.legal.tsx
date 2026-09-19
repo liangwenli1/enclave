@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { WwwShell, WwwWrap } from "@/components/www-shell";
+import { WwwMain, WwwShell } from "@/components/www-shell";
 
 export const Route = createFileRoute("/www/legal")({
   component: WwwLegal,
@@ -9,31 +9,28 @@ export const Route = createFileRoute("/www/legal")({
 function WwwLegal() {
   return (
     <WwwShell>
-      <WwwWrap className="max-w-2xl">
-        <h1 className="text-[28px] font-semibold tracking-tight">安全与法律</h1>
-        <section className="mt-6 grid gap-2 text-[13px] text-muted">
-          <h2 className="text-[15px] font-medium text-ink">内核许可</h2>
-          <p>fingerprint-chromium 基于 Ungoogled Chromium，BSD-3-Clause。不是 100% 自研内核。补丁源码若延迟，不得宣传已完整审计。</p>
-        </section>
-        <section className="mt-6 grid gap-2 text-[13px] text-muted">
-          <h2 className="text-[15px] font-medium text-ink">第一版必须防</h2>
-          <ul className="list-disc pl-5">
-            <li>恶意内核镜像：哈希不符拒启</li>
-            <li>假安装包：1.0 必须签名（尚未交付）</li>
-            <li>CDP / 本机 API 被扫：只绑 127.0.0.1，API 默认关</li>
-            <li>环境串数据：独立 user-data</li>
-            <li>代理密码进日志：只存 passwordRef</li>
-          </ul>
-        </section>
-        <section className="mt-6 grid gap-2 text-[13px] text-muted">
-          <h2 className="text-[15px] font-medium text-ink">不承诺</h2>
-          <p>不承诺过某站风控。不承诺国家级完整控机。用户主动关闭沙箱后的后果自行承担。</p>
-        </section>
-        <section className="mt-6 grid gap-2 text-[13px] text-muted">
-          <h2 className="text-[15px] font-medium text-ink">披露</h2>
-          <p>security@enclave.local（渠道草稿，正式域名未上。）</p>
-        </section>
-      </WwwWrap>
+      <WwwMain>
+        <p className="www-kicker">Legal</p>
+        <h1>安全与法律。</h1>
+        <div className="www-grid">
+          <article className="www-card">
+            <h3>内核许可</h3>
+            <p>fingerprint-chromium 基于 Ungoogled Chromium，BSD-3-Clause。不是 100% 自研内核。补丁源码若延迟，不得宣传已完整审计。</p>
+          </article>
+          <article className="www-card">
+            <h3>第一版必须防</h3>
+            <p>恶意内核镜像哈希不符则拒启。假安装包必须靠签名挡住（签名尚未交付）。CDP 与本机 API 只绑回环，API 默认关。环境数据互不串。代理密码只存引用。</p>
+          </article>
+          <article className="www-card">
+            <h3>不承诺</h3>
+            <p>不承诺过某站风控。不承诺国家级完整控机。用户主动关沙箱后的后果自行承担。</p>
+          </article>
+          <article className="www-card">
+            <h3>披露</h3>
+            <p>security@enclave.local。正式域名未上，此地址是渠道草稿。</p>
+          </article>
+        </div>
+      </WwwMain>
     </WwwShell>
   );
 }

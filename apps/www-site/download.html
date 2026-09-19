@@ -7,46 +7,37 @@
   <link rel="stylesheet" href="css/site.css" />
 </head>
 <body>
-  <main class="wrap">
-    <h1>下载与 SHA256</h1>
-    <p class="lead">1.0 客户下的是签过名的工作台安装包，再由内核管理器校验 fingerprint-chromium。两项必须分开看：安装包还没签发；内核哈希来自官方 GitHub Release，已经公示。</p>
-
-    <h2 style="margin-top:40px">工作台安装包</h2>
-    <div class="frame">
-      <table>
-        <thead><tr><th>平台</th><th>文件</th><th>SHA256</th><th>状态</th></tr></thead>
-        <tbody>
-          <tr><td>Windows x64</td><td class="mono">Enclave-0.1.0-x64.msi</td><td>—</td><td class="warn">未签发</td></tr>
-          <tr><td>macOS Apple Silicon</td><td class="mono">Enclave-0.1.0-arm64.dmg</td><td>—</td><td class="warn">未签发</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="hint">没有哈希的安装包不会开放下载按钮。不提供未签名包。</p>
-
-    <h2 style="margin-top:40px">已准入 / 候选内核 · 148.0.7778.215</h2>
-    <div class="frame">
-      <table>
-        <thead><tr><th>平台</th><th>通道</th><th>SHA256</th><th>bytes</th></tr></thead>
-        <tbody>
-          <tr>
-            <td>linux-x64</td><td>stable</td>
-            <td class="mono">70d239830332e5820aa34dfcb284161cac0429eee25da642830afe04bda717f4</td>
-            <td class="mono">141269020</td>
-          </tr>
-          <tr>
-            <td>win-x64</td><td>candidate</td>
-            <td class="mono">9ef3f471b7a6641b4224532522b29141ce3746e27d55788d88e2fd951f362579</td>
-            <td class="mono">189767686</td>
-          </tr>
-          <tr>
-            <td>mac-arm64</td><td>candidate</td>
-            <td class="mono">b72f091e2e1a7583eed389c4b8e3534ed355e568af8c8bbf8fc30a25e23ca679</td>
-            <td class="mono">140187500</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="hint">linux-x64 为 stable。win / mac 为 candidate：哈希来自 GitHub Release digest，未在对应系统完成 spawn 基线前不得进 stable。</p>
+  <main class="www-main">
+    <p class="www-kicker">Download</p>
+    <h1>先核哈希，再安装。</h1>
+    <p class="www-lead">客户下的是签过名的工作台安装包。内核由工作台按清单校验。安装包尚未签发，所以没有下载按钮。</p>
+    <section class="www-section">
+      <h2>工作台安装包</h2>
+      <div class="www-table-wrap">
+        <table>
+          <thead><tr><th>平台</th><th>文件</th><th>SHA256</th><th>状态</th></tr></thead>
+          <tbody>
+            <tr><td>Windows x64</td><td class="www-mono">Enclave-0.1.0-x64.msi</td><td>—</td><td class="www-warn">未签发</td></tr>
+            <tr><td>macOS Apple Silicon</td><td class="www-mono">Enclave-0.1.0-arm64.dmg</td><td>—</td><td class="www-warn">未签发</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="www-hint">没有哈希的包不会开放下载。不提供未签名安装包。</p>
+    </section>
+    <section class="www-section">
+      <h2>内核 148.0.7778.215</h2>
+      <div class="www-table-wrap">
+        <table>
+          <thead><tr><th>平台</th><th>通道</th><th>SHA256</th><th>bytes</th></tr></thead>
+          <tbody>
+            <tr><td>linux-x64</td><td>stable</td><td class="www-mono">70d239830332e5820aa34dfcb284161cac0429eee25da642830afe04bda717f4</td><td class="www-mono">141269020</td></tr>
+            <tr><td>win-x64</td><td>candidate</td><td class="www-mono">9ef3f471b7a6641b4224532522b29141ce3746e27d55788d88e2fd951f362579</td><td class="www-mono">189767686</td></tr>
+            <tr><td>mac-arm64</td><td>candidate</td><td class="www-mono">b72f091e2e1a7583eed389c4b8e3534ed355e568af8c8bbf8fc30a25e23ca679</td><td class="www-mono">140187500</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="www-hint">linux-x64 为 stable。win / mac 为 candidate。</p>
+    </section>
   </main>
   <script src="js/site.js"></script>
 </body>
