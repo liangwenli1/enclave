@@ -16,11 +16,21 @@ fn main() {
                     let _ = std::fs::copy(&manifest_src, &manifest_dst);
                 }
             }
-            let sidecar = app.shell().sidecar("enclave-host")?;
-            sidecar
-                .current_dir(&data)
-                .env("ENCLAVE_ALLOW_LOOPBACK_NO_AUTH", "1")
-                .spawn()?;
+            match app.shell().sidecar("enclave-host") {
+                Ok(cmd) => {
+                    if let Err(e) = cmd
+                        .current_dir(&data)
+                        .env("ENCLAVE_ALLOW_LOOPBACK_NO_AUTH", "1")
+                        .spawn()
+                    {
+                        eprintln!("enclave-host spawn: {e}");
+                    }
+                }
+                Err(e) => eprintln!("enclave-host sidecar: {e}"),
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                window.open_devtools();
+            }
             Ok(())
         })
         .run(tauri::generate_context!())

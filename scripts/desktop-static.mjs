@@ -14,13 +14,33 @@ function walk(dir, acc = []) {
   return acc;
 }
 
+function rewriteHtml(html) {
+  const probe = `<script>window.addEventListener("error",function(e){document.body.style.cssText="margin:24px;color:#f4f4f5;font:14px ui-sans-serif,system-ui";document.body.textContent=String((e&&e.message)||e);});</script>`;
+  if (!html.includes("window.addEventListener(\"error\"")) {
+    html = html.replace("<head>", `<head>${probe}`);
+    html = html.replace("<head >", `<head>${probe}`);
+  }
+  return html
+    .replaceAll('href="/assets/', 'href="./assets/')
+    .replaceAll("href='/assets/", "href='./assets/")
+    .replaceAll('src="/assets/', 'src="./assets/')
+    .replaceAll("src='/assets/", "src='./assets/")
+    .replaceAll('href="/favicon', 'href="./favicon')
+    .replaceAll('href="/__grok/', 'href="./__grok/')
+    .replaceAll('url(/assets/', 'url(./assets/');
+}
+
 function copyDir(src, out) {
   mkdirSync(out, { recursive: true });
   for (const file of walk(src)) {
     const rel = path.relative(src, file);
     const target = path.join(out, rel);
     mkdirSync(path.dirname(target), { recursive: true });
-    copyFileSync(file, target);
+    if (file.endsWith(".html")) {
+      writeFileSync(target, rewriteHtml(readFileSync(file, "utf8")));
+    } else {
+      copyFileSync(file, target);
+    }
   }
 }
 
@@ -59,7 +79,12 @@ if (index) {
     ${css ? `<link rel="stylesheet" href="./assets/${css}" />` : ""}
   </head>
   <body>
-    <div id="root"></div>
+    <script>
+      window.addEventListener("error", function (e) {
+        document.body.style.cssText = "margin:24px;color:#f4f4f5;font:14px ui-sans-serif,system-ui";
+        document.body.textContent = String((e && e.message) || e);
+      });
+    </script>
     <script type="module" src="./assets/${js}"></script>
   </body>
 </html>

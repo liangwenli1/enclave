@@ -148,6 +148,7 @@ function authPopupPlugin(): Plugin {
 export default defineConfig(({ command, isPreview }) => {
   const desktop = process.env.VITE_ENCLAVE_DIRECT === "true";
   return {
+  base: desktop ? "./" : "/",
   server: {
     host: "0.0.0.0",
     port: 8080,
