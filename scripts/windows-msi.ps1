@@ -19,7 +19,8 @@ Need cargo "rustup default stable then reopen the terminal."
 Need npm "Node installer should provide npm."
 
 rustup default stable
-Get-Process enclave-host, Enclave -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process enclave-host, enclave-desktop, Enclave -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
 
 npm ci
 cargo build --release -p enclave-host
