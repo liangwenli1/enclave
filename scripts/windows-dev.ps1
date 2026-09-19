@@ -10,8 +10,13 @@ function Need($cmd, $hint) {
 
 Need git "Install Git for Windows."
 Need node "Install Node 22 LTS from https://nodejs.org"
-Need cargo "Install Rust from https://rustup.rs then reopen the terminal."
+Need rustup "Install Rust from https://rustup.rs then reopen the terminal."
 Need npm "Node installer should provide npm."
+
+rustup default stable
+if (-not $?) { throw "rustup default stable failed" }
+
+Need cargo "rustup default stable should provide cargo. Reopen the terminal and retry."
 
 npm ci
 cargo build --release -p enclave-host

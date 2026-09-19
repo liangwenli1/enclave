@@ -23,6 +23,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows-dev.ps1
 
 ```powershell
 npm ci
+rustup default stable
 cargo build --release -p enclave-host
 npm run dev
 ```
