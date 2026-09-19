@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div
       className={cn(
-        "flex min-h-dvh bg-canvas text-ink",
+        "flex h-full min-h-full bg-canvas text-ink",
         density === "comfortable" && "text-[15px]",
       )}
     >

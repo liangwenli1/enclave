@@ -31,8 +31,11 @@ if (-not $?) { throw "frontend build failed" }
 
 node scripts/desktop-static.mjs
 if (-not $?) { throw "desktop static shell failed" }
+$index = Join-Path $PWD "apps\desktop\src-tauri\frontend\index.html"
+if (-not (Test-Path $index)) { throw "frontend/index.html missing after desktop-static" }
+Write-Host "frontend shell $($index) $((Get-Item $index).Length) bytes"
 
-npx --yes @tauri-apps/cli@2 build --config apps/desktop/src-tauri/tauri.conf.json --bundles msi
+npx --yes @tauri-apps/cli@2 build --config (Join-Path $PWD "apps\desktop\src-tauri\tauri.conf.json") --bundles msi
 if (-not $?) { throw "tauri msi failed" }
 
 Write-Host "Unsigned MSI is under apps/desktop/src-tauri/target/release/bundle/msi/"

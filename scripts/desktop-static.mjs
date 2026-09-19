@@ -48,15 +48,16 @@ if (!js) {
 writeFileSync(
   path.join(dest, "index.html"),
   `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" style="height:100%">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Enclave</title>
     ${css ? `<link rel="stylesheet" href="./assets/${css}" />` : ""}
+    <style>html,body,#root{height:100%;margin:0}</style>
   </head>
-  <body style="margin:0;background:#010102;color:#f7f8f8">
-    <div id="root">Loading Enclave…</div>
+  <body style="margin:0;height:100%;background:#c8f31d;color:#111;font:16px/1.4 ui-sans-serif,system-ui">
+    <div id="root" style="min-height:100%">Loading Enclave…</div>
     <script>
       window.addEventListener("error", function (e) {
         var n = document.getElementById("root");
