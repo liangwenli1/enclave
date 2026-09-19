@@ -194,7 +194,7 @@ function PlanNotice() {
   if (!notice) return null;
   return (
     <Dialog open onOpenChange={(open) => !open && useEnclave.getState().setPlanNotice(null)}>
-      <DialogContent title={notice.title}>
+      <DialogContent title={notice.title} className="z-[70]">
         <p className="text-sm leading-6 text-muted">{notice.body}</p>
         <div className="mt-5 flex justify-end gap-2">
           <Button onClick={() => useEnclave.getState().setPlanNotice(null)}>{t(locale, "gotIt")}</Button>

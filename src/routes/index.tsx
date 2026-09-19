@@ -245,54 +245,64 @@ function CreateWizard({
   const [proxyId, setProxyId] = useState<string>("");
   const [copyId, setCopyId] = useState("");
 
-  const catalog = useEnclave((s) => s.searchCatalog);
+  const catalog = useEnclave((s) => s.searchCatalog) ?? [];
+  const [error, setError] = useState("");
   const create = () => {
-    if (!name.trim()) return;
-    const store = useEnclave.getState();
-    const plan = planOf(store.settings.plan);
-    if (envCount(store.environments) >= plan.envLimit) {
-      store.setPlanNotice({
-        title: "环境数量已达上限",
-        body: `当前套餐 ${plan.label} 最多 ${plan.envLimit} 个环境。删除不用的环境，或升级套餐。`,
-      });
-      store.addAudit({
-        action: "create_blocked",
-        level: "warn",
-        detail: `PLAN_ENV_LIMIT ${plan.label} max ${plan.envLimit}`,
-      });
-      return;
-    }
-    if (source === "copy" && copyId) {
-      const copy = store.duplicateEnv(copyId);
-      if (copy) {
-        store.patchEnv(copy.id, { name: name || copy.name });
-        onCreated(copy.id);
+    try {
+      if (!name.trim()) {
+        setError(locale === "zh" ? "请先填写环境名称。" : "Name is required.");
+        setStep(1);
+        return;
       }
-      return;
+      const store = useEnclave.getState();
+      const plan = planOf(store.settings.plan);
+      if (envCount(store.environments) >= plan.envLimit) {
+        onClose();
+        store.setPlanNotice({
+          title: "环境数量已达上限",
+          body: `当前套餐 ${plan.label} 最多 ${plan.envLimit} 个环境。删除不用的环境，或升级套餐。`,
+        });
+        store.addAudit({
+          action: "create_blocked",
+          level: "warn",
+          detail: `PLAN_ENV_LIMIT ${plan.label} max ${plan.envLimit}`,
+        });
+        return;
+      }
+      if (source === "copy" && copyId) {
+        const copy = store.duplicateEnv(copyId);
+        if (copy) {
+          store.patchEnv(copy.id, { name: name.trim() || copy.name });
+          onCreated(copy.id);
+        }
+        return;
+      }
+      const seed = randomSeed();
+      const engine = findEngine(Array.isArray(catalog) ? catalog : [], engineId);
+      const env = newEnvironment({
+        name: name.trim(),
+        group,
+        proxyId: proxyId || null,
+        profile: profileFromSeed(seed, platform, {
+          timezone,
+          platformVersion: defaultPlatformVersion(platform, winEdition),
+        }),
+        kernelPin: KERNEL_PIN,
+        searchEngine: engine?.id ?? "none",
+        searchProvider: engine ? engineToProvider(engine) : undefined,
+      });
+      env.timeline[0] = {
+        at: Date.now(),
+        kind: "created",
+        message: `source=${source}`,
+        level: "info",
+      };
+      store.upsertEnv(env);
+      store.addAudit({ action: "create_env", target: env.id, level: "info", detail: env.name });
+      onCreated(env.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
-    const seed = randomSeed();
-    const engine = findEngine(catalog, engineId);
-    const env = newEnvironment({
-      name: name || (locale === "zh" ? "未命名环境" : "Untitled"),
-      group,
-      proxyId: proxyId || null,
-      profile: profileFromSeed(seed, platform, {
-        timezone,
-        platformVersion: defaultPlatformVersion(platform, winEdition),
-      }),
-      kernelPin: KERNEL_PIN,
-      searchEngine: engine?.id ?? "none",
-      searchProvider: engine ? engineToProvider(engine) : undefined,
-    });
-    env.timeline[0] = {
-      at: Date.now(),
-      kind: "created",
-      message: `source=${source}`,
-      level: "info",
-    };
-    store.upsertEnv(env);
-    store.addAudit({ action: "create_env", target: env.id, level: "info", detail: env.name });
-    onCreated(env.id);
   };
 
   return (
@@ -418,23 +428,28 @@ function CreateWizard({
             </Field>
           </div>
         ) : null}
+        {error ? <p className="mt-3 text-sm text-bad">{error}</p> : null}
         <div className="mt-5 flex justify-between">
-          <Button onClick={step === 0 ? onClose : () => setStep((s) => s - 1)}>
+          <Button type="button" onClick={step === 0 ? onClose : () => setStep((s) => s - 1)}>
             {step === 0 ? t(locale, "cancel") : t(locale, "back")}
           </Button>
           {step < 2 ? (
             <Button
+              type="button"
               variant="primary"
-              disabled={step === 1 && !name.trim()}
               onClick={() => {
-                if (step === 1 && !name.trim()) return;
+                if (step === 1 && !name.trim()) {
+                  setError(locale === "zh" ? "请先填写环境名称。" : "Name is required.");
+                  return;
+                }
+                setError("");
                 setStep((s) => s + 1);
               }}
             >
               {t(locale, "next")}
             </Button>
           ) : (
-            <Button variant="primary" disabled={!name.trim()} onClick={create}>
+            <Button type="button" variant="primary" onClick={create}>
               {t(locale, "create")}
             </Button>
           )}
