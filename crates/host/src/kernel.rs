@@ -874,6 +874,7 @@ pub async fn start_environment(
         args.push("--disable-quic".into());
         args.push("--dns-over-https-mode=off".into());
         args.push("--disable-features=UseDnsHttpsSvcb".into());
+        args.push("--enable-features=SetIpv6ProbeFalse".into());
     }
     if allow_no_sandbox {
         args.push("--no-sandbox".into());
