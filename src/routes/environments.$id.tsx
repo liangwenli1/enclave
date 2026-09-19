@@ -1,9 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FlaskConical, Play, Square } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge, Button, Field, Input, Panel, StatusDot, Textarea } from "@/components/ui";
 import { useLocale } from "@/components/shell";
 import { classifyAll } from "@/lib/kernel/flags";
+import { listSearchEnginesFn } from "@/lib/kernel/functions";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { staticConsistency } from "@/lib/lab";
@@ -113,21 +114,7 @@ function EnvDetail() {
               </select>
             </Field>
             <Field label={t(locale, "searchEngine")}>
-              <select
-                className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
-                value={env.searchEngine ?? "none"}
-                onChange={(e) =>
-                  useEnclave.getState().patchEnv(env.id, {
-                    searchEngine: e.target.value as typeof env.searchEngine,
-                  })
-                }
-              >
-                <option value="none">{t(locale, "searchEngineNone")}</option>
-                <option value="bing">Microsoft Bing</option>
-                <option value="baidu">百度</option>
-                <option value="duckduckgo">DuckDuckGo</option>
-              </select>
-              <p className="mt-1 text-[12px] text-subtle">{t(locale, "searchEngineHint")}</p>
+              <SearchEnginePanel envId={env.id} running={status === "running"} />
             </Field>
             <Field label={t(locale, "note")}>
               <Textarea
@@ -386,6 +373,88 @@ function FlagsForm({
       >
         {t(locale, "save")}
       </Button>
+    </div>
+  );
+}
+
+type EngineRow = {
+  id: string;
+  name: string;
+  keyword: string;
+  url: string;
+  suggestUrl: string;
+  isDefault: boolean;
+};
+
+function SearchEnginePanel({ envId, running }: { envId: string; running: boolean }) {
+  const locale = useLocale();
+  const env = useEnclave((s) => s.environments.find((e) => e.id === envId));
+  const [engines, setEngines] = useState<EngineRow[]>([]);
+  const refresh = async () => {
+    const res = await listSearchEnginesFn({ data: { envId } });
+    setEngines(res.engines ?? []);
+  };
+  useEffect(() => {
+    void refresh();
+  }, [envId]);
+  if (!env) return null;
+  const current = env.searchEngine ?? "none";
+  const setDefault = (row: EngineRow) => {
+    useEnclave.getState().patchEnv(envId, {
+      searchEngine: row.id,
+      searchProvider:
+        row.id === "none"
+          ? undefined
+          : {
+              name: row.name,
+              keyword: row.keyword,
+              url: row.url,
+              suggestUrl: row.suggestUrl,
+            },
+    });
+  };
+  return (
+    <div className="grid gap-2">
+      <p className="text-[12px] text-subtle">{t(locale, "searchEngineHint")}</p>
+      <div className="overflow-x-auto rounded-md border border-line">
+        <table className="w-full text-left text-[12px]">
+          <thead className="bg-surface-2 text-[11px] text-subtle">
+            <tr>
+              <th className="px-2 py-1">{t(locale, "name")}</th>
+              <th className="px-2 py-1">keyword</th>
+              <th className="px-2 py-1" />
+            </tr>
+          </thead>
+          <tbody>
+            {engines.map((row) => {
+              const selected = current === row.id || (current === "none" && row.id === "none");
+              return (
+                <tr key={`${row.id}-${row.keyword}`} className="border-t border-line">
+                  <td className="px-2 py-1.5">
+                    {row.name}
+                    {row.isDefault ? (
+                      <span className="ml-2 text-[11px] text-ok">{t(locale, "searchCurrent")}</span>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-1.5 font-mono text-subtle">{row.keyword}</td>
+                  <td className="px-2 py-1.5 text-right">
+                    <Button
+                      variant={selected && row.id !== "none" ? "primary" : "ghost"}
+                      onClick={() => setDefault(row)}
+                    >
+                      {t(locale, "searchSetDefault")}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button onClick={() => void refresh()}>{t(locale, "searchRefresh")}</Button>
+        {running ? <span className="text-[12px] text-warn">{t(locale, "searchEngineHint")}</span> : null}
+      </div>
     </div>
   );
 }

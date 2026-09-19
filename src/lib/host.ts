@@ -80,6 +80,7 @@ export async function startEnv(env: Environment) {
       allowNoSandbox,
       proxyServer: proxyUrl(proxy),
       searchEngine: env.searchEngine ?? "none",
+      searchProvider: env.searchProvider,
     },
   });
   if (!result.ok) {

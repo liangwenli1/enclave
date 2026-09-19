@@ -77,7 +77,8 @@ export type Environment = {
   note: string;
   profile: FingerprintProfile;
   proxyId: string | null;
-  searchEngine: "none" | "bing" | "baidu" | "duckduckgo";
+  searchEngine: string;
+  searchProvider?: { name: string; keyword: string; url: string; suggestUrl?: string };
   extensionIds: string[];
   kernelPin: { id: string; version: string; sha256: string };
   allowNoSandbox: boolean;
@@ -272,6 +273,7 @@ export function newEnvironment(partial?: Partial<Environment>): Environment {
       "profile",
       "proxyId",
       "searchEngine",
+      "searchProvider",
       "extensionIds",
     ]),
   };

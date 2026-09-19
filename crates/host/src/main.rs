@@ -1,13 +1,13 @@
-use axum::extract::{Request, State};
+use axum::extract::{Query, Request, State};
 use axum::http::{header, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use enclave_host::kernel::{
-    admit, capabilities, ensure_dirs, load_manifest, read_status_fast, restore_runtimes,
-    start_environment, stop_environment, stable_linux, FingerprintProfile, HostPaths, KernelRecord,
-    KernelStatus, ManifestFile, RuntimeRow,
+    admit, capabilities, ensure_dirs, list_search_engines, load_manifest, read_status_fast,
+    restore_runtimes, start_environment, stop_environment, stable_linux, FingerprintProfile,
+    HostPaths, KernelRecord, KernelStatus, ManifestFile, RuntimeRow, SearchProvider,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -55,6 +55,7 @@ async fn main() {
         .route("/v1/runtimes", get(list_runtimes))
         .route("/v1/environments/start", post(env_start))
         .route("/v1/environments/stop", post(env_stop))
+        .route("/v1/search-engines", get(search_engines))
         .route("/v1/lab/collect", post(lab_collect))
         .layer(middleware::from_fn_with_state(state.clone(), auth))
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any).allow_headers(Any))
@@ -164,6 +165,7 @@ struct StartBody {
     allow_no_sandbox: bool,
     proxy_server: Option<String>,
     search_engine: Option<String>,
+    search_provider: Option<SearchProvider>,
 }
 
 async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -> Json<Value> {
@@ -176,6 +178,7 @@ async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -
         body.allow_no_sandbox,
         body.proxy_server.as_deref(),
         body.search_engine.as_deref(),
+        body.search_provider.as_ref(),
         &state.runtimes,
     )
     .await
@@ -199,6 +202,12 @@ async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -
 #[serde(rename_all = "camelCase")]
 struct StopBody {
     env_id: String,
+}
+
+async fn search_engines(State(state): State<Arc<App>>, Query(q): Query<HashMap<String, String>>) -> Json<Value> {
+    let env_id = q.get("envId").cloned().unwrap_or_default();
+    let engines = list_search_engines(&state.paths, &env_id);
+    Json(json!({ "ok": true, "engines": engines }))
 }
 
 async fn env_stop(State(state): State<Arc<App>>, Json(body): Json<StopBody>) -> Json<Value> {

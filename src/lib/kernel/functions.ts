@@ -40,6 +40,13 @@ export const startKernelDownloadFn = createServerFn({ method: "POST" }).handler(
   return host.startDownload();
 });
 
+export const listSearchEnginesFn = createServerFn({ method: "GET" })
+  .validator(z.object({ envId: z.string() }))
+  .handler(async ({ data }) => {
+    const host = await import("./host.server");
+    return host.listSearchEngines(data.envId);
+  });
+
 export const startEnvFn = createServerFn({ method: "POST" })
   .validator(
     z.object({
@@ -48,7 +55,15 @@ export const startEnvFn = createServerFn({ method: "POST" })
       extraFlags: z.array(z.string()),
       allowNoSandbox: z.boolean(),
       proxyServer: z.string().optional(),
-      searchEngine: z.enum(["none", "bing", "baidu", "duckduckgo"]).optional(),
+      searchEngine: z.string().optional(),
+      searchProvider: z
+        .object({
+          name: z.string(),
+          keyword: z.string(),
+          url: z.string(),
+          suggestUrl: z.string().optional(),
+        })
+        .optional(),
     }),
   )
   .handler(async ({ data }) => {

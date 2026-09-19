@@ -1,7 +1,7 @@
 use crate::flags::{classify, FlagClass};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -346,42 +346,23 @@ pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf
     find_chrome(&extract_dir(paths, k))
 }
 
-async fn apply_search_engine(user_data_dir: &Path, engine: Option<&str>) -> Result<Option<PathBuf>> {
+async fn apply_search_engine(
+    user_data_dir: &Path,
+    engine: Option<&str>,
+    provider: Option<&SearchProvider>,
+) -> Result<Option<PathBuf>> {
     let ext_dir = user_data_dir.join("enclave-search");
     let policy_path = user_data_dir
         .join("policies")
         .join("managed")
         .join("enclave.json");
-    let key = engine.unwrap_or("none").to_ascii_lowercase();
-    if key.is_empty() || key == "none" {
+    let chosen = resolve_search_provider(engine, provider);
+    if chosen.is_none() {
         let _ = tokio::fs::remove_dir_all(&ext_dir).await;
         let _ = tokio::fs::remove_file(&policy_path).await;
         return Ok(None);
     }
-    let (name, keyword, url, suggest) = match key.as_str() {
-        "bing" => (
-            "Microsoft Bing",
-            "bing.com",
-            "https://www.bing.com/search?q={searchTerms}",
-            "https://www.bing.com/osjson.aspx?query={searchTerms}",
-        ),
-        "baidu" => (
-            "百度",
-            "baidu.com",
-            "https://www.baidu.com/s?wd={searchTerms}",
-            "",
-        ),
-        "duckduckgo" | "ddg" => (
-            "DuckDuckGo",
-            "duckduckgo.com",
-            "https://duckduckgo.com/?q={searchTerms}",
-            "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
-        ),
-        _ => {
-            let _ = tokio::fs::remove_dir_all(&ext_dir).await;
-            return Ok(None);
-        }
-    };
+    let chosen = chosen.unwrap();
     tokio::fs::create_dir_all(&ext_dir).await?;
     let manifest = json!({
         "manifest_version": 3,
@@ -389,10 +370,10 @@ async fn apply_search_engine(user_data_dir: &Path, engine: Option<&str>) -> Resu
         "version": "1.0.0",
         "chrome_settings_overrides": {
             "search_provider": {
-                "name": name,
-                "keyword": keyword,
-                "search_url": url,
-                "suggest_url": suggest,
+                "name": chosen.name,
+                "keyword": chosen.keyword,
+                "search_url": chosen.url,
+                "suggest_url": chosen.suggest_url,
                 "encoding": "UTF-8",
                 "is_default": true
             }
@@ -400,6 +381,189 @@ async fn apply_search_engine(user_data_dir: &Path, engine: Option<&str>) -> Resu
     });
     tokio::fs::write(ext_dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest)?).await?;
     Ok(Some(ext_dir))
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchProvider {
+    pub name: String,
+    pub keyword: String,
+    pub url: String,
+    #[serde(default)]
+    pub suggest_url: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchEngineRow {
+    pub name: String,
+    pub keyword: String,
+    pub url: String,
+    pub suggest_url: String,
+    pub is_default: bool,
+    pub id: String,
+}
+
+fn preset_provider(engine: &str) -> Option<SearchProvider> {
+    match engine.to_ascii_lowercase().as_str() {
+        "google" => Some(SearchProvider {
+            name: "Google".into(),
+            keyword: "google.com".into(),
+            url: "https://www.google.com/search?q={searchTerms}".into(),
+            suggest_url: "https://www.google.com/complete/search?client=chrome&q={searchTerms}".into(),
+        }),
+        "bing" => Some(SearchProvider {
+            name: "Microsoft Bing".into(),
+            keyword: "bing.com".into(),
+            url: "https://www.bing.com/search?q={searchTerms}".into(),
+            suggest_url: "https://www.bing.com/osjson.aspx?query={searchTerms}".into(),
+        }),
+        "baidu" => Some(SearchProvider {
+            name: "百度".into(),
+            keyword: "baidu.com".into(),
+            url: "https://www.baidu.com/s?wd={searchTerms}".into(),
+            suggest_url: String::new(),
+        }),
+        "duckduckgo" | "ddg" => Some(SearchProvider {
+            name: "DuckDuckGo".into(),
+            keyword: "duckduckgo.com".into(),
+            url: "https://duckduckgo.com/?q={searchTerms}".into(),
+            suggest_url: "https://duckduckgo.com/ac/?q={searchTerms}&type=list".into(),
+        }),
+        _ => None,
+    }
+}
+
+fn resolve_search_provider(engine: Option<&str>, provider: Option<&SearchProvider>) -> Option<SearchProvider> {
+    if let Some(p) = provider {
+        if p.url.contains("{searchTerms}") && !p.url.starts_with("http://{") {
+            return Some(p.clone());
+        }
+    }
+    preset_provider(engine.unwrap_or("none"))
+}
+
+pub fn list_search_engines(paths: &HostPaths, env_id: &str) -> Vec<SearchEngineRow> {
+    let user_data = paths.profiles.join(format!("env_{env_id}")).join("user-data");
+    let mut rows = profile_search_engines(&user_data);
+    let default_kw = rows
+        .iter()
+        .find(|r| r.is_default)
+        .map(|r| r.keyword.clone())
+        .unwrap_or_else(|| "nosearch".into());
+    for preset in ["google", "bing", "baidu", "duckduckgo"] {
+        if let Some(p) = preset_provider(preset) {
+            if !rows.iter().any(|r| r.keyword.eq_ignore_ascii_case(&p.keyword) || r.url == p.url) {
+                rows.push(SearchEngineRow {
+                    id: preset.into(),
+                    name: p.name,
+                    keyword: p.keyword,
+                    url: p.url,
+                    suggest_url: p.suggest_url,
+                    is_default: false,
+                });
+            }
+        }
+    }
+    if !rows.iter().any(|r| r.keyword.eq_ignore_ascii_case("nosearch")) {
+        rows.insert(
+            0,
+            SearchEngineRow {
+                id: "none".into(),
+                name: "No Search".into(),
+                keyword: "nosearch".into(),
+                url: "http://{searchTerms}".into(),
+                suggest_url: String::new(),
+                is_default: default_kw == "nosearch" && !rows.iter().any(|r| r.is_default),
+            },
+        );
+    }
+    rows
+}
+
+fn profile_search_engines(user_data: &Path) -> Vec<SearchEngineRow> {
+    let web = user_data.join("Default").join("Web Data");
+    if !web.exists() {
+        return vec![];
+    }
+    let tmp = user_data.join("Default").join("WebData.enclave-read");
+    if std::fs::copy(&web, &tmp).is_err() {
+        return vec![];
+    }
+    let default_kw = default_search_keyword(user_data);
+    let mut rows = vec![];
+    if let Ok(conn) = rusqlite::Connection::open_with_flags(
+        &tmp,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    ) {
+        let sql = "SELECT short_name, keyword, url, IFNULL(suggest_url,'') FROM keywords WHERE url IS NOT NULL AND trim(url) != ''";
+        let sql_fallback = "SELECT short_name, keyword, url FROM keywords WHERE url IS NOT NULL AND trim(url) != ''";
+        let mut with_suggest = true;
+        let stmt = conn.prepare(sql).or_else(|_| {
+            with_suggest = false;
+            conn.prepare(sql_fallback)
+        });
+        if let Ok(mut stmt) = stmt {
+            let mapped = stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0).unwrap_or_default(),
+                    row.get::<_, String>(1).unwrap_or_default(),
+                    row.get::<_, String>(2).unwrap_or_default(),
+                    if with_suggest {
+                        row.get::<_, String>(3).unwrap_or_default()
+                    } else {
+                        String::new()
+                    },
+                ))
+            });
+            if let Ok(iter) = mapped {
+                for item in iter.flatten() {
+                    let (name, keyword, url, suggest) = item;
+                    let id = engine_id_from_keyword(&keyword, &url);
+                    let is_default = (!default_kw.is_empty() && keyword.eq_ignore_ascii_case(&default_kw))
+                        || (default_kw.is_empty() && keyword.eq_ignore_ascii_case("nosearch"));
+                    rows.push(SearchEngineRow {
+                        id,
+                        name,
+                        keyword,
+                        url,
+                        suggest_url: suggest,
+                        is_default,
+                    });
+                }
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&tmp);
+    rows
+}
+
+fn default_search_keyword(user_data: &Path) -> String {
+    let path = user_data.join("Default").join("Preferences");
+    let Ok(raw) = std::fs::read_to_string(path) else { return String::new() };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return String::new() };
+    v.pointer("/default_search_provider_data/template_url_data/keyword")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
+}
+
+fn engine_id_from_keyword(keyword: &str, url: &str) -> String {
+    let k = keyword.to_ascii_lowercase();
+    let u = url.to_ascii_lowercase();
+    if k == "nosearch" || u.starts_with("http://{searchterms}") {
+        "none".into()
+    } else if k.contains("google") || u.contains("google.com/search") {
+        "google".into()
+    } else if k.contains("bing") || u.contains("bing.com/search") {
+        "bing".into()
+    } else if k.contains("baidu") || u.contains("baidu.com") {
+        "baidu".into()
+    } else if k.contains("duckduckgo") || u.contains("duckduckgo.com") {
+        "duckduckgo".into()
+    } else {
+        k
+    }
 }
 
 pub async fn persist_status(paths: &HostPaths, status: &KernelStatus) -> Result<()> {
@@ -594,6 +758,7 @@ pub async fn start_environment(
     allow_no_sandbox: bool,
     proxy_server: Option<&str>,
     search_engine: Option<&str>,
+    search_provider: Option<&SearchProvider>,
     runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
 ) -> Result<Spawned, (String, String)> {
     {
@@ -627,7 +792,7 @@ pub async fn start_environment(
     tokio::fs::create_dir_all(&user_data_dir)
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
-    let search_ext = apply_search_engine(&user_data_dir, search_engine)
+    let search_ext = apply_search_engine(&user_data_dir, search_engine, search_provider)
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
 

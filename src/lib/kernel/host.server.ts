@@ -114,6 +114,7 @@ export async function startEnvironment(input: {
   allowNoSandbox: boolean;
   proxyServer?: string;
   searchEngine?: string;
+  searchProvider?: { name: string; keyword: string; url: string; suggestUrl?: string };
 }): Promise<StartResult> {
   try {
     const res = await hostFetch("/v1/environments/start", {
@@ -159,6 +160,25 @@ export async function listRuntimesFresh() {
     return [];
   }
 }
+
+export async function listSearchEngines(envId: string) {
+  try {
+    const res = await hostFetch(`/v1/search-engines?envId=${encodeURIComponent(envId)}`);
+    if (!res.ok) return { ok: false as const, engines: [] as SearchEngineRow[] };
+    return (await res.json()) as { ok: boolean; engines: SearchEngineRow[] };
+  } catch {
+    return { ok: false as const, engines: [] as SearchEngineRow[] };
+  }
+}
+
+export type SearchEngineRow = {
+  id: string;
+  name: string;
+  keyword: string;
+  url: string;
+  suggestUrl: string;
+  isDefault: boolean;
+};
 
 export async function collectCdp(envId: string): Promise<LabSnapshot> {
   const res = await hostFetch("/v1/lab/collect", {
