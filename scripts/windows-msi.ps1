@@ -2,6 +2,10 @@
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
+if (Test-Path .git) {
+  git checkout -- apps/desktop/src-tauri/Cargo.toml 2>$null
+}
+
 function Need($cmd, $hint) {
   if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
     throw "Missing $cmd. $hint"
