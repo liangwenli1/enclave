@@ -19,7 +19,7 @@ function SecurityPage() {
     void getKernelStatusFn().then((d) => {
       setKernelState(d.status.state);
       setCaps(
-        `${d.capabilities.os} uid=${d.capabilities.uid} sandboxLikely=${d.capabilities.sandboxLikely}`,
+        `runtime=native host=${String((d.capabilities as { host?: string }).host ?? "rust")} ${d.capabilities.os} uid=${d.capabilities.uid} sandboxLikely=${d.capabilities.sandboxLikely} sha256=${(d.kernel.manifest.sha256 ?? "").slice(0, 16)}…`,
       );
     });
   }, []);
@@ -38,6 +38,14 @@ function SecurityPage() {
             <li className="flex justify-between">
               <span className="text-subtle">{t(locale, "signatureMissing")}</span>
               <Badge tone="warn">{t(locale, "signatureMissing")}</Badge>
+            </li>
+            <li className="flex justify-between">
+              <span className="text-subtle">runtime</span>
+              <Badge tone="ok">native</Badge>
+            </li>
+            <li className="flex justify-between">
+              <span className="text-subtle">{t(locale, "plan")}</span>
+              <span className="font-mono text-[12px]">{settings.plan ?? "free"}</span>
             </li>
             <li className="flex justify-between">
               <span className="text-subtle">API</span>

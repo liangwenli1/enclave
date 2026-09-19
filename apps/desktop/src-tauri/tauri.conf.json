@@ -1,0 +1,28 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Enclave",
+  "version": "0.1.0",
+  "identifier": "com.enclave.workbench",
+  "build": {
+    "beforeDevCommand": "",
+    "devUrl": "http://127.0.0.1:8080",
+    "frontendDist": "../../../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Enclave",
+        "width": 1280,
+        "height": 800
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": ["msi", "dmg"],
+    "icon": []
+  }
+}

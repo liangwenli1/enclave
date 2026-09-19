@@ -17,6 +17,7 @@ import { cn } from "@/lib/cn";
 import { getKernelStatusFn } from "@/lib/kernel/functions";
 import { t, type Locale } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
+import { Onboarding } from "@/components/onboarding";
 
 const NAV = [
   { to: "/", key: "navEnv" as const, icon: Box },
@@ -143,6 +144,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       {locked ? <LockScreen /> : null}
+      <Onboarding />
       <HostSync />
     </div>
   );

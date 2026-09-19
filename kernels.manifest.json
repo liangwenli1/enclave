@@ -17,7 +17,39 @@
       "releasedAt": "2026-06-21T04:34:00Z",
       "upstream": "Ungoogled Chromium",
       "license": "BSD-3-Clause",
-      "notes": "Patch source delayed about one major. Hash is the GitHub Release asset digest. Publisher GPG is not present."
+      "notes": "Official GitHub Release. Linux verification adapter only until desktop installers ship."
+    },
+    {
+      "id": "fingerprint-chromium",
+      "version": "148.0.7778.215",
+      "platform": "win-x64",
+      "channel": "candidate",
+      "url": "https://github.com/adryfish/fingerprint-chromium/releases/download/148.0.7778.215/ungoogled-chromium_148.0.7778.215-1.1_windows_x64.zip",
+      "filename": "ungoogled-chromium_148.0.7778.215-1.1_windows_x64.zip",
+      "sha256": "9ef3f471b7a6641b4224532522b29141ce3746e27d55788d88e2fd951f362579",
+      "bytes": 189767686,
+      "signature": "missing",
+      "publisher": "adryfish",
+      "releasedAt": "2026-06-21T04:34:00Z",
+      "upstream": "Ungoogled Chromium",
+      "license": "BSD-3-Clause",
+      "notes": "Hash from GitHub Release digest. Not stable until spawn+sandbox baseline on Windows. Installer exe is a different asset and is not this zip."
+    },
+    {
+      "id": "fingerprint-chromium",
+      "version": "148.0.7778.215",
+      "platform": "mac-arm64",
+      "channel": "candidate",
+      "url": "https://github.com/adryfish/fingerprint-chromium/releases/download/148.0.7778.215/ungoogled-chromium_148.0.7778.215-1.1_macos.dmg",
+      "filename": "ungoogled-chromium_148.0.7778.215-1.1_macos.dmg",
+      "sha256": "b72f091e2e1a7583eed389c4b8e3534ed355e568af8c8bbf8fc30a25e23ca679",
+      "bytes": 140187500,
+      "signature": "missing",
+      "publisher": "adryfish",
+      "releasedAt": "2026-06-21T04:34:00Z",
+      "upstream": "Ungoogled Chromium",
+      "license": "BSD-3-Clause",
+      "notes": "Hash from GitHub Release digest. DMG is labeled macos, arch not split in upstream name. Not stable until spawn+sandbox baseline on Apple Silicon."
     }
   ],
   "previousStable": null

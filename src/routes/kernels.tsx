@@ -104,10 +104,21 @@ function KernelsPage() {
         <div className="mt-2">{t(locale, "hostHeadless")}</div>
         {data?.capabilities ? (
           <div className="mt-2 font-mono">
-            host {data.capabilities.os}/{data.capabilities.arch} uid={String(data.capabilities.uid)} display=
+            host {String((data.capabilities as { host?: string }).host ?? "node")} runtime=
+            {String((data.capabilities as { runtime?: string }).runtime ?? "verify")}{" "}
+            {data.capabilities.os}/{data.capabilities.arch} uid={String(data.capabilities.uid)} display=
             {String(data.capabilities.display)} sandboxLikely={String(data.capabilities.sandboxLikely)}
           </div>
         ) : null}
+      </Panel>
+
+      <Panel className="mt-3 p-4">
+        <div className="text-[13px] font-medium">win-x64 / mac-arm64</div>
+        <p className="mt-1 text-[12px] text-subtle">{t(locale, "pendingKernels")}</p>
+        <ul className="mt-3 grid gap-2 font-mono text-[11px]">
+          <li>win-x64 candidate sha256 9ef3f471b7a6641b4224532522b29141ce3746e27d55788d88e2fd951f362579</li>
+          <li>mac-arm64 candidate sha256 b72f091e2e1a7583eed389c4b8e3534ed355e568af8c8bbf8fc30a25e23ca679</li>
+        </ul>
       </Panel>
     </div>
   );

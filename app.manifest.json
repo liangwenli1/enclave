@@ -1,0 +1,12 @@
+{
+  "product": "Enclave",
+  "channel": "dev",
+  "version": "0.1.0-verify",
+  "release": false,
+  "note": "Not a customer build. 1.0 requires signed Windows/macOS installers. This file is the app-update slot; empty signature means do not ship.",
+  "artifacts": {
+    "win-x64": { "url": "", "sha256": "", "signature": "missing" },
+    "mac-arm64": { "url": "", "sha256": "", "signature": "missing" }
+  },
+  "publicKeyId": "pending"
+}

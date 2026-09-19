@@ -39,7 +39,9 @@ function LabPage() {
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-6">
       <h1 className="text-[20px] font-semibold tracking-tight">{t(locale, "labTitle")}</h1>
-      <p className="mt-1 max-w-2xl text-[13px] text-subtle">{t(locale, "hostHeadless")}</p>
+      <p className="mt-1 max-w-2xl text-[13px] text-subtle">
+        {t(locale, "hostHeadless")} <span className="font-mono text-[11px]">runtime: native</span>
+      </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <select
           className="h-8 rounded-md border border-line bg-surface px-2 text-[13px]"

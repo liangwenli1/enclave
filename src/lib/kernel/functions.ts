@@ -26,14 +26,13 @@ const profileSchema = z.object({
 
 export const getKernelStatusFn = createServerFn({ method: "GET" }).handler(async () => {
   const host = await import("./host.server");
-  const status = await host.readStatus();
-  const runtimes = await host.listRuntimesFresh();
-  return {
-    status,
-    kernel: host.kernelPublicView(),
-    capabilities: host.hostCapabilities(),
-    runtimes,
-  };
+  const [status, runtimes, kernel, capabilities] = await Promise.all([
+    host.readStatus(),
+    host.listRuntimesFresh(),
+    host.kernelPublicView(),
+    host.hostCapabilities(),
+  ]);
+  return { status, kernel, capabilities, runtimes };
 });
 
 export const startKernelDownloadFn = createServerFn({ method: "POST" }).handler(async () => {
@@ -103,3 +102,13 @@ export const probeProxyFn = createServerFn({ method: "POST" })
       };
     }
   });
+
+export const getHostTokenFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { readFile } = await import("node:fs/promises");
+  try {
+    const token = (await readFile("data/host.token", "utf8")).trim();
+    return { ok: true as const, token, bind: "127.0.0.1:17891" };
+  } catch {
+    return { ok: false as const, token: "", bind: "127.0.0.1:17891" };
+  }
+});

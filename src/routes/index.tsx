@@ -4,14 +4,8 @@ import { useMemo, useState } from "react";
 import { Button, Dialog, DialogContent, Field, Input, StatusDot } from "@/components/ui";
 import { startEnv, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
-import {
-  KERNEL_PIN,
-  TIMEZONES,
-  newEnvironment,
-  profileFromSeed,
-  randomSeed,
-  type PlatformId,
-} from "@/lib/schema";
+import { KERNEL_PIN, TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
+import { envCount, planOf } from "@/lib/license";
 import { useEnclave } from "@/lib/store";
 import { useLocale } from "@/components/shell";
 
@@ -21,6 +15,7 @@ function EnvironmentsPage() {
   const locale = useLocale();
   const navigate = useNavigate();
   const environments = useEnclave((s) => s.environments);
+  const planId = useEnclave((s) => s.settings.plan);
   const runtimes = useEnclave((s) => s.runtimes);
   const selected = useEnclave((s) => s.selectedIds);
   const [query, setQuery] = useState("");
@@ -42,11 +37,28 @@ function EnvironmentsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-[20px] font-semibold tracking-tight">{t(locale, "navEnv")}</h1>
-          <p className="mt-1 max-w-xl text-[13px] text-subtle">{t(locale, "tagline")}</p>
+          <p className="mt-1 max-w-xl text-[13px] text-subtle">
+            {t(locale, "tagline")} · {t(locale, "plan")} {planOf(planId).label}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setTrash((v) => !v)}>{trash ? t(locale, "navEnv") : t(locale, "trash")}</Button>
-          <Button variant="primary" onClick={() => setWizard(true)}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              const store = useEnclave.getState();
+              const plan = planOf(store.settings.plan);
+              if (envCount(store.environments) >= plan.envLimit) {
+                store.addAudit({
+                  action: "create_blocked",
+                  level: "warn",
+                  detail: `PLAN_ENV_LIMIT ${plan.label} max ${plan.envLimit}`,
+                });
+                return;
+              }
+              setWizard(true);
+            }}
+          >
             <Plus className="size-3.5" />
             {t(locale, "newEnv")}
           </Button>
@@ -233,6 +245,15 @@ function CreateWizard({
 
   const create = () => {
     const store = useEnclave.getState();
+    const plan = planOf(store.settings.plan);
+    if (envCount(store.environments) >= plan.envLimit) {
+      store.addAudit({
+        action: "create_blocked",
+        level: "warn",
+        detail: `PLAN_ENV_LIMIT ${plan.label} max ${plan.envLimit}`,
+      });
+      return;
+    }
     if (source === "copy" && copyId) {
       const copy = store.duplicateEnv(copyId);
       if (copy) {

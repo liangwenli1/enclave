@@ -1,4 +1,5 @@
 import { collectCdpFn, getKernelStatusFn, startEnvFn, stopEnvFn } from "@/lib/kernel/functions";
+import { planOf, runningCount } from "@/lib/license";
 import type { Environment, ProxyItem } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
@@ -13,6 +14,27 @@ export function proxyUrl(proxy: ProxyItem | undefined): string | undefined {
 
 export async function startEnv(env: Environment) {
   const store = useEnclave.getState();
+  const plan = planOf(store.settings.plan);
+  if (runningCount(store.runtimes) >= plan.concurrent && store.runtimes[env.id]?.status !== "running") {
+    const code = "PLAN_CONCURRENT_LIMIT";
+    store.setRuntime(env.id, {
+      envId: env.id,
+      pid: null,
+      debugPort: null,
+      debugAddress: "127.0.0.1",
+      status: "error",
+      startedAt: null,
+      hashOk: true,
+      error: code,
+    });
+    store.addAudit({
+      action: "start_blocked",
+      target: env.id,
+      level: "warn",
+      detail: `${code} ${plan.label} max ${plan.concurrent}`,
+    });
+    return { ok: false as const, code, message: `${plan.label} concurrent limit ${plan.concurrent}` };
+  }
   const kernel = await getKernelStatusFn();
   if (kernel.status.state !== "admitted") {
     store.setRuntime(env.id, {
@@ -98,7 +120,7 @@ export async function startEnv(env: Environment) {
     action: "start",
     target: env.id,
     level: env.allowNoSandbox ? "warn" : "info",
-    detail: `pid ${result.pid} port ${result.port}`,
+    detail: `pid ${result.pid} port ${result.port} runtime=native`,
   });
   store.patchEnv(
     env.id,
@@ -108,7 +130,7 @@ export async function startEnv(env: Environment) {
     {
       at: Date.now(),
       kind: "running",
-      message: `pid ${result.pid} · 127.0.0.1:${result.port}`,
+      message: `pid ${result.pid} · runtime=native`,
       level: env.allowNoSandbox ? "warn" : "info",
     },
   );

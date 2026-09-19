@@ -128,6 +128,8 @@ export type AppSettings = {
   apiPort: number;
   confirmDangerousApi: boolean;
   allowNoSandboxHost: boolean;
+  plan: "free" | "solo" | "pro";
+  onboarded: boolean;
 };
 
 export function makeId(prefix: string): string {

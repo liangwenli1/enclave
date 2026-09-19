@@ -72,6 +72,8 @@ const initialSettings: AppSettings = {
   apiPort: 18765,
   confirmDangerousApi: true,
   allowNoSandboxHost: false,
+  plan: "free",
+  onboarded: false,
 };
 
 export const useEnclave = create<Store>()(
@@ -217,6 +219,14 @@ export const useEnclave = create<Store>()(
         audit: s.audit,
         lab: { control: s.lab.control, lastByEnv: s.lab.lastByEnv, lastRunId: s.lab.lastRunId },
       }),
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<Store>;
+        return {
+          ...current,
+          ...p,
+          settings: { ...initialSettings, ...p.settings },
+        };
+      },
     },
   ),
 );
