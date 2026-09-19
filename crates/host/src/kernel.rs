@@ -352,40 +352,57 @@ async fn apply_search_engine(
     provider: Option<&SearchProvider>,
 ) -> Result<Option<PathBuf>> {
     let ext_dir = user_data_dir.join("enclave-search");
-    let policy_path = user_data_dir
-        .join("policies")
-        .join("managed")
-        .join("enclave.json");
+    let policy_dir = user_data_dir.join("policies").join("managed");
+    let policy_path = policy_dir.join("enclave.json");
     let chosen = resolve_search_provider(engine, provider);
+    let _ = tokio::fs::remove_dir_all(&ext_dir).await;
     if chosen.is_none() {
-        let _ = tokio::fs::remove_dir_all(&ext_dir).await;
         let _ = tokio::fs::remove_file(&policy_path).await;
         return Ok(None);
     }
     let chosen = chosen.unwrap();
-    tokio::fs::create_dir_all(&ext_dir).await?;
     let favicon = favicon_url_for(&chosen.keyword, &chosen.url);
-    let mut provider = json!({
-        "name": chosen.name,
-        "keyword": chosen.keyword,
-        "search_url": chosen.url,
-        "favicon_url": favicon,
-        "encoding": "UTF-8",
-        "is_default": true
+    tokio::fs::create_dir_all(&policy_dir).await?;
+    let mut policy = json!({
+        "DefaultSearchProviderEnabled": true,
+        "DefaultSearchProviderName": chosen.name,
+        "DefaultSearchProviderKeyword": chosen.keyword,
+        "DefaultSearchProviderSearchURL": chosen.url,
+        "DefaultSearchProviderFaviconURL": favicon,
+        "DefaultSearchProviderEncodings": ["UTF-8"]
     });
     if !chosen.suggest_url.is_empty() {
-        provider["suggest_url"] = json!(chosen.suggest_url);
+        policy["DefaultSearchProviderSuggestURL"] = json!(chosen.suggest_url);
     }
-    let manifest = json!({
-        "manifest_version": 3,
-        "name": "Enclave Search",
-        "version": "1.0.0",
-        "chrome_settings_overrides": {
-            "search_provider": provider
-        }
+    tokio::fs::write(&policy_path, serde_json::to_vec_pretty(&policy)?).await?;
+
+    let prefs_dir = user_data_dir.join("Default");
+    tokio::fs::create_dir_all(&prefs_dir).await?;
+    let prefs_path = prefs_dir.join("Preferences");
+    let mut prefs = if prefs_path.exists() {
+        tokio::fs::read(&prefs_path)
+            .await
+            .ok()
+            .and_then(|b| serde_json::from_slice(&b).ok())
+            .unwrap_or_else(|| json!({}))
+    } else {
+        json!({})
+    };
+    let mut template = json!({
+        "short_name": chosen.name,
+        "keyword": chosen.keyword,
+        "url": chosen.url,
+        "favicon_url": favicon,
+        "safe_for_autoreplace": true,
+        "input_encodings": ["UTF-8"]
     });
-    tokio::fs::write(ext_dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest)?).await?;
-    Ok(Some(ext_dir))
+    if !chosen.suggest_url.is_empty() {
+        template["suggestions_url"] = json!(chosen.suggest_url);
+    }
+    prefs["default_search_provider_data"] = json!({ "template_url_data": template });
+    prefs["default_search_provider"] = json!({ "enabled": true });
+    tokio::fs::write(&prefs_path, serde_json::to_vec_pretty(&prefs)?).await?;
+    Ok(None)
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

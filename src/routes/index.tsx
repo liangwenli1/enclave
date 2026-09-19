@@ -243,6 +243,7 @@ function CreateWizard({
 
   const catalog = useEnclave((s) => s.searchCatalog);
   const create = () => {
+    if (!name.trim()) return;
     const store = useEnclave.getState();
     const plan = planOf(store.settings.plan);
     if (envCount(store.environments) >= plan.envLimit) {
@@ -326,7 +327,12 @@ function CreateWizard({
         {step === 1 ? (
           <div className="grid gap-3">
             <Field label={t(locale, "name")}>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder={locale === "zh" ? "例如 test" : "e.g. test"}
+                required
+              />
             </Field>
             <Field label={t(locale, "group")}>
               <Input value={group} onChange={(e) => setGroup(e.target.value)} />
@@ -416,11 +422,18 @@ function CreateWizard({
             {step === 0 ? t(locale, "cancel") : t(locale, "back")}
           </Button>
           {step < 2 ? (
-            <Button variant="primary" onClick={() => setStep((s) => s + 1)}>
+            <Button
+              variant="primary"
+              disabled={step === 1 && !name.trim()}
+              onClick={() => {
+                if (step === 1 && !name.trim()) return;
+                setStep((s) => s + 1);
+              }}
+            >
               {t(locale, "next")}
             </Button>
           ) : (
-            <Button variant="primary" onClick={create}>
+            <Button variant="primary" disabled={!name.trim()} onClick={create}>
               {t(locale, "create")}
             </Button>
           )}
