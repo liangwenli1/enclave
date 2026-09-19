@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Button, Dialog, DialogContent, Field, Input, Select, StatusDot } from "@/components/ui";
 import { startEnv, stopEnv, trashEnv, purgeEnv } from "@/lib/host";
 import { t, runtimeLabel } from "@/lib/i18n";
-import { TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
+import { KERNEL_PIN, TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
 import { defaultPlatformVersion, platformLabel } from "@/lib/os";
 import { engineToProvider, findEngine } from "@/lib/engines";
 import { envCount, planOf } from "@/lib/license";
