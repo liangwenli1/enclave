@@ -347,6 +347,19 @@ pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf
 }
 
 async fn seed_search_engine(user_data_dir: &Path) -> Result<()> {
+    let managed = user_data_dir.join("policies").join("managed");
+    tokio::fs::create_dir_all(&managed).await?;
+    let policy = json!({
+        "DefaultSearchProviderEnabled": true,
+        "DefaultSearchProviderName": "DuckDuckGo",
+        "DefaultSearchProviderKeyword": "ddg",
+        "DefaultSearchProviderSearchURL": "https://duckduckgo.com/?q={searchTerms}",
+        "DefaultSearchProviderSuggestURL": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
+        "DefaultSearchProviderNewTabURL": "https://duckduckgo.com/",
+        "DefaultSearchProviderIconURL": "https://duckduckgo.com/favicon.ico"
+    });
+    tokio::fs::write(managed.join("enclave.json"), serde_json::to_vec_pretty(&policy)?).await?;
+
     let default_dir = user_data_dir.join("Default");
     tokio::fs::create_dir_all(&default_dir).await?;
     let path = default_dir.join("Preferences");
@@ -356,14 +369,6 @@ async fn seed_search_engine(user_data_dir: &Path) -> Result<()> {
     } else {
         json!({})
     };
-    let has_search = prefs
-        .pointer("/default_search_provider_data/template_url_data/url")
-        .and_then(|v| v.as_str())
-        .map(|s| s.contains("{searchTerms}"))
-        .unwrap_or(false);
-    if has_search {
-        return Ok(());
-    }
     prefs["default_search_provider_data"] = json!({
         "template_url_data": {
             "short_name": "DuckDuckGo",
@@ -379,8 +384,6 @@ async fn seed_search_engine(user_data_dir: &Path) -> Result<()> {
         }
     });
     prefs["browser"]["has_seen_welcome_page"] = json!(true);
-    prefs["session"]["restore_on_startup"] = json!(4);
-    prefs["session"]["startup_urls"] = json!(["https://duckduckgo.com/"]);
     tokio::fs::write(path, serde_json::to_vec_pretty(&prefs)?).await?;
     Ok(())
 }
