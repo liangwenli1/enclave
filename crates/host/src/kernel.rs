@@ -870,6 +870,10 @@ pub async fn start_environment(
     }
     if let Some(p) = proxy_server {
         args.push(format!("--proxy-server={p}"));
+        args.push("--proxy-bypass-list=<-loopback>".into());
+        args.push("--disable-quic".into());
+        args.push("--dns-over-https-mode=off".into());
+        args.push("--disable-features=UseDnsHttpsSvcb".into());
     }
     if allow_no_sandbox {
         args.push("--no-sandbox".into());
