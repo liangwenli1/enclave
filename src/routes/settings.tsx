@@ -137,6 +137,9 @@ function SettingsPage() {
           <p className="mt-2">{t(locale, "tagline")}</p>
           <p className="mt-2">{t(locale, "license")}</p>
           <p className="mt-2">{t(locale, "delaySource")}</p>
+          <a href="/www" className="mt-3 inline-block text-[13px] text-ink underline">
+            官网
+          </a>
         </Panel>
       </div>
     </div>

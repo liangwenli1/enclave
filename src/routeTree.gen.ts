@@ -16,7 +16,11 @@ import { Route as LabRouteImport } from './routes/lab'
 import { Route as NetworkRouteImport } from './routes/network'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as WwwRouteImport } from './routes/www'
 import { Route as EnvironmentsIdRouteImport } from './routes/environments.$id'
+import { Route as WwwAccountRouteImport } from './routes/www.account'
+import { Route as WwwDownloadRouteImport } from './routes/www.download'
+import { Route as WwwPricingRouteImport } from './routes/www.pricing'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -53,10 +57,30 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const WwwRoute = WwwRouteImport.update({
+  id: '/www',
+  path: '/www',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const EnvironmentsIdRoute = EnvironmentsIdRouteImport.update({
   id: '/environments/$id',
   path: '/environments/$id',
   getParentRoute: () => rootRouteImport,
+} as any)
+const WwwAccountRoute = WwwAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => WwwRoute,
+} as any)
+const WwwDownloadRoute = WwwDownloadRouteImport.update({
+  id: '/download',
+  path: '/download',
+  getParentRoute: () => WwwRoute,
+} as any)
+const WwwPricingRoute = WwwPricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => WwwRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -67,7 +91,11 @@ export interface FileRoutesByFullPath {
   '/network': typeof NetworkRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
+  '/www/account': typeof WwwAccountRoute
+  '/www/download': typeof WwwDownloadRoute
+  '/www/pricing': typeof WwwPricingRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -77,7 +105,11 @@ export interface FileRoutesByTo {
   '/network': typeof NetworkRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
+  '/www/account': typeof WwwAccountRoute
+  '/www/download': typeof WwwDownloadRoute
+  '/www/pricing': typeof WwwPricingRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -88,7 +120,11 @@ export interface FileRoutesById {
   '/network': typeof NetworkRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
+  '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
+  '/www/account': typeof WwwAccountRoute
+  '/www/download': typeof WwwDownloadRoute
+  '/www/pricing': typeof WwwPricingRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -100,7 +136,11 @@ export interface FileRouteTypes {
     | '/network'
     | '/security'
     | '/settings'
+    | '/www'
     | '/environments/$id'
+    | '/www/account'
+    | '/www/download'
+    | '/www/pricing'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -110,7 +150,11 @@ export interface FileRouteTypes {
     | '/network'
     | '/security'
     | '/settings'
+    | '/www'
     | '/environments/$id'
+    | '/www/account'
+    | '/www/download'
+    | '/www/pricing'
   id:
     | '__root__'
     | '/'
@@ -120,7 +164,11 @@ export interface FileRouteTypes {
     | '/network'
     | '/security'
     | '/settings'
+    | '/www'
     | '/environments/$id'
+    | '/www/account'
+    | '/www/download'
+    | '/www/pricing'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -131,6 +179,7 @@ export interface RootRouteChildren {
   NetworkRoute: typeof NetworkRoute
   SecurityRoute: typeof SecurityRoute
   SettingsRoute: typeof SettingsRoute
+  WwwRoute: typeof WwwRouteWithChildren
   EnvironmentsIdRoute: typeof EnvironmentsIdRoute
 }
 
@@ -185,6 +234,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/www': {
+      id: '/www'
+      path: '/www'
+      fullPath: '/www'
+      preLoaderRoute: typeof WwwRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/environments/$id': {
       id: '/environments/$id'
       path: '/environments/$id'
@@ -192,8 +248,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EnvironmentsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/www/account': {
+      id: '/www/account'
+      path: '/account'
+      fullPath: '/www/account'
+      preLoaderRoute: typeof WwwAccountRouteImport
+      parentRoute: typeof WwwRoute
+    }
+    '/www/download': {
+      id: '/www/download'
+      path: '/download'
+      fullPath: '/www/download'
+      preLoaderRoute: typeof WwwDownloadRouteImport
+      parentRoute: typeof WwwRoute
+    }
+    '/www/pricing': {
+      id: '/www/pricing'
+      path: '/pricing'
+      fullPath: '/www/pricing'
+      preLoaderRoute: typeof WwwPricingRouteImport
+      parentRoute: typeof WwwRoute
+    }
   }
 }
+
+interface WwwRouteChildren {
+  WwwAccountRoute: typeof WwwAccountRoute
+  WwwDownloadRoute: typeof WwwDownloadRoute
+  WwwPricingRoute: typeof WwwPricingRoute
+}
+
+const WwwRouteChildren: WwwRouteChildren = {
+  WwwAccountRoute: WwwAccountRoute,
+  WwwDownloadRoute: WwwDownloadRoute,
+  WwwPricingRoute: WwwPricingRoute,
+}
+
+const WwwRouteWithChildren = WwwRoute._addFileChildren(WwwRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -203,6 +294,7 @@ const rootRouteChildren: RootRouteChildren = {
   NetworkRoute: NetworkRoute,
   SecurityRoute: SecurityRoute,
   SettingsRoute: SettingsRoute,
+  WwwRoute: WwwRouteWithChildren,
   EnvironmentsIdRoute: EnvironmentsIdRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,4 +1,4 @@
-import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
+import { createRootRoute, HeadContent, Outlet, Scripts, useRouterState } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AppShell } from "@/components/shell";
@@ -15,7 +15,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#010102" },
       {
         name: "description",
-        content: "Local-first multi-environment browser workbench",
+        content: "本机多环境浏览器。内核跑在客户自己的电脑上。",
       },
     ],
     links: [
@@ -25,7 +25,13 @@ export const Route = createRootRoute({
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
     ],
   }),
-  component: () => (
+  component: RootDocument,
+});
+
+function RootDocument() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isWww = pathname === "/www" || pathname.startsWith("/www/");
+  return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <HeadContent />
@@ -33,12 +39,16 @@ export const Route = createRootRoute({
       <body>
         <PreviewHostBridge />
         <AuthProvider>
-          <AppShell>
+          {isWww ? (
             <Outlet />
-          </AppShell>
+          ) : (
+            <AppShell>
+              <Outlet />
+            </AppShell>
+          )}
         </AuthProvider>
         <Scripts />
       </body>
     </html>
-  ),
-});
+  );
+}
