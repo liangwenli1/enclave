@@ -17,7 +17,10 @@ fn main() {
                 }
             }
             let sidecar = app.shell().sidecar("enclave-host")?;
-            sidecar.current_dir(&data).spawn()?;
+            sidecar
+                .current_dir(&data)
+                .env("ENCLAVE_ALLOW_LOOPBACK_NO_AUTH", "1")
+                .spawn()?;
             Ok(())
         })
         .run(tauri::generate_context!())

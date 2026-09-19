@@ -4,6 +4,8 @@ version = "0.9.0"
 description = "Enclave workbench shell. Unsigned preview, not 1.0."
 edition = "2021"
 
+[workspace]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 

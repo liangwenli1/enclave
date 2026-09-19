@@ -24,7 +24,16 @@ const profileSchema = z.object({
   lockedFields: z.array(z.string()),
 });
 
-export const getKernelStatusFn = createServerFn({ method: "GET" }).handler(async () => {
+const DIRECT = import.meta.env.VITE_ENCLAVE_DIRECT === "true";
+
+function dataOf<T>(input: T | { data: T }): T {
+  if (input && typeof input === "object" && "data" in (input as object)) {
+    return (input as { data: T }).data;
+  }
+  return input;
+}
+
+const getKernelStatusServer = createServerFn({ method: "GET" }).handler(async () => {
   const host = await import("./host.server");
   const [status, runtimes, kernel, capabilities] = await Promise.all([
     host.readStatus(),
@@ -35,19 +44,35 @@ export const getKernelStatusFn = createServerFn({ method: "GET" }).handler(async
   return { status, kernel, capabilities, runtimes };
 });
 
-export const startKernelDownloadFn = createServerFn({ method: "POST" }).handler(async () => {
+export async function getKernelStatusFn() {
+  if (DIRECT) return (await import("./host.direct")).getKernelStatus();
+  return getKernelStatusServer();
+}
+
+const startKernelDownloadServer = createServerFn({ method: "POST" }).handler(async () => {
   const host = await import("./host.server");
   return host.startDownload();
 });
 
-export const listSearchEnginesFn = createServerFn({ method: "GET" })
+export async function startKernelDownloadFn() {
+  if (DIRECT) return (await import("./host.direct")).startDownload();
+  return startKernelDownloadServer();
+}
+
+const listSearchEnginesServer = createServerFn({ method: "GET" })
   .validator(z.object({ envId: z.string() }))
   .handler(async ({ data }) => {
     const host = await import("./host.server");
     return host.listSearchEngines(data.envId);
   });
 
-export const startEnvFn = createServerFn({ method: "POST" })
+export async function listSearchEnginesFn(input: { data: { envId: string } } | { envId: string }) {
+  const data = dataOf(input);
+  if (DIRECT) return (await import("./host.direct")).listSearchEngines(data.envId);
+  return listSearchEnginesServer({ data });
+}
+
+const startEnvServer = createServerFn({ method: "POST" })
   .validator(
     z.object({
       envId: z.string(),
@@ -71,21 +96,47 @@ export const startEnvFn = createServerFn({ method: "POST" })
     return host.startEnvironment(data);
   });
 
-export const stopEnvFn = createServerFn({ method: "POST" })
+export async function startEnvFn(input: { data: {
+    envId: string;
+    profile: z.infer<typeof profileSchema>;
+    extraFlags: string[];
+    allowNoSandbox: boolean;
+    proxyServer?: string;
+    searchEngine?: string;
+    searchProvider?: { name: string; keyword: string; url: string; suggestUrl?: string };
+  } }) {
+  const data = dataOf(input);
+  if (DIRECT) return (await import("./host.direct")).startEnvironment(data);
+  return startEnvServer({ data });
+}
+
+const stopEnvServer = createServerFn({ method: "POST" })
   .validator(z.object({ envId: z.string() }))
   .handler(async ({ data }) => {
     const host = await import("./host.server");
     return host.stopEnvironment(data.envId);
   });
 
-export const collectCdpFn = createServerFn({ method: "POST" })
+export async function stopEnvFn(input: { data: { envId: string } }) {
+  const data = dataOf(input);
+  if (DIRECT) return (await import("./host.direct")).stopEnvironment(data.envId);
+  return stopEnvServer({ data });
+}
+
+const collectCdpServer = createServerFn({ method: "POST" })
   .validator(z.object({ envId: z.string() }))
   .handler(async ({ data }) => {
     const host = await import("./host.server");
     return host.collectCdp(data.envId);
   });
 
-export const probeProxyFn = createServerFn({ method: "POST" })
+export async function collectCdpFn(input: { data: { envId: string } }) {
+  const data = dataOf(input);
+  if (DIRECT) return (await import("./host.direct")).collectCdp(data.envId);
+  return collectCdpServer({ data });
+}
+
+const probeProxyServer = createServerFn({ method: "POST" })
   .validator(
     z.object({
       protocol: z.enum(["http", "https", "socks5"]),
@@ -119,7 +170,15 @@ export const probeProxyFn = createServerFn({ method: "POST" })
     }
   });
 
-export const getHostTokenFn = createServerFn({ method: "GET" }).handler(async () => {
+export async function probeProxyFn(input: {
+  data: { protocol: "http" | "https" | "socks5"; host: string; port: number };
+}) {
+  const data = dataOf(input);
+  if (DIRECT) return (await import("./host.direct")).probeProxy();
+  return probeProxyServer({ data });
+}
+
+const getHostTokenServer = createServerFn({ method: "GET" }).handler(async () => {
   const { readFile } = await import("node:fs/promises");
   try {
     const token = (await readFile("data/host.token", "utf8")).trim();
@@ -128,3 +187,8 @@ export const getHostTokenFn = createServerFn({ method: "GET" }).handler(async ()
     return { ok: false as const, token: "", bind: "127.0.0.1:17891" };
   }
 });
+
+export async function getHostTokenFn() {
+  if (DIRECT) return { ok: true as const, token: "", bind: "127.0.0.1:17891" };
+  return getHostTokenServer();
+}

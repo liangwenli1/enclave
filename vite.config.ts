@@ -145,7 +145,9 @@ function authPopupPlugin(): Plugin {
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
-export default defineConfig(({ command, isPreview }) => ({
+export default defineConfig(({ command, isPreview }) => {
+  const desktop = process.env.VITE_ENCLAVE_DIRECT === "true";
+  return {
   server: {
     host: "0.0.0.0",
     port: 8080,
@@ -169,8 +171,8 @@ export default defineConfig(({ command, isPreview }) => ({
     // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
     grokPwaPlugin(),
     tailwindcss(),
-    tanstackStart(),
-    ...(command === "build" || isPreview
+    tanstackStart(desktop ? { spa: { enabled: true } } : {}),
+    ...(!desktop && (command === "build" || isPreview)
       ? [
           nitro({
             preset: "vercel",
@@ -183,4 +185,5 @@ export default defineConfig(({ command, isPreview }) => ({
       : []),
     viteReact(),
   ],
-}));
+  };
+});
