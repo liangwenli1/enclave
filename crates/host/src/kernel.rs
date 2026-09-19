@@ -267,6 +267,27 @@ fn find_chrome(dir: &Path) -> Option<PathBuf> {
     None
 }
 
+#[cfg(windows)]
+fn hide_window(cmd: &mut Command) {
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+async fn kill_pid(pid: u32) {
+    #[cfg(windows)]
+    {
+        let mut kill = Command::new("taskkill");
+        kill.args(["/PID", &pid.to_string(), "/T", "/F"]);
+        hide_window(&mut kill);
+        let _ = kill.status().await;
+    }
+    #[cfg(unix)]
+    {
+        let _ = Command::new("kill").args(["-KILL", &format!("-{pid}")]).status().await;
+        let _ = Command::new("kill").args(["-KILL", &pid.to_string()]).status().await;
+    }
+}
+
 async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
     let name = archive
         .file_name()
@@ -277,14 +298,14 @@ async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
         {
             let archive = archive.display().to_string().replace('\'', "''");
             let dest = dest.display().to_string().replace('\'', "''");
-            let out = Command::new("powershell")
-                .args([
-                    "-NoProfile",
-                    "-Command",
-                    &format!("Expand-Archive -LiteralPath '{archive}' -DestinationPath '{dest}' -Force"),
-                ])
-                .output()
-                .await?;
+            let mut cmd = Command::new("powershell");
+            cmd.args([
+                "-NoProfile",
+                "-Command",
+                &format!("Expand-Archive -LiteralPath '{archive}' -DestinationPath '{dest}' -Force"),
+            ]);
+            hide_window(&mut cmd);
+            let out = cmd.output().await?;
             if !out.status.success() {
                 bail!("unzip: {}", String::from_utf8_lossy(&out.stderr));
             }
@@ -634,8 +655,7 @@ pub async fn start_environment(
         let _ = child.wait().await;
     });
     if !wait_for_cdp(port, 12000).await {
-        let _ = Command::new("kill").args(["-KILL", &format!("-{pid}")]).status().await;
-        let _ = Command::new("kill").args(["-KILL", &pid.to_string()]).status().await;
+        kill_pid(pid).await;
         let stderr = stderr_buf.lock().await.clone();
         let sandbox_hint = !allow_no_sandbox
             && (stderr.to_lowercase().contains("no sandbox")
@@ -673,14 +693,24 @@ pub async fn start_environment(
 pub fn pid_alive(pid: u32) -> bool {
     #[cfg(windows)]
     {
-        std::process::Command::new("tasklist")
-            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
-            .output()
-            .map(|o| {
-                let text = String::from_utf8_lossy(&o.stdout);
-                text.contains(&pid.to_string())
-            })
-            .unwrap_or(false)
+        const PROCESS_QUERY_LIMITED_INFORMATION: u32 = 0x1000;
+        const STILL_ACTIVE: u32 = 259;
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn OpenProcess(access: u32, inherit: i32, pid: u32) -> isize;
+            fn CloseHandle(handle: isize) -> i32;
+            fn GetExitCodeProcess(handle: isize, exit_code: *mut u32) -> i32;
+        }
+        unsafe {
+            let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if handle == 0 {
+                return false;
+            }
+            let mut code = 0u32;
+            let ok = GetExitCodeProcess(handle, &mut code);
+            CloseHandle(handle);
+            ok != 0 && code == STILL_ACTIVE
+        }
     }
     #[cfg(unix)]
     {
@@ -718,10 +748,7 @@ pub async fn stop_environment(
     if let Some(rt) = rt {
         #[cfg(windows)]
         {
-            let _ = Command::new("taskkill")
-                .args(["/PID", &rt.pid.to_string(), "/T", "/F"])
-                .status()
-                .await;
+            kill_pid(rt.pid).await;
         }
         #[cfg(unix)]
         {
