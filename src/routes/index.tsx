@@ -1,10 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Plus, Play, Square, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Button, Dialog, DialogContent, Field, Input, StatusDot } from "@/components/ui";
+import { Button, Dialog, DialogContent, Field, Input, Select, StatusDot } from "@/components/ui";
 import { startEnv, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { KERNEL_PIN, TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
+import { defaultPlatformVersion, platformLabel } from "@/lib/os";
+import { engineToProvider, findEngine } from "@/lib/engines";
 import { envCount, planOf } from "@/lib/license";
 import { useEnclave } from "@/lib/store";
 import { useLocale } from "@/components/shell";
@@ -139,7 +141,7 @@ function EnvironmentsPage() {
                       </Link>
                       <div className="text-[11px] text-subtle">{env.group}</div>
                     </td>
-                    <td className="px-3 py-2 capitalize">{env.profile.platform}</td>
+                    <td className="px-3 py-2">{platformLabel(env.profile)}</td>
                     <td className="px-3 py-2 text-subtle">
                       {useEnclave.getState().proxies.find((p) => p.id === env.proxyId)?.name ??
                         t(locale, "noProxy")}
@@ -239,10 +241,13 @@ function CreateWizard({
   const [name, setName] = useState("");
   const [group, setGroup] = useState("default");
   const [platform, setPlatform] = useState<PlatformId>("windows");
+  const [winEdition, setWinEdition] = useState<"10" | "11">("11");
+  const [engineId, setEngineId] = useState("google");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
   const [proxyId, setProxyId] = useState<string>("");
   const [copyId, setCopyId] = useState("");
 
+  const catalog = useEnclave((s) => s.searchCatalog);
   const create = () => {
     const store = useEnclave.getState();
     const plan = planOf(store.settings.plan);
@@ -263,12 +268,18 @@ function CreateWizard({
       return;
     }
     const seed = randomSeed();
+    const engine = findEngine(catalog, engineId);
     const env = newEnvironment({
       name: name || (locale === "zh" ? "未命名环境" : "Untitled"),
       group,
       proxyId: proxyId || null,
-      profile: profileFromSeed(seed, platform, { timezone }),
+      profile: profileFromSeed(seed, platform, {
+        timezone,
+        platformVersion: defaultPlatformVersion(platform, winEdition),
+      }),
       kernelPin: KERNEL_PIN,
+      searchEngine: engine?.id ?? "none",
+      searchProvider: engine ? engineToProvider(engine) : undefined,
     });
     env.timeline[0] = {
       at: Date.now(),
@@ -322,15 +333,32 @@ function CreateWizard({
               <Input value={group} onChange={(e) => setGroup(e.target.value)} />
             </Field>
             <Field label={t(locale, "platform")}>
-              <select
-                className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
+              <Select
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value as PlatformId)}
               >
                 <option value="windows">Windows</option>
                 <option value="macos">macOS</option>
                 <option value="linux">Linux</option>
-              </select>
+              </Select>
+            </Field>
+            {platform === "windows" ? (
+              <Field label={t(locale, "osVersion")}>
+                <Select value={winEdition} onChange={(e) => setWinEdition(e.target.value as "10" | "11")}>
+                  <option value="10">{t(locale, "win10")}</option>
+                  <option value="11">{t(locale, "win11")}</option>
+                </Select>
+              </Field>
+            ) : null}
+            <Field label={t(locale, "searchEngine")}>
+              <Select value={engineId} onChange={(e) => setEngineId(e.target.value)}>
+                <option value="none">{t(locale, "searchEngineNone")}</option>
+                {catalog.map((engine) => (
+                  <option key={engine.id} value={engine.id}>
+                    {engine.name}
+                  </option>
+                ))}
+              </Select>
             </Field>
             {source === "copy" ? (
               <Field label={t(locale, "fromCopy")}>

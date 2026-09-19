@@ -16,8 +16,7 @@
         "title": "Enclave",
         "width": 1280,
         "height": 800,
-        "backgroundColor": "#010102",
-        "additionalBrowserArgs": "--auto-open-devtools-for-tabs"
+        "backgroundColor": "#010102"
       }
     ],
     "security": {

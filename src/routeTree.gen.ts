@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as EnginesRouteImport } from './routes/engines'
 import { Route as ExtensionsRouteImport } from './routes/extensions'
 import { Route as KernelsRouteImport } from './routes/kernels'
 import { Route as LabRouteImport } from './routes/lab'
@@ -27,6 +28,11 @@ import { Route as WwwPricingRouteImport } from './routes/www.pricing'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EnginesRoute = EnginesRouteImport.update({
+  id: '/engines',
+  path: '/engines',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExtensionsRoute = ExtensionsRouteImport.update({
@@ -97,6 +103,7 @@ const WwwPricingRoute = WwwPricingRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
   '/lab': typeof LabRoute
@@ -113,6 +120,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
   '/lab': typeof LabRoute
@@ -130,6 +138,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
   '/lab': typeof LabRoute
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/engines'
     | '/extensions'
     | '/kernels'
     | '/lab'
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/engines'
     | '/extensions'
     | '/kernels'
     | '/lab'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/engines'
     | '/extensions'
     | '/kernels'
     | '/lab'
@@ -197,6 +209,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  EnginesRoute: typeof EnginesRoute
   ExtensionsRoute: typeof ExtensionsRoute
   KernelsRoute: typeof KernelsRoute
   LabRoute: typeof LabRoute
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/engines': {
+      id: '/engines'
+      path: '/engines'
+      fullPath: '/engines'
+      preLoaderRoute: typeof EnginesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/extensions': {
@@ -330,6 +350,7 @@ const WwwRouteWithChildren = WwwRoute._addFileChildren(WwwRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  EnginesRoute: EnginesRoute,
   ExtensionsRoute: ExtensionsRoute,
   KernelsRoute: KernelsRoute,
   LabRoute: LabRoute,

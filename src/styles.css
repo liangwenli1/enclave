@@ -68,22 +68,34 @@
   --www-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+}
+
 html.light {
   color-scheme: light;
-  --enclave-canvas: #f4f5f5;
-  --enclave-surface: #ffffff;
-  --enclave-surface-2: #f7f8f8;
-  --enclave-surface-3: #eef0f1;
-  --enclave-ink: #0f1011;
-  --enclave-muted: #3a3d42;
-  --enclave-subtle: #6a6e76;
-  --enclave-line: #e3e5e7;
-  --enclave-line-strong: #c9ccd1;
-  --enclave-accent: #1c1d1f;
-  --enclave-accent-fg: #f7f8f8;
-  --enclave-ok: #1f8a3a;
-  --enclave-warn: #a36b12;
-  --enclave-bad: #c13b34;
+  --enclave-canvas: #f3f1ec;
+  --enclave-surface: #fffcf7;
+  --enclave-surface-2: #f6f3ee;
+  --enclave-surface-3: #ebe6dc;
+  --enclave-ink: #161412;
+  --enclave-muted: #3f3c38;
+  --enclave-subtle: #6f6a62;
+  --enclave-line: #e4dfd6;
+  --enclave-line-strong: #cfc8bb;
+  --enclave-accent: #161412;
+  --enclave-accent-fg: #f7f4ee;
+  --enclave-ok: #1f7a3a;
+  --enclave-warn: #a57a1f;
+  --enclave-bad: #b42318;
 }
 
 html,

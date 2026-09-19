@@ -10,6 +10,7 @@ import {
   Settings,
   Shield,
   Cpu,
+  SearchCode,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
@@ -22,6 +23,7 @@ import { Onboarding } from "@/components/onboarding";
 const NAV = [
   { to: "/", key: "navEnv" as const, icon: Box },
   { to: "/network", key: "navNet" as const, icon: Globe },
+  { to: "/engines", key: "navEngines" as const, icon: SearchCode },
   { to: "/extensions", key: "navExt" as const, icon: Puzzle },
   { to: "/lab", key: "navLab" as const, icon: FlaskConical },
   { to: "/kernels", key: "navKernels" as const, icon: Cpu },
@@ -69,7 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Mark />
           <div className="leading-tight">
             <div className="text-sm font-semibold tracking-tight">{t(locale, "app")}</div>
-            <div className="text-xs text-subtle">148 · stable</div>
+            <div className="text-xs text-subtle">{t(locale, "appKind")}</div>
           </div>
         </div>
         <nav className="app-nav">
@@ -256,6 +258,7 @@ function CommandPalette({
     () => [
       { to: "/", label: t(locale, "navEnv") },
       { to: "/network", label: t(locale, "navNet") },
+      { to: "/engines", label: t(locale, "navEngines") },
       { to: "/extensions", label: t(locale, "navExt") },
       { to: "/lab", label: t(locale, "navLab") },
       { to: "/kernels", label: t(locale, "navKernels") },

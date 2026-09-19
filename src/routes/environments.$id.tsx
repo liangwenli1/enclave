@@ -1,12 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FlaskConical, Play, Square } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { Badge, Button, Field, Input, Panel, StatusDot, Textarea } from "@/components/ui";
+import { useMemo, useState } from "react";
+import { Badge, Button, Field, Input, Panel, Select, StatusDot, Textarea } from "@/components/ui";
 import { useLocale } from "@/components/shell";
 import { classifyAll } from "@/lib/kernel/flags";
-import { listSearchEnginesFn } from "@/lib/kernel/functions";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
+import { engineToProvider } from "@/lib/engines";
+import { defaultWinVersion, windowsEdition } from "@/lib/os";
 import { staticConsistency } from "@/lib/lab";
 import { TIMEZONES, type FingerprintProfile, type PlatformId, type WebrtcMode } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
@@ -46,7 +47,11 @@ function EnvDetail() {
           <h1 className="text-[18px] font-semibold tracking-tight">{env.name}</h1>
           <Badge tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}>
             <StatusDot tone={status === "running" ? "run" : status === "error" ? "bad" : "idle"} />
-            {status}
+            {status === "running"
+              ? t(locale, "running")
+              : status === "error"
+                ? t(locale, "error")
+                : t(locale, "stopped")}
           </Badge>
           <div className="ml-auto flex gap-2">
             {status === "running" ? (
@@ -98,8 +103,7 @@ function EnvDetail() {
               />
             </Field>
             <Field label={t(locale, "proxy")}>
-              <select
-                className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
+              <Select
                 value={env.proxyId ?? ""}
                 onChange={(e) =>
                   useEnclave.getState().patchEnv(env.id, { proxyId: e.target.value || null })
@@ -111,10 +115,10 @@ function EnvDetail() {
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
             <Field label={t(locale, "searchEngine")}>
-              <SearchEnginePanel envId={env.id} running={status === "running"} />
+              <EngineSelect envId={env.id} value={env.searchEngine ?? "none"} />
             </Field>
             <Field label={t(locale, "note")}>
               <Textarea
@@ -170,41 +174,45 @@ function EnvDetail() {
 
       <aside className="grid h-fit gap-3">
         <Panel className="p-4">
-          <div className="mb-2 text-[12px] font-medium">{t(locale, "runtime")}</div>
+          <div className="mb-2 text-sm font-medium">{t(locale, "runtime")}</div>
+          <p className="text-sm text-subtle">
+            {runtime?.status === "running"
+              ? t(locale, "running")
+              : runtime?.error ?? t(locale, "stopped")}
+          </p>
           {runtime?.status === "running" ? (
-            <dl className="grid gap-2 text-[12px]">
-              <Row k={t(locale, "pid")} v={String(runtime.pid)} />
-              <Row k={t(locale, "debugPort")} v={`127.0.0.1:${runtime.debugPort}`} />
-              <Row k={t(locale, "hash")} v={runtime.hashOk ? t(locale, "hashOk") : t(locale, "hashFail")} />
-              <Row k="SHA256" v={(runtime.sha256 ?? "").slice(0, 16)} />
-            </dl>
-          ) : (
-            <p className="text-[12px] text-subtle">{runtime?.error ?? t(locale, "runtimeEmpty")}</p>
-          )}
-          {runtime?.status === "running" ? (
-            <Button
-              className="mt-3 w-full"
-              onClick={() => void collectEnvCdp(env.id)}
-            >
-              {t(locale, "collectCdp")}
+            <Button className="mt-3 w-full" onClick={() => void collectEnvCdp(env.id)}>
+              {t(locale, "collectPage")}
             </Button>
           ) : null}
-        </Panel>
-        <Panel className="p-4 text-[12px] text-subtle">
-          <div>{t(locale, "bindLoopback")}</div>
-          <div className="mt-2">{t(locale, "hostHeadless")}</div>
         </Panel>
       </aside>
     </div>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function EngineSelect({ envId, value }: { envId: string; value: string }) {
+  const locale = useLocale();
+  const catalog = useEnclave((s) => s.searchCatalog);
   return (
-    <div className="flex justify-between gap-3">
-      <dt className="text-subtle">{k}</dt>
-      <dd className="font-mono text-ink">{v}</dd>
-    </div>
+    <Select
+      value={value}
+      onChange={(e) => {
+        const id = e.target.value;
+        const engine = catalog.find((item) => item.id === id);
+        useEnclave.getState().patchEnv(envId, {
+          searchEngine: id,
+          searchProvider: engine ? engineToProvider(engine) : undefined,
+        });
+      }}
+    >
+      <option value="none">{t(locale, "searchEngineNone")}</option>
+      {catalog.map((engine) => (
+        <option key={engine.id} value={engine.id}>
+          {engine.name}
+        </option>
+      ))}
+    </Select>
   );
 }
 
@@ -237,26 +245,35 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
         </div>
       </Field>
       <Field label={t(locale, "platform")}>
-        <select
-          className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
+        <Select
           value={profile.platform}
           onChange={(e) => patch({ platform: e.target.value as PlatformId })}
         >
           <option value="windows">Windows</option>
           <option value="macos">macOS</option>
           <option value="linux">Linux</option>
-        </select>
+        </Select>
       </Field>
+      {profile.platform === "windows" ? (
+        <Field label={t(locale, "osVersion")}>
+          <Select
+            value={windowsEdition(profile.platformVersion)}
+            onChange={(e) => patch({ platformVersion: defaultWinVersion(e.target.value as "10" | "11") })}
+          >
+            <option value="10">{t(locale, "win10")}</option>
+            <option value="11">{t(locale, "win11")}</option>
+          </Select>
+        </Field>
+      ) : null}
       <Field label={t(locale, "brand")}>
-        <select
-          className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
+        <Select
           value={profile.brand}
           onChange={(e) => patch({ brand: e.target.value as FingerprintProfile["brand"] })}
         >
           {["Chrome", "Edge", "Opera", "Vivaldi"].map((b) => (
             <option key={b}>{b}</option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label={t(locale, "cores")}>
         <Input
@@ -266,15 +283,11 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
         />
       </Field>
       <Field label={t(locale, "timezone")}>
-        <select
-          className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
-          value={profile.timezone}
-          onChange={(e) => patch({ timezone: e.target.value })}
-        >
+        <Select value={profile.timezone} onChange={(e) => patch({ timezone: e.target.value })}>
           {TIMEZONES.map((tz) => (
             <option key={tz}>{tz}</option>
           ))}
-        </select>
+        </Select>
       </Field>
       <Field label={t(locale, "locale")}>
         <Input value={profile.locale} onChange={(e) => patch({ locale: e.target.value })} />
@@ -377,84 +390,6 @@ function FlagsForm({
   );
 }
 
-type EngineRow = {
-  id: string;
-  name: string;
-  keyword: string;
-  url: string;
-  suggestUrl: string;
-  isDefault: boolean;
-};
-
-function SearchEnginePanel({ envId, running }: { envId: string; running: boolean }) {
-  const locale = useLocale();
-  const env = useEnclave((s) => s.environments.find((e) => e.id === envId));
-  const [engines, setEngines] = useState<EngineRow[]>([]);
-  const refresh = async () => {
-    const res = await listSearchEnginesFn({ data: { envId } });
-    setEngines(res.engines ?? []);
-  };
-  useEffect(() => {
-    void refresh();
-  }, [envId]);
-  if (!env) return null;
-  const current = env.searchEngine ?? "none";
-  const setDefault = (row: EngineRow) => {
-    useEnclave.getState().patchEnv(envId, {
-      searchEngine: row.id,
-      searchProvider:
-        row.id === "none"
-          ? undefined
-          : {
-              name: row.name,
-              keyword: row.keyword,
-              url: row.url,
-              suggestUrl: row.suggestUrl,
-            },
-    });
-  };
-  return (
-    <div className="grid gap-2">
-      <p className="text-[12px] text-subtle">{t(locale, "searchEngineHint")}</p>
-      <div className="overflow-x-auto rounded-md border border-line">
-        <table className="w-full text-left text-[12px]">
-          <thead className="bg-surface-2 text-[11px] text-subtle">
-            <tr>
-              <th className="px-2 py-1">{t(locale, "name")}</th>
-              <th className="px-2 py-1">keyword</th>
-              <th className="px-2 py-1" />
-            </tr>
-          </thead>
-          <tbody>
-            {engines.map((row) => {
-              const selected = current === row.id || (current === "none" && row.id === "none");
-              return (
-                <tr key={`${row.id}-${row.keyword}`} className="border-t border-line">
-                  <td className="px-2 py-1.5">
-                    {row.name}
-                    {row.isDefault ? (
-                      <span className="ml-2 text-[11px] text-ok">{t(locale, "searchCurrent")}</span>
-                    ) : null}
-                  </td>
-                  <td className="px-2 py-1.5 font-mono text-subtle">{row.keyword}</td>
-                  <td className="px-2 py-1.5 text-right">
-                    <Button
-                      variant={selected && row.id !== "none" ? "primary" : "ghost"}
-                      onClick={() => setDefault(row)}
-                    >
-                      {t(locale, "searchSetDefault")}
-                    </Button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex items-center gap-2">
-        <Button onClick={() => void refresh()}>{t(locale, "searchRefresh")}</Button>
-        {running ? <span className="text-[12px] text-warn">{t(locale, "searchEngineHint")}</span> : null}
-      </div>
-    </div>
-  );
 }
+
+

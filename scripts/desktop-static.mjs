@@ -56,24 +56,8 @@ writeFileSync(
     ${css ? `<link rel="stylesheet" href="./assets/${css}" />` : ""}
     <style>html,body,#root{height:100%;margin:0}</style>
   </head>
-  <body style="margin:0;height:100%;background:#c8f31d;color:#111;font:16px/1.4 ui-sans-serif,system-ui">
-    <div id="root" style="min-height:100%">Loading Enclave…</div>
-    <script>
-      window.addEventListener("error", function (e) {
-        var n = document.getElementById("root");
-        if (n && /Loading Enclave/.test(n.textContent || "")) n.textContent = String((e && e.message) || e);
-      });
-      window.addEventListener("unhandledrejection", function (e) {
-        var n = document.getElementById("root");
-        if (n && /Loading Enclave/.test(n.textContent || "")) n.textContent = String(e.reason || e);
-      });
-      setTimeout(function () {
-        var n = document.getElementById("root");
-        if (n && /Loading Enclave/.test(n.textContent || "")) {
-          n.textContent = "UI bundle did not start. Open DevTools (F12) and send the red error.";
-        }
-      }, 5000);
-    </script>
+  <body style="margin:0;height:100%;background:#010102;color:#f7f8f8">
+    <div id="root" style="min-height:100%"></div>
     <script type="module" src="./assets/${js}"></script>
   </body>
 </html>

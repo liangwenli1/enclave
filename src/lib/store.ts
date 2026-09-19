@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { BUILTIN_ENGINES, type CatalogEngine } from "@/lib/engines";
 import {
   type AppSettings,
   type AuditEvent,
@@ -36,6 +37,7 @@ type Store = {
   environments: Environment[];
   proxies: ProxyItem[];
   extensions: ExtensionItem[];
+  searchCatalog: CatalogEngine[];
   audit: AuditEvent[];
   runtimes: Record<string, RuntimeView>;
   lab: LabState;
@@ -57,6 +59,8 @@ type Store = {
   removeProxy: (id: string) => void;
   upsertExt: (ext: ExtensionItem) => void;
   removeExt: (id: string) => void;
+  upsertEngine: (engine: CatalogEngine) => void;
+  removeEngine: (id: string) => void;
   addAudit: (event: Omit<AuditEvent, "id" | "at"> & { at?: number }) => void;
   setRuntime: (envId: string, runtime: RuntimeView | null) => void;
   setControlSnap: (snap: LabSnapshot) => void;
@@ -83,6 +87,7 @@ export const useEnclave = create<Store>()(
       environments: [],
       proxies: [],
       extensions: [],
+      searchCatalog: BUILTIN_ENGINES,
       audit: [],
       runtimes: {},
       lab: { lastByEnv: {}, lastRunId: null },
@@ -177,6 +182,12 @@ export const useEnclave = create<Store>()(
         })),
       removeExt: (id) =>
         set((s) => ({ extensions: s.extensions.filter((e) => e.id !== id) })),
+      upsertEngine: (engine) =>
+        set((s) => ({
+          searchCatalog: [engine, ...s.searchCatalog.filter((e) => e.id !== engine.id)],
+        })),
+      removeEngine: (id) =>
+        set((s) => ({ searchCatalog: s.searchCatalog.filter((e) => e.id !== id || e.builtin) })),
       addAudit: (event) =>
         set((s) => ({
           audit: [
@@ -216,6 +227,7 @@ export const useEnclave = create<Store>()(
         environments: s.environments,
         proxies: s.proxies,
         extensions: s.extensions,
+        searchCatalog: s.searchCatalog?.length ? s.searchCatalog : BUILTIN_ENGINES,
         audit: s.audit,
         lab: { control: s.lab.control, lastByEnv: s.lab.lastByEnv, lastRunId: s.lab.lastRunId },
       }),
@@ -225,6 +237,7 @@ export const useEnclave = create<Store>()(
           ...current,
           ...p,
           settings: { ...initialSettings, ...p.settings },
+          searchCatalog: p.searchCatalog?.length ? p.searchCatalog : BUILTIN_ENGINES,
         };
       },
     },
