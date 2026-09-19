@@ -95,7 +95,7 @@ const dict = {
     port: "端口",
     username: "用户名",
     password: "密码",
-    passwordStored: "密码只存保险箱引用，不进明文库",
+    passwordStored: "密码只存保险箱引用，不进明文库。Clash 请开全局节点，不要规则分流，否则 Google 会看见你的真实地区。",
     collectPage: "采集当前页（对照机）",
     collectCdp: "采集内核页面",
     runStatic: "画像静态一致性",
