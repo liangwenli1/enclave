@@ -28,6 +28,7 @@ if (-not $?) { throw "host build failed" }
 $binDir = Join-Path $PWD "apps\desktop\src-tauri\binaries"
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 Copy-Item "target\release\enclave-host.exe" (Join-Path $binDir "enclave-host-x86_64-pc-windows-msvc.exe") -Force
+Copy-Item "kernels.manifest.json" (Join-Path $binDir "kernels.manifest.json") -Force
 
 $env:VITE_ENCLAVE_DIRECT = "true"
 npm run build
@@ -41,6 +42,7 @@ Write-Host "frontend shell $($index) $((Get-Item $index).Length) bytes"
 
 npx --yes @tauri-apps/cli@2 build --config (Join-Path $PWD "apps\desktop\src-tauri\tauri.conf.json") --bundles msi
 if (-not $?) { throw "tauri msi failed" }
+Copy-Item "kernels.manifest.json" "apps\desktop\src-tauri\target\release\kernels.manifest.json" -Force
 
 Write-Host "Unsigned MSI is under apps/desktop/src-tauri/target/release/bundle/msi/"
 Write-Host "Do not call this 1.0. Upload with: gh release upload v0.9.0-windows-preview <msi> --clobber"

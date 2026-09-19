@@ -7,13 +7,7 @@ fn main() {
         .setup(|app| {
             let data = app.path().app_data_dir().expect("app data dir");
             std::fs::create_dir_all(&data)?;
-            if let Ok(resource) = app.path().resource_dir() {
-                let manifest_src = resource.join("kernels.manifest.json");
-                let manifest_dst = data.join("kernels.manifest.json");
-                if manifest_src.exists() && !manifest_dst.exists() {
-                    let _ = std::fs::copy(&manifest_src, &manifest_dst);
-                }
-            }
+            seed_manifest(app.handle(), &data);
             match app.shell().sidecar("enclave-host") {
                 Ok(cmd) => {
                     if let Err(e) = cmd
@@ -47,4 +41,29 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("enclave desktop");
+}
+
+fn seed_manifest(app: &tauri::AppHandle, data: &std::path::Path) {
+    let dest = data.join("kernels.manifest.json");
+    let mut sources = Vec::new();
+    if let Ok(dir) = app.path().resource_dir() {
+        sources.push(dir.join("kernels.manifest.json"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            sources.push(dir.join("kernels.manifest.json"));
+            sources.push(dir.join("resources").join("kernels.manifest.json"));
+        }
+    }
+    for src in sources {
+        if src.is_file() {
+            if let Err(e) = std::fs::copy(&src, &dest) {
+                eprintln!("manifest copy {}: {e}", src.display());
+                continue;
+            }
+            eprintln!("manifest seeded from {}", src.display());
+            return;
+        }
+    }
+    eprintln!("kernels.manifest.json not found for host cwd {}", data.display());
 }

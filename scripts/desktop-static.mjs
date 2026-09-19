@@ -61,11 +61,11 @@ writeFileSync(
     <script>
       window.addEventListener("error", function (e) {
         var n = document.getElementById("root");
-        if (n) n.textContent = String((e && e.message) || e);
+        if (n && /Loading Enclave/.test(n.textContent || "")) n.textContent = String((e && e.message) || e);
       });
       window.addEventListener("unhandledrejection", function (e) {
         var n = document.getElementById("root");
-        if (n) n.textContent = String(e.reason || e);
+        if (n && /Loading Enclave/.test(n.textContent || "")) n.textContent = String(e.reason || e);
       });
       setTimeout(function () {
         var n = document.getElementById("root");

@@ -15,21 +15,50 @@ async function hostFetch(pathname: string, init?: RequestInit): Promise<Response
   });
 }
 
-export async function getKernelStatus() {
-  const res = await hostFetch("/v1/kernel");
-  if (!res.ok) throw new Error(`host HTTP ${res.status}`);
-  const body = (await res.json()) as {
-    status: KernelStatus;
-    kernel: unknown;
-    capabilities: unknown;
-    runtimes: unknown;
-  };
+function downStatus(message: string) {
   return {
-    status: body.status,
-    kernel: body.kernel,
-    capabilities: body.capabilities,
-    runtimes: body.runtimes,
+    status: {
+      state: "error" as const,
+      bytesReceived: 0,
+      bytesExpected: 0,
+      sha256Expected: "",
+      signature: "missing" as const,
+      error: message,
+    },
+    kernel: {
+      manifest: { sha256: "", id: "fingerprint-chromium", version: "unknown" },
+      previousStable: null,
+      channel: "stable",
+    },
+    capabilities: {
+      host: "rust-down",
+      os: "win32",
+      uid: null,
+      sandboxLikely: false,
+    },
+    runtimes: [] as unknown[],
   };
+}
+
+export async function getKernelStatus() {
+  try {
+    const res = await hostFetch("/v1/kernel");
+    if (!res.ok) return downStatus(`host HTTP ${res.status}`);
+    const body = (await res.json()) as {
+      status: KernelStatus;
+      kernel: unknown;
+      capabilities: unknown;
+      runtimes: unknown;
+    };
+    return {
+      status: body.status,
+      kernel: body.kernel,
+      capabilities: body.capabilities,
+      runtimes: Array.isArray(body.runtimes) ? body.runtimes : [],
+    };
+  } catch (e) {
+    return downStatus(e instanceof Error ? e.message : "HOST_UNAVAILABLE");
+  }
 }
 
 export async function startDownload(): Promise<KernelStatus> {

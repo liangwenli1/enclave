@@ -16,12 +16,21 @@ function SecurityPage() {
   const [caps, setCaps] = useState<string>("");
 
   useEffect(() => {
-    void getKernelStatusFn().then((d) => {
-      setKernelState(d.status.state);
-      setCaps(
-        `runtime=native host=${String((d.capabilities as { host?: string }).host ?? "rust")} ${d.capabilities.os} uid=${d.capabilities.uid} sandboxLikely=${d.capabilities.sandboxLikely} sha256=${(d.kernel.manifest.sha256 ?? "").slice(0, 16)}…`,
-      );
-    });
+    void getKernelStatusFn()
+      .then((d) => {
+        setKernelState(d.status.state);
+        const caps = (d.capabilities ?? {}) as {
+          host?: string;
+          os?: string;
+          uid?: unknown;
+          sandboxLikely?: unknown;
+        };
+        const sha = String((d.kernel as { manifest?: { sha256?: string } } | undefined)?.manifest?.sha256 ?? "");
+        setCaps(
+          `runtime=native host=${caps.host ?? "rust"} ${caps.os ?? ""} uid=${String(caps.uid)} sandboxLikely=${String(caps.sandboxLikely)} sha256=${sha.slice(0, 16)}…`,
+        );
+      })
+      .catch(() => setKernelState("host-down"));
   }, []);
 
   return (
