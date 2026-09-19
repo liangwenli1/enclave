@@ -8,7 +8,12 @@ import { fileURLToPath } from "node:url";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const bind = process.env.ENCLAVE_HOST_BIND ?? "127.0.0.1:17891";
 const health = `http://${bind}/v1/health`;
-const bin = path.join(root, "target", "release", "enclave-host");
+const bin = path.join(
+  root,
+  "target",
+  "release",
+  process.platform === "win32" ? "enclave-host.exe" : "enclave-host",
+);
 
 async function healthy() {
   try {

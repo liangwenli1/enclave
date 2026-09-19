@@ -112,15 +112,14 @@ pub struct Capabilities {
 
 pub fn capabilities() -> Capabilities {
     let uid = current_uid();
-    let display = std::env::var_os("DISPLAY").is_some();
     Capabilities {
         host: "rust".into(),
         os: std::env::consts::OS.into(),
         arch: std::env::consts::ARCH.into(),
         uid,
-        display,
+        display: !force_headless(),
         loopback_only: true,
-        headless_forced: !display,
+        headless_forced: force_headless(),
         sandbox_likely: std::env::consts::OS == "linux" && uid != Some(0),
         runtime: "native".into(),
     }
@@ -174,12 +173,32 @@ pub fn load_manifest(path: &Path) -> Result<ManifestFile> {
     Ok(serde_json::from_str(&raw)?)
 }
 
-pub fn stable_linux(manifest: &ManifestFile) -> Result<&KernelRecord> {
+pub fn kernel_for_this_os(manifest: &ManifestFile) -> Result<&KernelRecord> {
+    let platform = if cfg!(windows) {
+        "win-x64"
+    } else if cfg!(target_os = "macos") {
+        "mac-arm64"
+    } else {
+        "linux-x64"
+    };
     manifest
         .kernels
         .iter()
-        .find(|k| k.channel == "stable" && !k.sha256.is_empty())
-        .context("no hashed stable kernel")
+        .find(|k| k.platform == platform && !k.sha256.is_empty())
+        .with_context(|| format!("no hashed kernel for {platform}"))
+}
+
+pub fn stable_linux(manifest: &ManifestFile) -> Result<&KernelRecord> {
+    kernel_for_this_os(manifest)
+}
+
+pub fn force_headless() -> bool {
+    if std::env::var_os("ENCLAVE_HEADLESS").is_some() {
+        return true;
+    }
+    cfg!(unix)
+        && std::env::var_os("DISPLAY").is_none()
+        && std::env::var_os("WAYLAND_DISPLAY").is_none()
 }
 
 pub async fn ensure_dirs(paths: &HostPaths) -> Result<()> {
@@ -226,11 +245,16 @@ fn find_chrome(dir: &Path) -> Option<PathBuf> {
             let p = ent.path();
             let name = ent.file_name();
             let name = name.to_string_lossy();
+            let lower = name.to_ascii_lowercase();
             if p.is_dir() {
                 if name != "resources" && name != "locales" {
                     stack.push(p);
                 }
-            } else if names.iter().any(|n| *n == name) {
+            } else if names.iter().any(|n| *n == name)
+                || lower == "chrome.exe"
+                || lower == "chromium.exe"
+                || lower == "ungoogled-chromium.exe"
+            {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -241,6 +265,59 @@ fn find_chrome(dir: &Path) -> Option<PathBuf> {
         }
     }
     None
+}
+
+async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
+    let name = archive
+        .file_name()
+        .map(|s| s.to_string_lossy().to_ascii_lowercase())
+        .unwrap_or_default();
+    if name.ends_with(".zip") {
+        #[cfg(windows)]
+        {
+            let archive = archive.display().to_string().replace('\'', "''");
+            let dest = dest.display().to_string().replace('\'', "''");
+            let out = Command::new("powershell")
+                .args([
+                    "-NoProfile",
+                    "-Command",
+                    &format!("Expand-Archive -LiteralPath '{archive}' -DestinationPath '{dest}' -Force"),
+                ])
+                .output()
+                .await?;
+            if !out.status.success() {
+                bail!("unzip: {}", String::from_utf8_lossy(&out.stderr));
+            }
+            return Ok(());
+        }
+        #[cfg(not(windows))]
+        {
+            let out = Command::new("unzip")
+                .args(["-o", archive.to_str().unwrap(), "-d", dest.to_str().unwrap()])
+                .output()
+                .await?;
+            if !out.status.success() {
+                bail!("unzip: {}", String::from_utf8_lossy(&out.stderr));
+            }
+            return Ok(());
+        }
+    }
+    let out = Command::new("tar")
+        .args([
+            "--no-same-owner",
+            "-xJf",
+            archive.to_str().unwrap(),
+            "-C",
+            dest.to_str().unwrap(),
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .await?;
+    if !out.status.success() {
+        bail!("tar: {}", String::from_utf8_lossy(&out.stderr));
+    }
+    Ok(())
 }
 
 pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf> {
@@ -389,21 +466,7 @@ pub async fn admit(
             tokio::fs::remove_dir_all(&dest).await.ok();
         }
         tokio::fs::create_dir_all(&dest).await?;
-        let tar = Command::new("tar")
-            .args([
-                "--no-same-owner",
-                "-xJf",
-                archive.to_str().unwrap(),
-                "-C",
-                dest.to_str().unwrap(),
-            ])
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .output()
-            .await?;
-        if !tar.status.success() {
-            bail!("tar: {}", String::from_utf8_lossy(&tar.stderr));
-        }
+        extract_archive(&archive, &dest).await?;
     }
     let exe = resolve_executable(paths, k).context("chrome executable not found")?;
     let mut s = status.lock().await;
@@ -507,7 +570,7 @@ pub async fn start_environment(
         "--disable-sync".into(),
         "--mute-audio".into(),
     ];
-    if std::env::var_os("DISPLAY").is_none() {
+    if force_headless() {
         args.push("--headless=new".into());
         args.push("--disable-gpu".into());
     }
@@ -608,11 +671,25 @@ pub async fn start_environment(
 }
 
 pub fn pid_alive(pid: u32) -> bool {
-    std::process::Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    #[cfg(windows)]
+    {
+        std::process::Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH"])
+            .output()
+            .map(|o| {
+                let text = String::from_utf8_lossy(&o.stdout);
+                text.contains(&pid.to_string())
+            })
+            .unwrap_or(false)
+    }
+    #[cfg(unix)]
+    {
+        std::process::Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
 }
 
 pub async fn wait_for_cdp(port: u16, timeout_ms: u64) -> bool {
@@ -639,11 +716,21 @@ pub async fn stop_environment(
 ) -> Result<()> {
     let rt = { runtimes.lock().await.remove(env_id) };
     if let Some(rt) = rt {
-        let _ = Command::new("kill").args(["-TERM", &format!("-{}", rt.pid)]).status().await;
-        let _ = Command::new("kill").args(["-TERM", &rt.pid.to_string()]).status().await;
-        sleep(Duration::from_millis(400)).await;
-        let _ = Command::new("kill").args(["-KILL", &format!("-{}", rt.pid)]).status().await;
-        let _ = Command::new("kill").args(["-KILL", &rt.pid.to_string()]).status().await;
+        #[cfg(windows)]
+        {
+            let _ = Command::new("taskkill")
+                .args(["/PID", &rt.pid.to_string(), "/T", "/F"])
+                .status()
+                .await;
+        }
+        #[cfg(unix)]
+        {
+            let _ = Command::new("kill").args(["-TERM", &format!("-{}", rt.pid)]).status().await;
+            let _ = Command::new("kill").args(["-TERM", &rt.pid.to_string()]).status().await;
+            sleep(Duration::from_millis(400)).await;
+            let _ = Command::new("kill").args(["-KILL", &format!("-{}", rt.pid)]).status().await;
+            let _ = Command::new("kill").args(["-KILL", &rt.pid.to_string()]).status().await;
+        }
     }
     let rows: Vec<_> = runtimes.lock().await.values().cloned().collect();
     persist_runtimes(paths, &rows).await?;
