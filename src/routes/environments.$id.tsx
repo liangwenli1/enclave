@@ -5,7 +5,7 @@ import { Badge, Button, Field, Input, Panel, Select, StatusDot, Textarea } from 
 import { useLocale } from "@/components/shell";
 import { classifyAll } from "@/lib/kernel/flags";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
-import { t } from "@/lib/i18n";
+import { t, runtimeLabel } from "@/lib/i18n";
 import { engineToProvider } from "@/lib/engines";
 import { defaultWinVersion, windowsEdition } from "@/lib/os";
 import { staticConsistency } from "@/lib/lab";
@@ -47,11 +47,7 @@ function EnvDetail() {
           <h1 className="text-[18px] font-semibold tracking-tight">{env.name}</h1>
           <Badge tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}>
             <StatusDot tone={status === "running" ? "run" : status === "error" ? "bad" : "idle"} />
-            {status === "running"
-              ? t(locale, "running")
-              : status === "error"
-                ? t(locale, "error")
-                : t(locale, "stopped")}
+            {runtimeLabel(locale, status, runtime?.error)}
           </Badge>
           <div className="ml-auto flex gap-2">
             {status === "running" ? (
@@ -178,7 +174,7 @@ function EnvDetail() {
           <p className="text-sm text-subtle">
             {runtime?.status === "running"
               ? t(locale, "running")
-              : runtime?.error ?? t(locale, "stopped")}
+              : runtimeLabel(locale, runtime?.status ?? "stopped", runtime?.error)}
           </p>
           {runtime?.status === "running" ? (
             <Button className="mt-3 w-full" onClick={() => void collectEnvCdp(env.id)}>

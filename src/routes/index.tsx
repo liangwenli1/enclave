@@ -3,7 +3,7 @@ import { Plus, Play, Square, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Dialog, DialogContent, Field, Input, Select, StatusDot } from "@/components/ui";
 import { startEnv, stopEnv } from "@/lib/host";
-import { t } from "@/lib/i18n";
+import { t, runtimeLabel } from "@/lib/i18n";
 import { KERNEL_PIN, TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
 import { defaultPlatformVersion, platformLabel } from "@/lib/os";
 import { engineToProvider, findEngine } from "@/lib/engines";
@@ -150,13 +150,7 @@ function EnvironmentsPage() {
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5">
                         <StatusDot tone={tone} />
-                        {status === "running"
-                          ? t(locale, "running")
-                          : status === "starting"
-                            ? t(locale, "starting")
-                            : status === "error"
-                              ? t(locale, "error")
-                              : t(locale, "stopped")}
+                        {runtimeLabel(locale, status, rt?.error)}
                       </span>
                     </td>
                     <td className="px-3 py-2">
@@ -252,6 +246,10 @@ function CreateWizard({
     const store = useEnclave.getState();
     const plan = planOf(store.settings.plan);
     if (envCount(store.environments) >= plan.envLimit) {
+      store.setPlanNotice({
+        title: "环境数量已达上限",
+        body: `当前套餐 ${plan.label} 最多 ${plan.envLimit} 个环境。删除不用的环境，或升级套餐。`,
+      });
       store.addAudit({
         action: "create_blocked",
         level: "warn",
@@ -315,8 +313,8 @@ function CreateWizard({
               <button
                 key={id}
                 onClick={() => setSource(id)}
-                className={`rounded-lg border px-3 py-4 text-left text-[13px] ${
-                  source === id ? "border-line-strong bg-surface-2" : "border-line"
+                className={`rounded-lg border px-3 py-4 text-left text-sm text-ink ${
+                  source === id ? "border-line-strong bg-surface-2" : "border-line bg-canvas"
                 }`}
               >
                 {label}

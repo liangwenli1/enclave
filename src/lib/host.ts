@@ -25,7 +25,11 @@ export async function startEnv(env: Environment) {
       status: "error",
       startedAt: null,
       hashOk: true,
-      error: code,
+      error: "PLAN_CONCURRENT_LIMIT",
+    });
+    store.setPlanNotice({
+      title: "同时运行已达上限",
+      body: `当前套餐 ${plan.label} 最多同时运行 ${plan.concurrent} 个环境。先停止正在运行的环境，或升级套餐。`,
     });
     store.addAudit({
       action: "start_blocked",

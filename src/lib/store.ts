@@ -43,10 +43,12 @@ type Store = {
   lab: LabState;
   locked: boolean;
   selectedIds: string[];
+  planNotice: { title: string; body: string } | null;
   setLocale: (locale: AppSettings["locale"]) => void;
   setTheme: (theme: AppSettings["theme"]) => void;
   setDensity: (density: AppSettings["density"]) => void;
   setLocked: (locked: boolean) => void;
+  setPlanNotice: (notice: { title: string; body: string } | null) => void;
   patchSettings: (patch: Partial<AppSettings>) => void;
   upsertEnv: (env: Environment) => void;
   patchEnv: (id: string, patch: Partial<Environment>, event?: TimelineEvent) => void;
@@ -93,6 +95,7 @@ export const useEnclave = create<Store>()(
       lab: { lastByEnv: {}, lastRunId: null },
       locked: false,
       selectedIds: [],
+      planNotice: null,
       setLocale: (locale) =>
         set((s) => ({ settings: { ...s.settings, locale } })),
       setTheme: (theme) =>
@@ -100,6 +103,7 @@ export const useEnclave = create<Store>()(
       setDensity: (density) =>
         set((s) => ({ settings: { ...s.settings, density } })),
       setLocked: (locked) => set({ locked }),
+      setPlanNotice: (planNotice) => set({ planNotice }),
       patchSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),
       upsertEnv: (env) =>

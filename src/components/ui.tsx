@@ -135,12 +135,12 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-surface p-4 shadow-panel",
+          "fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-surface p-5 text-ink shadow-panel",
           className,
         )}
       >
         <div className="mb-4 flex items-center justify-between">
-          <DialogPrimitive.Title className="text-[15px] font-semibold tracking-tight">
+          <DialogPrimitive.Title className="text-base font-semibold tracking-tight text-ink">
             {title}
           </DialogPrimitive.Title>
           <DialogPrimitive.Close className="rounded-md p-1 text-subtle hover:bg-surface-2 hover:text-ink">

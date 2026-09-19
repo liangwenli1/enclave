@@ -66,6 +66,9 @@ const dict = {
     brand: "品牌",
     consistency: "一致性",
     pass: "通过",
+    gotIt: "知道了",
+    seePlans: "查看套餐",
+    planConcurrentShort: "同时运行已达上限",
     fail: "未通过",
     warn: "警告",
     runtime: "运行时",
@@ -268,6 +271,9 @@ const dict = {
     brand: "Brand",
     consistency: "Consistency",
     pass: "Pass",
+    gotIt: "OK",
+    seePlans: "View plans",
+    planConcurrentShort: "Concurrent limit reached",
     fail: "Fail",
     warn: "Warn",
     runtime: "Runtime",
@@ -417,6 +423,13 @@ export function t(locale: Locale, key: MessageKey): string {
   return typeof value === "string" ? value : String(value);
 }
 
-export function tTemplate(locale: Locale, key: keyof (typeof dict)["zh"]["templates"]): string {
-  return dict[locale].templates[key];
+export function runtimeLabel(locale: Locale, status: string, error?: string): string {
+  if (status === "running") return t(locale, "running");
+  if (status === "starting") return t(locale, "starting");
+  if (status === "error") {
+    if (error?.includes("PLAN_CONCURRENT")) return t(locale, "planConcurrentShort");
+    if (error?.includes("KERNEL")) return t(locale, "kernelMissing");
+    return t(locale, "error");
+  }
+  return t(locale, "stopped");
 }

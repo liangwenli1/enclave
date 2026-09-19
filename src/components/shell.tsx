@@ -151,8 +151,35 @@ export function AppShell({ children }: { children: ReactNode }) {
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       {locked ? <LockScreen /> : null}
       <Onboarding />
+      <PlanNotice />
       <HostSync />
     </div>
+  );
+}
+
+function PlanNotice() {
+  const locale = useLocale();
+  const navigate = useNavigate();
+  const notice = useEnclave((s) => s.planNotice);
+  if (!notice) return null;
+  return (
+    <Dialog open onOpenChange={(open) => !open && useEnclave.getState().setPlanNotice(null)}>
+      <DialogContent title={notice.title}>
+        <p className="text-sm leading-6 text-muted">{notice.body}</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button onClick={() => useEnclave.getState().setPlanNotice(null)}>{t(locale, "gotIt")}</Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              useEnclave.getState().setPlanNotice(null);
+              void navigate({ to: "/www/pricing" });
+            }}
+          >
+            {t(locale, "seePlans")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
