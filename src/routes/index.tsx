@@ -1,10 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Plus, Play, Square, Trash2 } from "lucide-react";
+import { Plus, Play, Square, Trash2, AppWindow } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button, Dialog, DialogContent, Field, Input, Select, StatusDot } from "@/components/ui";
 import { startEnv, stopEnv, trashEnv, purgeEnv } from "@/lib/host";
 import { t, runtimeLabel } from "@/lib/i18n";
-import { KERNEL_PIN, TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
+import { TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
 import { defaultPlatformVersion, platformLabel } from "@/lib/os";
 import { engineToProvider, findEngine } from "@/lib/engines";
 import { envCount, planOf } from "@/lib/license";
@@ -106,7 +106,7 @@ function EnvironmentsPage() {
                 <th className="px-3 py-2">{t(locale, "name")}</th>
                 <th className="px-3 py-2">{t(locale, "platform")}</th>
                 <th className="px-3 py-2">{t(locale, "proxy")}</th>
-                <th className="px-3 py-2">{t(locale, "webrtc")}</th>
+                <th className="px-3 py-2">{t(locale, "group")}</th>
                 <th className="px-3 py-2">{t(locale, "runtime")}</th>
                 <th className="px-3 py-2" />
               </tr>
@@ -141,12 +141,17 @@ function EnvironmentsPage() {
                       </Link>
                       <div className="text-[11px] text-subtle">{env.group}</div>
                     </td>
-                    <td className="px-3 py-2">{platformLabel(env.profile)}</td>
+                    <td className="px-3 py-2">
+                      <span className="inline-flex items-center gap-1.5 text-muted">
+                        <AppWindow className="size-4" />
+                        {platformLabel(env.profile)}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-subtle">
                       {useEnclave.getState().proxies.find((p) => p.id === env.proxyId)?.name ??
                         t(locale, "noProxy")}
                     </td>
-                    <td className="px-3 py-2">{env.profile.webrtc.mode}</td>
+                    <td className="px-3 py-2 text-subtle">{env.group}</td>
                     <td className="px-3 py-2">
                       <span className="inline-flex items-center gap-1.5">
                         <StatusDot tone={tone} />
@@ -236,7 +241,7 @@ function CreateWizard({
   const [group, setGroup] = useState("default");
   const [platform, setPlatform] = useState<PlatformId>("windows");
   const [winEdition, setWinEdition] = useState<"10" | "11">("11");
-  const [engineId, setEngineId] = useState("google");
+  const [engineId, setEngineId] = useState("none");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
   const [proxyId, setProxyId] = useState<string>("");
   const [copyId, setCopyId] = useState("");
@@ -412,9 +417,6 @@ function CreateWizard({
                 ))}
               </select>
             </Field>
-            <div className="rounded-md border border-line bg-canvas px-3 py-2 text-[12px] text-subtle">
-              kernel {KERNEL_PIN.id} {KERNEL_PIN.version}
-            </div>
           </div>
         ) : null}
         <div className="mt-5 flex justify-between">

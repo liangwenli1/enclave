@@ -31,12 +31,13 @@ export const Route = createRootRoute({
 function RootDocument() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isWww = pathname === "/www" || pathname.startsWith("/www/");
+  const isLogin = pathname === "/login";
   const desktop = import.meta.env.VITE_ENCLAVE_DIRECT === "true";
   const app = (
     <>
       <PreviewHostBridge />
       <AuthProvider>
-        {isWww ? (
+        {isWww || isLogin ? (
           <Outlet />
         ) : (
           <AppShell>

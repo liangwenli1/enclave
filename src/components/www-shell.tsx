@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
+import { SignedIn, SignedOut } from "@/lib/auth/gates";
 
 const NAV = [
   { to: "/www", label: "产品", exact: true },
@@ -31,6 +32,16 @@ export function WwwShell({ children }: { children: ReactNode }) {
                 {item.label}
               </Link>
             ))}
+            <SignedOut>
+              <Link to="/login" className="www-nav-ghost">
+                登录
+              </Link>
+            </SignedOut>
+            <SignedIn>
+              <Link to="/www/account" className="www-nav-ghost">
+                已登录
+              </Link>
+            </SignedIn>
             <Link to="/" className="www-nav-ghost">
               工作台
             </Link>

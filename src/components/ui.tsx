@@ -128,30 +128,34 @@ export function DialogContent({
 }: {
   className?: string;
   children: ReactNode;
-  title: string;
+  title?: string;
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40" />
       <DialogPrimitive.Content
         className={cn(
-          "enclave-dialog fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line p-5 shadow-panel",
+          "enclave-dialog fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line p-5 shadow-panel",
           className,
         )}
         style={{ color: "var(--enclave-ink)", background: "var(--enclave-surface)" }}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <DialogPrimitive.Title
-            data-dialog-title
-            className="text-base font-semibold tracking-tight"
-            style={{ color: "inherit" }}
-          >
-            {title}
-          </DialogPrimitive.Title>
-          <DialogPrimitive.Close className="rounded-md p-1 text-subtle hover:bg-surface-2 hover:text-ink">
-            <X className="size-4" />
-          </DialogPrimitive.Close>
-        </div>
+        {title ? (
+          <div className="mb-4 flex items-center justify-between">
+            <DialogPrimitive.Title
+              data-dialog-title
+              className="text-base font-semibold tracking-tight"
+              style={{ color: "inherit" }}
+            >
+              {title}
+            </DialogPrimitive.Title>
+            <DialogPrimitive.Close className="grid size-8 place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-ink">
+              <X className="size-4" />
+            </DialogPrimitive.Close>
+          </div>
+        ) : (
+          <DialogPrimitive.Title className="sr-only">Dialog</DialogPrimitive.Title>
+        )}
         {children}
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>

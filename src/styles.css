@@ -82,17 +82,17 @@
 
 html.light {
   color-scheme: light;
-  --enclave-canvas: #f3f1ec;
-  --enclave-surface: #fffcf7;
-  --enclave-surface-2: #f6f3ee;
-  --enclave-surface-3: #ebe6dc;
-  --enclave-ink: #161412;
-  --enclave-muted: #3f3c38;
-  --enclave-subtle: #6f6a62;
-  --enclave-line: #e4dfd6;
-  --enclave-line-strong: #cfc8bb;
-  --enclave-accent: #161412;
-  --enclave-accent-fg: #f7f4ee;
+  --enclave-canvas: #f3f5f9;
+  --enclave-surface: #ffffff;
+  --enclave-surface-2: #eef2f8;
+  --enclave-surface-3: #e4eaf3;
+  --enclave-ink: #0f1728;
+  --enclave-muted: #3d4a63;
+  --enclave-subtle: #6b7790;
+  --enclave-line: #e2e8f0;
+  --enclave-line-strong: #c9d4e3;
+  --enclave-accent: #2b6bff;
+  --enclave-accent-fg: #ffffff;
   --enclave-ok: #1f7a3a;
   --enclave-warn: #a57a1f;
   --enclave-bad: #b42318;
@@ -559,8 +559,8 @@ body {
 
 .app-nav a:hover,
 .app-nav a[data-active="true"] {
-  color: var(--enclave-ink);
-  background: var(--enclave-surface-2);
+  color: var(--enclave-accent);
+  background: color-mix(in oklab, var(--enclave-accent) 12%, var(--enclave-surface));
 }
 
 .app-nav-foot {
@@ -575,7 +575,7 @@ body {
 
 html.light .enclave-dialog,
 html.light .enclave-dialog [data-dialog-title] {
-  color: #161412 !important;
-  background: #fffcf7;
+  color: #0f1728 !important;
+  background: #ffffff;
 }
 

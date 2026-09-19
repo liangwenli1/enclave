@@ -11,6 +11,7 @@ import {
   Shield,
   Cpu,
   SearchCode,
+  UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
@@ -20,6 +21,9 @@ import { stopEnv } from "@/lib/host";
 import { t, type Locale } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
 import { Onboarding } from "@/components/onboarding";
+import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { getMyLicenseFn } from "@/lib/license-api";
 
 const NAV = [
   { to: "/", key: "navEnv" as const, icon: Box },
@@ -75,7 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="text-xs text-subtle">{t(locale, "appKind")}</div>
           </div>
         </div>
-        <nav className="app-nav">
+        <nav className="app-nav min-h-0 flex-1 overflow-auto">
           {NAV.map((item) => (
             <Link
               key={item.to}
@@ -90,6 +94,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="border-t border-line p-2">
           <nav className="app-nav app-nav-foot">
             <Link to="/www">官网</Link>
+            <SignedOut>
+              <Link to="/login">
+                <UserRound className="size-4" />
+                登录
+              </Link>
+            </SignedOut>
             <Link
               to="/settings"
               data-active={pathname === "/settings" ? "true" : "false"}
@@ -119,6 +129,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               ⌘K
             </kbd>
           </button>
+          <SignedIn>
+            <UserButton />
+          </SignedIn>
           <Button variant="ghost" size="icon" onClick={() => useEnclave.getState().setLocked(true)}>
             <Lock className="size-3.5" />
           </Button>
@@ -153,9 +166,25 @@ export function AppShell({ children }: { children: ReactNode }) {
       {locked ? <LockScreen /> : null}
       <Onboarding />
       <PlanNotice />
+      <LicenseSync />
       <HostSync />
     </div>
   );
+}
+
+function LicenseSync() {
+  const { user, isPending } = useCurrentUserState();
+  useEffect(() => {
+    if (isPending || !user) return;
+    void getMyLicenseFn()
+      .then((lic) => {
+        useEnclave.getState().patchSettings({ plan: lic.plan });
+      })
+      .catch(() => {
+        /* desktop build has no /api — keep local plan */
+      });
+  }, [user, isPending]);
+  return null;
 }
 
 function PlanNotice() {
@@ -305,20 +334,20 @@ function CommandPalette({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title={t(locale, "command")} className="p-0">
-        <Command className="text-[13px]" shouldFilter>
+      <DialogContent className="overflow-hidden p-0">
+        <Command className="text-sm" shouldFilter>
           <Command.Input
             placeholder={t(locale, "search")}
-            className="h-11 w-full border-b border-line bg-transparent px-4 outline-none"
+            className="h-12 w-full border-b border-line bg-transparent px-4 outline-none"
           />
           <Command.List className="max-h-80 overflow-auto p-2">
-            <Command.Empty className="px-2 py-6 text-center text-subtle">—</Command.Empty>
-            <Command.Group heading={t(locale, "navEnv")} className="text-[11px] text-subtle">
+            <Command.Empty className="px-2 py-6 text-center text-subtle">没有匹配项</Command.Empty>
+            <Command.Group heading="页面" className="text-xs text-subtle">
               {pages.map((p) => (
                 <Command.Item
                   key={p.to}
-                  value={p.label}
-                  className="rounded-md px-2 py-1.5 text-ink aria-selected:bg-surface-2"
+                  value={`page ${p.label}`}
+                  className="rounded-md px-2 py-2 text-ink aria-selected:bg-surface-2"
                   onSelect={() => {
                     void navigate({ to: p.to });
                     onOpenChange(false);
@@ -328,12 +357,12 @@ function CommandPalette({
                 </Command.Item>
               ))}
             </Command.Group>
-            <Command.Group heading={t(locale, "env")} className="mt-2 text-[11px] text-subtle">
+            <Command.Group heading="环境" className="mt-2 text-xs text-subtle">
               {envs.map((env) => (
                 <Command.Item
                   key={env.id}
-                  value={env.name}
-                  className="rounded-md px-2 py-1.5 text-ink aria-selected:bg-surface-2"
+                  value={`env ${env.name}`}
+                  className="rounded-md px-2 py-2 text-ink aria-selected:bg-surface-2"
                   onSelect={() => {
                     void navigate({ to: "/environments/$id", params: { id: env.id } });
                     onOpenChange(false);

@@ -1,9 +1,11 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { WwwMain, WwwShell } from "@/components/www-shell";
-import { type PlanId, PLANS } from "@/lib/license";
-import { type SiteAccount, clearSiteAccount, readSiteAccount, writeSiteAccount } from "@/lib/site-account";
+import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { PLANS } from "@/lib/license";
+import { getMyLicenseFn } from "@/lib/license-api";
 import { useEnclave } from "@/lib/store";
+import { useEffect, useState } from "react";
 
 export const Route = createFileRoute("/www/account")({
   component: WwwAccount,
@@ -11,94 +13,70 @@ export const Route = createFileRoute("/www/account")({
 });
 
 function WwwAccount() {
-  const navigate = useNavigate();
-  const [email, setEmail] = useState("");
-  const [plan, setPlan] = useState<PlanId>("free");
-  const [account, setAccount] = useState<SiteAccount | null>(null);
-
-  useEffect(() => {
-    setAccount(readSiteAccount());
-  }, []);
-
   return (
     <WwwShell>
       <WwwMain>
         <p className="www-kicker">Account</p>
-        <h1>账号在本机演示。</h1>
+        <h1>账号与订阅</h1>
         <p className="www-lead">
-          厂商许可证 API 还没接。这里只保存邮箱和档位到浏览器，用来走通「选套餐 → 打开工作台」。不是付费通道。
+          登录后工作台读取你的档位。环境、Cookie、代理只存在这台电脑，不会上传。
         </p>
         <div className="www-card www-card-narrow">
-          {account ? (
-            <>
-              <p className="www-kicker">已登录</p>
-              <h3>{account.email}</h3>
-              <p className="www-mono">
-                {PLANS[account.plan].label} · {PLANS[account.plan].envLimit} 环境
-              </p>
-              <div className="www-actions">
-                <button
-                  type="button"
-                  className="www-btn www-btn-primary"
-                  onClick={() => {
-                    useEnclave.getState().patchSettings({ plan: account.plan });
-                    void navigate({ to: "/" });
-                  }}
-                >
-                  打开工作台
-                </button>
-                <button
-                  type="button"
-                  className="www-btn www-btn-ghost"
-                  onClick={() => {
-                    clearSiteAccount();
-                    setAccount(null);
-                  }}
-                >
-                  退出
-                </button>
-              </div>
-            </>
-          ) : (
-            <form
-              className="www-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (!email.includes("@")) return;
-                const next = { email: email.trim().toLowerCase(), plan, createdAt: Date.now() };
-                writeSiteAccount(next);
-                useEnclave.getState().patchSettings({ plan });
-                setAccount(next);
-                void navigate({ to: "/" });
-              }}
-            >
-              <label>
-                邮箱
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                />
-              </label>
-              <label>
-                档位
-                <select value={plan} onChange={(e) => setPlan(e.target.value as PlanId)}>
-                  {(Object.keys(PLANS) as PlanId[]).map((id) => (
-                    <option key={id} value={id}>
-                      {PLANS[id].label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit" className="www-btn www-btn-primary">
-                注册并进入工作台
-              </button>
-            </form>
-          )}
+          <SignedOut>
+            <p>还没有登录。</p>
+            <div className="www-actions">
+              <Link to="/login" className="www-btn www-btn-primary">
+                登录或注册
+              </Link>
+              <Link to="/www/pricing" className="www-btn www-btn-ghost">
+                查看套餐
+              </Link>
+            </div>
+          </SignedOut>
+          <SignedIn>
+            <LoggedInAccount />
+          </SignedIn>
         </div>
       </WwwMain>
     </WwwShell>
+  );
+}
+
+function LoggedInAccount() {
+  const user = useCurrentUser();
+  const planId = useEnclave((s) => s.settings.plan);
+  const plan = PLANS[planId];
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    void getMyLicenseFn()
+      .then((lic) => {
+        useEnclave.getState().patchSettings({ plan: lic.plan });
+        setStatus("");
+      })
+      .catch(() => setStatus("本机离线时沿用上次档位。"));
+  }, []);
+
+  return (
+    <>
+      <div className="mb-4">
+        <UserButton />
+      </div>
+      <p className="www-kicker">当前订阅</p>
+      <h3>{plan.label}</h3>
+      <p className="www-mono">
+        {plan.envLimit} 个环境 · {plan.concurrent} 并发
+        {user?.primaryEmail ? ` · ${user.primaryEmail}` : ""}
+      </p>
+      {status ? <p className="www-hint">{status}</p> : null}
+      <div className="www-actions">
+        <Link to="/" className="www-btn www-btn-primary">
+          打开工作台
+        </Link>
+        <Link to="/www/pricing" className="www-btn www-btn-ghost">
+          更改套餐
+        </Link>
+      </div>
+    </>
   );
 }
