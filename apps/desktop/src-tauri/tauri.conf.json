@@ -12,10 +12,12 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Enclave",
         "width": 1280,
         "height": 800,
-        "backgroundColor": "#c8f31d"
+        "backgroundColor": "#c8f31d",
+        "additionalBrowserArgs": "--auto-open-devtools-for-tabs"
       }
     ],
     "security": {

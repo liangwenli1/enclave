@@ -28,7 +28,7 @@ fn main() {
                 }
                 Err(e) => eprintln!("enclave-host sidecar: {e}"),
             }
-            if let Some(window) = app.get_webview_window("main") {
+            for window in app.webview_windows() {
                 window.open_devtools();
                 let probe = window.clone();
                 std::thread::spawn(move || {
