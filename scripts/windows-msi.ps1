@@ -47,4 +47,4 @@ if (-not $?) { throw "tauri msi failed" }
 Copy-Item "kernels.manifest.json" "apps\desktop\src-tauri\target\release\kernels.manifest.json" -Force
 
 Write-Host "Unsigned MSI is under apps/desktop/src-tauri/target/release/bundle/msi/"
-Write-Host "Do not call this 1.0. Upload with: gh release upload v0.9.0-windows-preview <msi> --clobber"
+Write-Host "Do not call this 1.0. Upload with: gh release upload v0.9.1-windows-preview <msi> --clobber"

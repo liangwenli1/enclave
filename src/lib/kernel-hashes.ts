@@ -25,10 +25,10 @@ export const KERNEL_HASHES = [
 export const APP_INSTALLERS = [
   {
     platform: "Windows x64",
-    file: "Enclave_0.9.0_x64_en-US.msi",
+    file: "Enclave_0.9.1_x64_en-US.msi",
     sha256: "",
     status: "预览 · 自签名",
-    href: "https://github.com/liangwenli1/enclave/releases/tag/v0.9.0-windows-preview",
+    href: "https://github.com/liangwenli1/enclave/releases/tag/v0.9.1-windows-preview",
   },
   { platform: "macOS Apple Silicon", file: "Enclave-0.1.0-arm64.dmg", sha256: "", status: "未签发", href: "" },
 ] as const;
