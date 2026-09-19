@@ -259,6 +259,7 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
             <option value="10">{t(locale, "win10")}</option>
             <option value="11">{t(locale, "win11")}</option>
           </Select>
+          <p className="text-xs text-subtle">{t(locale, "osHint")}</p>
         </Field>
       ) : null}
       <Field label={t(locale, "brand")}>

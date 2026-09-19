@@ -1,11 +1,15 @@
 import type { FingerprintProfile, PlatformId } from "@/lib/schema";
 
-export const WIN10_VERSION = "10.0.19045";
-export const WIN11_VERSION = "10.0.26100";
+export const WIN10_VERSION = "10.0.0";
+export const WIN11_VERSION = "19.0.0";
 
 export function windowsEdition(version: string): "10" | "11" {
-  const build = Number(version.split(".")[2] ?? 0);
-  return build >= 22000 ? "11" : "10";
+  const parts = version.split(".").map((n) => Number(n) || 0);
+  const major = parts[0] ?? 0;
+  const build = parts[2] ?? 0;
+  if (major >= 13) return "11";
+  if (build >= 22000) return "11";
+  return "10";
 }
 
 export function platformLabel(profile: Pick<FingerprintProfile, "platform" | "platformVersion">) {
