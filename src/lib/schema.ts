@@ -30,7 +30,7 @@ export type FingerprintProfile = {
 
 export type ProxyAuth = {
   username: string;
-  passwordRef: string;
+  password?: string;
 };
 
 export type ProxyItem = {

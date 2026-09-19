@@ -4,6 +4,8 @@ import { useLocale } from "@/components/shell";
 import { t } from "@/lib/i18n";
 import { PLANS } from "@/lib/license";
 import { useEnclave } from "@/lib/store";
+import { SignedIn, SignedOut } from "@/lib/auth/gates";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -12,6 +14,7 @@ function SettingsPage() {
   const settings = useEnclave((s) => s.settings);
   const patch = useEnclave((s) => s.patchSettings);
   const plan = PLANS[settings.plan];
+  const user = useCurrentUser();
 
   return (
     <div className="mx-auto max-w-xl p-4 md:p-6">
@@ -20,12 +23,27 @@ function SettingsPage() {
         <Panel className="p-4">
           <div className="mb-2 text-sm font-medium">{t(locale, "accountTitle")}</div>
           <p className="text-sm text-subtle">{t(locale, "accountBody")}</p>
-          <p className="mt-3 text-sm">
-            {t(locale, "accountLocal")} · {plan.label} · {plan.envLimit}
-          </p>
-          <Link to="/www/account" className="mt-3 inline-flex">
-            <Button variant="primary">{t(locale, "openAccount")}</Button>
-          </Link>
+          <SignedIn>
+            <p className="mt-3 text-sm">
+              {t(locale, "accountSigned")}
+              {user?.primaryEmail ? ` · ${user.primaryEmail}` : ""} · {plan.label} · {plan.envLimit}
+            </p>
+          </SignedIn>
+          <SignedOut>
+            <p className="mt-3 text-sm">
+              {t(locale, "accountLocal")} · {plan.label} · {plan.envLimit}
+            </p>
+          </SignedOut>
+          <div className="mt-3 flex gap-2">
+            <SignedOut>
+              <Link to="/login">
+                <Button variant="primary">登录</Button>
+              </Link>
+            </SignedOut>
+            <Link to="/www/account">
+              <Button variant={user ? "primary" : "secondary"}>{t(locale, "openAccount")}</Button>
+            </Link>
+          </div>
         </Panel>
         <Panel className="p-4">
           <div className="mb-3 text-sm font-medium">{t(locale, "language")}</div>

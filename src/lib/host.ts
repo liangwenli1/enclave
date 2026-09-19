@@ -5,11 +5,12 @@ import { useEnclave } from "@/lib/store";
 
 export function proxyUrl(proxy: ProxyItem | undefined): string | undefined {
   if (!proxy) return undefined;
-  const auth = proxy.auth
-    ? `${encodeURIComponent(proxy.auth.username)}:${encodeURIComponent("vault")}`
-    : "";
-  const creds = auth ? `${auth}@` : "";
-  return `${proxy.protocol}://${creds}${proxy.host}:${proxy.port}`;
+  if (proxy.auth?.username) {
+    const pass = encodeURIComponent(proxy.auth.password ?? "");
+    const user = encodeURIComponent(proxy.auth.username);
+    return `${proxy.protocol}://${user}:${pass}@${proxy.host}:${proxy.port}`;
+  }
+  return `${proxy.protocol}://${proxy.host}:${proxy.port}`;
 }
 
 export async function startEnv(env: Environment) {

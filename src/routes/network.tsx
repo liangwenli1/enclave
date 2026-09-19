@@ -127,7 +127,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => setDraft({ ...draft, password: e.target.value })}
             />
           </Field>
-          <Field label="ISO country">
+          <Field label={t(locale, "country")}>
             <Input
               value={draft.country}
               onChange={(e) => setDraft({ ...draft, country: e.target.value.toUpperCase() })}
@@ -149,14 +149,14 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
                 port: draft.port,
                 country: draft.country || undefined,
                 auth: draft.username
-                  ? { username: draft.username, passwordRef: `vault:${id}` }
+                  ? { username: draft.username, password: draft.password }
                   : undefined,
               });
               useEnclave.getState().addAudit({
                 action: "proxy_add",
                 target: id,
                 level: "info",
-                detail: "proxy stored; secret ref only",
+                detail: "proxy stored",
               });
               onClose();
             }}

@@ -10,19 +10,23 @@
   <main class="www-main">
     <p class="www-kicker">Download</p>
     <h1>先核哈希，再安装。</h1>
-    <p class="www-lead">客户下的是签过名的工作台安装包。内核由工作台按清单校验。安装包尚未签发，所以没有下载按钮。</p>
+    <p class="www-lead">Windows 预览包已放出，自签名，不是 1.0。macOS 尚未签发。</p>
     <section class="www-section">
       <h2>工作台安装包</h2>
       <div class="www-table-wrap">
         <table>
-          <thead><tr><th>平台</th><th>文件</th><th>SHA256</th><th>状态</th></tr></thead>
+          <thead><tr><th>平台</th><th>文件</th><th>状态</th></tr></thead>
           <tbody>
-            <tr><td>Windows x64</td><td class="www-mono">Enclave-0.1.0-x64.msi</td><td>—</td><td class="www-warn">未签发</td></tr>
-            <tr><td>macOS Apple Silicon</td><td class="www-mono">Enclave-0.1.0-arm64.dmg</td><td>—</td><td class="www-warn">未签发</td></tr>
+            <tr>
+              <td>Windows x64</td>
+              <td class="www-mono"><a href="https://github.com/liangwenli1/enclave/releases/tag/v0.9.0-windows-preview">Enclave_0.9.0_x64_en-US.msi</a></td>
+              <td>预览 · 自签名</td>
+            </tr>
+            <tr><td>macOS Apple Silicon</td><td class="www-mono">Enclave-0.1.0-arm64.dmg</td><td class="www-warn">未签发</td></tr>
           </tbody>
         </table>
       </div>
-      <p class="www-hint">没有哈希的包不会开放下载。不提供未签名安装包。</p>
+      <p class="www-hint">Windows 预览包是自签名。其他机器仍会提示未知发布者。</p>
     </section>
     <section class="www-section">
       <h2>内核 148.0.7778.215</h2>

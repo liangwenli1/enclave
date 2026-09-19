@@ -14,7 +14,7 @@ function WwwDownload() {
         <p className="www-kicker">Download</p>
         <h1>先核哈希，再安装。</h1>
         <p className="www-lead">
-          客户下的是签过名的工作台安装包。内核由工作台按清单校验。安装包尚未签发，所以没有下载按钮。内核哈希来自官方 GitHub Release，可以先对照。
+          Windows 预览包已放出，自签名，不是 1.0。下载后核发布页说明。macOS 尚未签发。
         </p>
 
         <section className="www-section">
@@ -33,7 +33,15 @@ function WwwDownload() {
                 {APP_INSTALLERS.map((row) => (
                   <tr key={row.file}>
                     <td>{row.platform}</td>
-                    <td className="www-mono">{row.file}</td>
+                    <td className="www-mono">
+                      {row.href ? (
+                        <a href={row.href} target="_blank" rel="noreferrer">
+                          {row.file}
+                        </a>
+                      ) : (
+                        row.file
+                      )}
+                    </td>
                     <td>—</td>
                     <td className="www-warn">{row.status}</td>
                   </tr>
@@ -41,7 +49,7 @@ function WwwDownload() {
               </tbody>
             </table>
           </div>
-          <p className="www-hint">没有哈希的包不会开放下载。不提供未签名安装包。</p>
+          <p className="www-hint">Windows 预览包是自签名。其他机器仍会提示未知发布者。</p>
         </section>
 
         <section className="www-section">

@@ -51,10 +51,9 @@ function EnvironmentsPage() {
               const store = useEnclave.getState();
               const plan = planOf(store.settings.plan);
               if (envCount(store.environments) >= plan.envLimit) {
-                store.addAudit({
-                  action: "create_blocked",
-                  level: "warn",
-                  detail: `PLAN_ENV_LIMIT ${plan.label} max ${plan.envLimit}`,
+                store.setPlanNotice({
+                  title: "环境数量已达上限",
+                  body: `当前套餐 ${plan.label} 最多 ${plan.envLimit} 个环境。删除不用的环境，或升级套餐。`,
                 });
                 return;
               }
