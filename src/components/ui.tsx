@@ -7,7 +7,7 @@ import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, TextareaHTML
 import { cn } from "@/lib/cn";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors duration-150 disabled:pointer-events-none disabled:opacity-40 select-none",
+  "inline-flex items-center justify-center gap-1.5 rounded-md font-medium select-none transition-[opacity,transform,background-color] duration-150 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98]",
   {
     variants: {
       variant: {
@@ -18,9 +18,9 @@ const buttonVariants = cva(
         danger: "bg-bad/15 text-bad border border-bad/30 hover:bg-bad/25",
       },
       size: {
-        sm: "h-8 px-2.5 text-[13px]",
-        md: "h-9 px-3.5 text-[13px]",
-        icon: "size-8 p-0",
+        sm: "h-9 px-3 text-sm",
+        md: "h-10 px-4 text-sm",
+        icon: "size-10 p-0",
       },
     },
     defaultVariants: { variant: "secondary", size: "sm" },
@@ -40,7 +40,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   return (
     <input
       className={cn(
-        "h-8 w-full rounded-md border border-line bg-surface px-2.5 text-[13px] text-ink placeholder:text-subtle",
+        "h-10 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink placeholder:text-subtle",
         className,
       )}
       {...props}
@@ -52,7 +52,7 @@ export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
   return (
     <textarea
       className={cn(
-        "min-h-20 w-full rounded-md border border-line bg-surface px-2.5 py-2 text-[13px] text-ink placeholder:text-subtle",
+        "min-h-20 w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle",
         className,
       )}
       {...props}
@@ -97,7 +97,7 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <label className="grid gap-1 text-[12px] text-subtle">
+    <label className="grid gap-2 text-sm text-subtle">
       <span className="tracking-wide">{label}</span>
       {children}
     </label>
@@ -121,7 +121,7 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
       <DialogPrimitive.Content
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line bg-surface p-5 shadow-panel",
+          "fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-line bg-surface p-4 shadow-panel",
           className,
         )}
       >
@@ -215,7 +215,7 @@ export function Panel({
   children: ReactNode;
 }) {
   return (
-    <section className={cn("rounded-lg border border-line bg-surface", className)}>
+    <section className={cn("rounded-2xl border border-line bg-surface", className)}>
       {children}
     </section>
   );

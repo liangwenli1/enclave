@@ -20,10 +20,11 @@
   --color-bad: var(--enclave-bad);
 
   --radius-xs: 4px;
-  --radius-sm: 6px;
+  --radius-sm: 8px;
   --radius-md: 8px;
   --radius-lg: 12px;
   --radius-xl: 16px;
+  --radius-2xl: 24px;
 
   --shadow-panel: 0 12px 40px color-mix(in oklab, #000 35%, transparent);
 }
@@ -519,4 +520,38 @@ body {
   .www-btn:active {
     transform: none;
   }
+}
+
+.app-nav {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--www-space-1);
+  padding: var(--www-space-2);
+}
+
+.app-nav a {
+  display: flex;
+  align-items: center;
+  gap: var(--www-space-2);
+  min-height: 40px;
+  padding: 0 var(--www-space-3);
+  border-radius: var(--www-radius-inner);
+  color: var(--enclave-subtle);
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition:
+    color var(--www-motion-quick) var(--www-ease),
+    background-color var(--www-motion-quick) var(--www-ease);
+}
+
+.app-nav a:hover,
+.app-nav a[data-active="true"] {
+  color: var(--enclave-ink);
+  background: var(--enclave-surface-2);
+}
+
+.app-nav-foot {
+  flex: none;
+  padding: 0;
 }

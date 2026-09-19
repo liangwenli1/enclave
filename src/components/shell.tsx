@@ -64,46 +64,43 @@ export function AppShell({ children }: { children: ReactNode }) {
         density === "comfortable" && "text-[15px]",
       )}
     >
-      <aside className="hidden w-[220px] shrink-0 flex-col border-r border-line bg-surface md:flex">
-        <div className="flex h-12 items-center gap-2 border-b border-line px-4">
+      <aside className="hidden w-[220px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
+        <div className="flex h-14 items-center gap-2 border-b border-line px-4">
           <Mark />
           <div className="leading-tight">
-            <div className="text-[13px] font-semibold tracking-tight">{t(locale, "app")}</div>
-            <div className="text-[10px] text-subtle">148 · stable</div>
+            <div className="text-sm font-semibold tracking-tight">{t(locale, "app")}</div>
+            <div className="text-xs text-subtle">148 · stable</div>
           </div>
         </div>
-        <nav className="flex flex-1 flex-col gap-0.5 p-2">
+        <nav className="app-nav">
           {NAV.map((item) => (
             <Link
               key={item.to}
               to={item.to}
-              className={cn(
-                "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted hover:bg-surface-2 hover:text-ink",
-                pathname === item.to && "bg-surface-2 text-ink",
-              )}
+              data-active={pathname === item.to ? "true" : "false"}
             >
-              <item.icon className="size-3.5" />
+              <item.icon className="size-4" />
               {t(locale, item.key)}
             </Link>
           ))}
         </nav>
         <div className="border-t border-line p-2">
-          <Link
-            to="/settings"
-            className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-muted hover:bg-surface-2 hover:text-ink",
-              pathname === "/settings" && "bg-surface-2 text-ink",
-            )}
-          >
-            <Settings className="size-3.5" />
-            {t(locale, "navSettings")}
-          </Link>
+          <nav className="app-nav app-nav-foot">
+            <Link to="/www">官网</Link>
+            <Link
+              to="/settings"
+              data-active={pathname === "/settings" ? "true" : "false"}
+            >
+              <Settings className="size-4" />
+              {t(locale, "navSettings")}
+            </Link>
+          </nav>
         </div>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 items-center gap-2 border-b border-line bg-surface px-3">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-line bg-canvas/90 px-3 backdrop-blur">
           <button
-            className="rounded-md p-2 text-muted md:hidden"
+            className="grid size-10 place-items-center rounded-md text-muted md:hidden"
             onClick={() => setMobileNav((v) => !v)}
             aria-label="Menu"
           >
@@ -111,7 +108,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
           <button
             onClick={() => setCmdOpen(true)}
-            className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-canvas px-2 text-left text-[12px] text-subtle md:max-w-md"
+            className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-surface px-3 text-left text-sm text-subtle md:max-w-md"
           >
             <Search className="size-3.5" />
             <span className="truncate">{t(locale, "search")}</span>
@@ -124,20 +121,27 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
         </header>
         {mobileNav ? (
-          <div className="flex gap-1 overflow-x-auto border-b border-line px-2 py-2 md:hidden">
+          <div className="flex flex-wrap gap-1 border-b border-line px-2 py-2 md:hidden">
             {NAV.map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
                 onClick={() => setMobileNav(false)}
                 className={cn(
-                  "shrink-0 rounded-full border border-line px-3 py-1 text-[12px] text-muted",
-                  pathname === item.to && "bg-surface-2 text-ink",
+                  "inline-flex min-h-11 shrink-0 items-center rounded-full border border-line bg-surface-2 px-4 text-sm text-muted",
+                  pathname === item.to && "text-ink",
                 )}
               >
                 {t(locale, item.key)}
               </Link>
             ))}
+            <Link
+              to="/www"
+              onClick={() => setMobileNav(false)}
+              className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-line bg-surface-2 px-4 text-sm"
+            >
+              官网
+            </Link>
           </div>
         ) : null}
         <main className="min-h-0 flex-1 overflow-auto">{children}</main>
@@ -205,8 +209,8 @@ function HostSync() {
 
 function Mark() {
   return (
-    <span className="grid size-7 place-items-center rounded-md border border-line-strong bg-canvas">
-      <span className="size-3 rounded-[2px] border border-accent/80" />
+    <span className="www-mark">
+      <i />
     </span>
   );
 }
@@ -216,9 +220,9 @@ function LockScreen() {
   const [value, setValue] = useState("");
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-canvas/95">
-      <div className="w-[min(360px,calc(100vw-24px))] rounded-xl border border-line bg-surface p-5">
-        <div className="mb-3 text-[15px] font-semibold">{t(locale, "locked")}</div>
-        <p className="mb-4 text-[12px] text-subtle">{t(locale, "masterPwHint")}</p>
+      <div className="w-[min(360px,calc(100vw-24px))] rounded-2xl border border-line bg-surface p-4">
+        <div className="mb-3 text-lg font-semibold tracking-tight">{t(locale, "locked")}</div>
+        <p className="mb-4 text-sm text-subtle">{t(locale, "masterPwHint")}</p>
         <Input
           type="password"
           value={value}
