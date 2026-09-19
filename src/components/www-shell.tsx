@@ -6,6 +6,7 @@ const NAV = [
   { to: "/www", label: "产品" },
   { to: "/www/pricing", label: "套餐" },
   { to: "/www/download", label: "下载" },
+  { to: "/www/docs", label: "文档" },
   { to: "/www/account", label: "账号" },
 ] as const;
 
@@ -43,7 +44,12 @@ export function WwwShell({ children }: { children: ReactNode }) {
       <main>{children}</main>
       <footer className="border-t border-line py-8 text-[12px] text-subtle">
         <div className="mx-auto flex max-w-5xl flex-wrap justify-between gap-3 px-4">
-          <div>内核 BSD-3-Clause · Ungoogled Chromium · fingerprint-chromium</div>
+          <div>
+            内核 BSD-3-Clause · Ungoogled Chromium · fingerprint-chromium
+            <Link to="/www/legal" className="ml-3 text-ink underline">
+              安全与法律
+            </Link>
+          </div>
           <div>安装包不收费。功能靠账号额度解锁。不宣传过某站风控。</div>
         </div>
       </footer>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Enclave — 本机多环境浏览器</title>
+  <meta name="description" content="内核跑在你自己的电脑上。不是网页里开 Chrome。安装包免费，功能靠账号额度解锁。" />
+  <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+  <main class="wrap">
+    <p class="kicker">Desktop · Native kernel</p>
+    <h1>内核跑在你自己的电脑上。<br />不是网页里开 Chrome。</h1>
+    <p class="lead">Enclave 是本机多环境浏览器工作台。安装包免费下载，额度由账号解锁。Cookie、指纹、出口按环境隔离。实验室采集的是内核窗口，不是工作台自己的页面。</p>
+    <div class="row">
+      <a class="btn primary" href="download.html">下载与校验</a>
+      <a class="btn ghost" href="pricing.html">看套餐</a>
+    </div>
+    <p class="hint">Windows / macOS 安装包尚未签发。没有哈希的包不会开放下载。</p>
+  </main>
+  <main class="wrap" style="padding-top:0">
+    <div class="grid three">
+      <div class="card"><h3>本机 spawn</h3><p>fingerprint-chromium 在客户电脑启动。调试口只绑 127.0.0.1。哈希不符拒启。</p></div>
+      <div class="card"><h3>一环境一画像</h3><p>种子锁定后重启稳定。WebRTC 默认不暴露真实 IP。代理失败有人话原因码。</p></div>
+      <div class="card"><h3>不卖过站承诺</h3><p>内核基于 Ungoogled Chromium 补丁，BSD-3-Clause。不宣传已过某站、不宣传 100% 自研内核。</p></div>
+    </div>
+  </main>
+  <main class="wrap" style="padding-top:0">
+    <h2>客户用法</h2>
+    <div class="grid two">
+      <div class="step"><b>1</b>打开官网，注册，选免费档或付费档。</div>
+      <div class="step"><b>2</b>下载对应系统的安装包，校验 SHA256，安装。</div>
+      <div class="step"><b>3</b>打开本机工作台，登录账号，额度同步。</div>
+      <div class="step"><b>4</b>新建环境 → 配代理 → 锁定画像 → 启动。本机弹出独立内核窗口。</div>
+      <div class="step"><b>5</b>实验室采集该内核窗口。失败则拒启并显示原因码。</div>
+      <div class="step"><b>6</b>换电脑：装客户端并登录。云同步未做时只能导入环境包。</div>
+    </div>
+  </main>
+  <script src="js/site.js"></script>
+</body>
+</html>

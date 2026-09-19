@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>账号 — Enclave</title>
+  <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+  <main class="wrap" style="max-width:560px">
+    <h1>账号</h1>
+    <p class="lead">厂商许可证 API 还没接。此页是官网注册结构，账号存在你的浏览器本机。不是付费通道。</p>
+    <div id="panel" class="card" style="margin-top:24px"></div>
+  </main>
+  <script src="js/site.js"></script>
+  <script>
+    const PLANS = { free: "Solo Free", solo: "Solo", pro: "Pro" };
+    function render() {
+      const el = document.getElementById("panel");
+      const a = account.read();
+      if (a) {
+        el.innerHTML = `<p>已登录（本机演示）</p><h3>${a.email}</h3><p class="mono">${PLANS[a.plan] || a.plan}</p>
+          <p><button class="btn ghost" type="button" id="out">退出</button></p>`;
+        document.getElementById("out").onclick = () => { account.clear(); render(); };
+        return;
+      }
+      el.innerHTML = `<form id="reg">
+        <label>邮箱<input type="email" name="email" required placeholder="you@company.com" /></label>
+        <label>档位<select name="plan"><option value="free">Solo Free</option><option value="solo">Solo</option><option value="pro">Pro</option></select></label>
+        <button class="btn primary" type="submit">注册</button>
+      </form>`;
+      document.getElementById("reg").onsubmit = (e) => {
+        e.preventDefault();
+        const f = e.target;
+        account.write({ email: f.email.value.trim().toLowerCase(), plan: f.plan.value, createdAt: Date.now() });
+        render();
+      };
+    }
+    document.addEventListener("DOMContentLoaded", render);
+  </script>
+</body>
+</html>

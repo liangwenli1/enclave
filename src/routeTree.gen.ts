@@ -19,7 +19,9 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as WwwRouteImport } from './routes/www'
 import { Route as EnvironmentsIdRouteImport } from './routes/environments.$id'
 import { Route as WwwAccountRouteImport } from './routes/www.account'
+import { Route as WwwDocsRouteImport } from './routes/www.docs'
 import { Route as WwwDownloadRouteImport } from './routes/www.download'
+import { Route as WwwLegalRouteImport } from './routes/www.legal'
 import { Route as WwwPricingRouteImport } from './routes/www.pricing'
 
 const IndexRoute = IndexRouteImport.update({
@@ -72,9 +74,19 @@ const WwwAccountRoute = WwwAccountRouteImport.update({
   path: '/account',
   getParentRoute: () => WwwRoute,
 } as any)
+const WwwDocsRoute = WwwDocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => WwwRoute,
+} as any)
 const WwwDownloadRoute = WwwDownloadRouteImport.update({
   id: '/download',
   path: '/download',
+  getParentRoute: () => WwwRoute,
+} as any)
+const WwwLegalRoute = WwwLegalRouteImport.update({
+  id: '/legal',
+  path: '/legal',
   getParentRoute: () => WwwRoute,
 } as any)
 const WwwPricingRoute = WwwPricingRouteImport.update({
@@ -94,7 +106,9 @@ export interface FileRoutesByFullPath {
   '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
   '/www/account': typeof WwwAccountRoute
+  '/www/docs': typeof WwwDocsRoute
   '/www/download': typeof WwwDownloadRoute
+  '/www/legal': typeof WwwLegalRoute
   '/www/pricing': typeof WwwPricingRoute
 }
 export interface FileRoutesByTo {
@@ -108,7 +122,9 @@ export interface FileRoutesByTo {
   '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
   '/www/account': typeof WwwAccountRoute
+  '/www/docs': typeof WwwDocsRoute
   '/www/download': typeof WwwDownloadRoute
+  '/www/legal': typeof WwwLegalRoute
   '/www/pricing': typeof WwwPricingRoute
 }
 export interface FileRoutesById {
@@ -123,7 +139,9 @@ export interface FileRoutesById {
   '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
   '/www/account': typeof WwwAccountRoute
+  '/www/docs': typeof WwwDocsRoute
   '/www/download': typeof WwwDownloadRoute
+  '/www/legal': typeof WwwLegalRoute
   '/www/pricing': typeof WwwPricingRoute
 }
 export interface FileRouteTypes {
@@ -139,7 +157,9 @@ export interface FileRouteTypes {
     | '/www'
     | '/environments/$id'
     | '/www/account'
+    | '/www/docs'
     | '/www/download'
+    | '/www/legal'
     | '/www/pricing'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -153,7 +173,9 @@ export interface FileRouteTypes {
     | '/www'
     | '/environments/$id'
     | '/www/account'
+    | '/www/docs'
     | '/www/download'
+    | '/www/legal'
     | '/www/pricing'
   id:
     | '__root__'
@@ -167,7 +189,9 @@ export interface FileRouteTypes {
     | '/www'
     | '/environments/$id'
     | '/www/account'
+    | '/www/docs'
     | '/www/download'
+    | '/www/legal'
     | '/www/pricing'
   fileRoutesById: FileRoutesById
 }
@@ -255,11 +279,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof WwwAccountRouteImport
       parentRoute: typeof WwwRoute
     }
+    '/www/docs': {
+      id: '/www/docs'
+      path: '/docs'
+      fullPath: '/www/docs'
+      preLoaderRoute: typeof WwwDocsRouteImport
+      parentRoute: typeof WwwRoute
+    }
     '/www/download': {
       id: '/www/download'
       path: '/download'
       fullPath: '/www/download'
       preLoaderRoute: typeof WwwDownloadRouteImport
+      parentRoute: typeof WwwRoute
+    }
+    '/www/legal': {
+      id: '/www/legal'
+      path: '/legal'
+      fullPath: '/www/legal'
+      preLoaderRoute: typeof WwwLegalRouteImport
       parentRoute: typeof WwwRoute
     }
     '/www/pricing': {
@@ -274,13 +312,17 @@ declare module '@tanstack/react-router' {
 
 interface WwwRouteChildren {
   WwwAccountRoute: typeof WwwAccountRoute
+  WwwDocsRoute: typeof WwwDocsRoute
   WwwDownloadRoute: typeof WwwDownloadRoute
+  WwwLegalRoute: typeof WwwLegalRoute
   WwwPricingRoute: typeof WwwPricingRoute
 }
 
 const WwwRouteChildren: WwwRouteChildren = {
   WwwAccountRoute: WwwAccountRoute,
+  WwwDocsRoute: WwwDocsRoute,
   WwwDownloadRoute: WwwDownloadRoute,
+  WwwLegalRoute: WwwLegalRoute,
   WwwPricingRoute: WwwPricingRoute,
 }
 
