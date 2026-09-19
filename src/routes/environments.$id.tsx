@@ -112,6 +112,23 @@ function EnvDetail() {
                 ))}
               </select>
             </Field>
+            <Field label={t(locale, "searchEngine")}>
+              <select
+                className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
+                value={env.searchEngine ?? "none"}
+                onChange={(e) =>
+                  useEnclave.getState().patchEnv(env.id, {
+                    searchEngine: e.target.value as typeof env.searchEngine,
+                  })
+                }
+              >
+                <option value="none">{t(locale, "searchEngineNone")}</option>
+                <option value="bing">Microsoft Bing</option>
+                <option value="baidu">百度</option>
+                <option value="duckduckgo">DuckDuckGo</option>
+              </select>
+              <p className="mt-1 text-[12px] text-subtle">{t(locale, "searchEngineHint")}</p>
+            </Field>
             <Field label={t(locale, "note")}>
               <Textarea
                 value={env.note}

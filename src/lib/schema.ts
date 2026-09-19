@@ -77,6 +77,7 @@ export type Environment = {
   note: string;
   profile: FingerprintProfile;
   proxyId: string | null;
+  searchEngine: "none" | "bing" | "baidu" | "duckduckgo";
   extensionIds: string[];
   kernelPin: { id: string; version: string; sha256: string };
   allowNoSandbox: boolean;
@@ -247,6 +248,7 @@ export function newEnvironment(partial?: Partial<Environment>): Environment {
     note: partial?.note ?? "",
     profile: partial?.profile ?? profileFromSeed(seed, "windows"),
     proxyId: partial?.proxyId ?? null,
+    searchEngine: partial?.searchEngine ?? "none",
     extensionIds: partial?.extensionIds ?? [],
     kernelPin: KERNEL_PIN,
     allowNoSandbox: false,
@@ -269,6 +271,7 @@ export function newEnvironment(partial?: Partial<Environment>): Environment {
       "note",
       "profile",
       "proxyId",
+      "searchEngine",
       "extensionIds",
     ]),
   };

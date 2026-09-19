@@ -48,6 +48,7 @@ export const startEnvFn = createServerFn({ method: "POST" })
       extraFlags: z.array(z.string()),
       allowNoSandbox: z.boolean(),
       proxyServer: z.string().optional(),
+      searchEngine: z.enum(["none", "bing", "baidu", "duckduckgo"]).optional(),
     }),
   )
   .handler(async ({ data }) => {

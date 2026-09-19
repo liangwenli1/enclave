@@ -163,6 +163,7 @@ struct StartBody {
     #[serde(default)]
     allow_no_sandbox: bool,
     proxy_server: Option<String>,
+    search_engine: Option<String>,
 }
 
 async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -> Json<Value> {
@@ -174,6 +175,7 @@ async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -
         &body.extra_flags,
         body.allow_no_sandbox,
         body.proxy_server.as_deref(),
+        body.search_engine.as_deref(),
         &state.runtimes,
     )
     .await

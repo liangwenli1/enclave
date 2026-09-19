@@ -79,6 +79,7 @@ export async function startEnv(env: Environment) {
       extraFlags: env.extraFlags,
       allowNoSandbox,
       proxyServer: proxyUrl(proxy),
+      searchEngine: env.searchEngine ?? "none",
     },
   });
   if (!result.ok) {

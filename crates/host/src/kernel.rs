@@ -1,7 +1,7 @@
 use crate::flags::{classify, FlagClass};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -346,60 +346,60 @@ pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf
     find_chrome(&extract_dir(paths, k))
 }
 
-fn search_extension_dir() -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("crates").join("host").join("search-ext"));
+async fn apply_search_engine(user_data_dir: &Path, engine: Option<&str>) -> Result<Option<PathBuf>> {
+    let ext_dir = user_data_dir.join("enclave-search");
+    let policy_path = user_data_dir
+        .join("policies")
+        .join("managed")
+        .join("enclave.json");
+    let key = engine.unwrap_or("none").to_ascii_lowercase();
+    if key.is_empty() || key == "none" {
+        let _ = tokio::fs::remove_dir_all(&ext_dir).await;
+        let _ = tokio::fs::remove_file(&policy_path).await;
+        return Ok(None);
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            candidates.push(dir.join("search-ext"));
-            candidates.push(dir.join("crates").join("host").join("search-ext"));
+    let (name, keyword, url, suggest) = match key.as_str() {
+        "bing" => (
+            "Microsoft Bing",
+            "bing.com",
+            "https://www.bing.com/search?q={searchTerms}",
+            "https://www.bing.com/osjson.aspx?query={searchTerms}",
+        ),
+        "baidu" => (
+            "百度",
+            "baidu.com",
+            "https://www.baidu.com/s?wd={searchTerms}",
+            "",
+        ),
+        "duckduckgo" | "ddg" => (
+            "DuckDuckGo",
+            "duckduckgo.com",
+            "https://duckduckgo.com/?q={searchTerms}",
+            "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
+        ),
+        _ => {
+            let _ = tokio::fs::remove_dir_all(&ext_dir).await;
+            return Ok(None);
         }
-    }
-    candidates.into_iter().find(|p| p.join("manifest.json").is_file())
-}
-
-async fn seed_search_engine(user_data_dir: &Path) -> Result<()> {
-    let managed = user_data_dir.join("policies").join("managed");
-    tokio::fs::create_dir_all(&managed).await?;
-    let policy = json!({
-        "DefaultSearchProviderEnabled": true,
-        "DefaultSearchProviderName": "DuckDuckGo",
-        "DefaultSearchProviderKeyword": "ddg",
-        "DefaultSearchProviderSearchURL": "https://duckduckgo.com/?q={searchTerms}",
-        "DefaultSearchProviderSuggestURL": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
-        "DefaultSearchProviderNewTabURL": "https://duckduckgo.com/",
-        "DefaultSearchProviderIconURL": "https://duckduckgo.com/favicon.ico"
-    });
-    tokio::fs::write(managed.join("enclave.json"), serde_json::to_vec_pretty(&policy)?).await?;
-
-    let default_dir = user_data_dir.join("Default");
-    tokio::fs::create_dir_all(&default_dir).await?;
-    let path = default_dir.join("Preferences");
-    let mut prefs = if path.exists() {
-        let raw = tokio::fs::read(&path).await?;
-        serde_json::from_slice::<Value>(&raw).unwrap_or_else(|_| json!({}))
-    } else {
-        json!({})
     };
-    prefs["default_search_provider_data"] = json!({
-        "template_url_data": {
-            "short_name": "DuckDuckGo",
-            "keyword": "duckduckgo.com",
-            "url": "https://duckduckgo.com/?q={searchTerms}",
-            "suggestions_url": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
-            "favicon_url": "https://duckduckgo.com/favicon.ico",
-            "safe_for_autoreplace": true,
-            "date_created": "0",
-            "last_modified": "0",
-            "prepopulate_id": 0,
-            "encodings": ["UTF-8"]
+    tokio::fs::create_dir_all(&ext_dir).await?;
+    let manifest = json!({
+        "manifest_version": 3,
+        "name": "Enclave Search",
+        "version": "1.0.0",
+        "chrome_settings_overrides": {
+            "search_provider": {
+                "name": name,
+                "keyword": keyword,
+                "search_url": url,
+                "suggest_url": suggest,
+                "encoding": "UTF-8",
+                "is_default": true
+            }
         }
     });
-    prefs["browser"]["has_seen_welcome_page"] = json!(true);
-    tokio::fs::write(path, serde_json::to_vec_pretty(&prefs)?).await?;
-    Ok(())
+    tokio::fs::write(ext_dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest)?).await?;
+    Ok(Some(ext_dir))
 }
 
 pub async fn persist_status(paths: &HostPaths, status: &KernelStatus) -> Result<()> {
@@ -593,6 +593,7 @@ pub async fn start_environment(
     extra_flags: &[String],
     allow_no_sandbox: bool,
     proxy_server: Option<&str>,
+    search_engine: Option<&str>,
     runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
 ) -> Result<Spawned, (String, String)> {
     {
@@ -626,7 +627,7 @@ pub async fn start_environment(
     tokio::fs::create_dir_all(&user_data_dir)
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
-    seed_search_engine(&user_data_dir)
+    let search_ext = apply_search_engine(&user_data_dir, search_engine)
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
 
@@ -650,9 +651,8 @@ pub async fn start_environment(
         "--no-default-browser-check".into(),
         "--disable-sync".into(),
         "--mute-audio".into(),
-        "--disable-search-engine-choice-screen".into(),
     ];
-    if let Some(ext) = search_extension_dir() {
+    if let Some(ext) = search_ext {
         args.push(format!("--load-extension={}", ext.display()));
     }
     if force_headless() {

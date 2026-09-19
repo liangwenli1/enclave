@@ -113,6 +113,7 @@ export async function startEnvironment(input: {
   extraFlags: string[];
   allowNoSandbox: boolean;
   proxyServer?: string;
+  searchEngine?: string;
 }): Promise<StartResult> {
   try {
     const res = await hostFetch("/v1/environments/start", {
