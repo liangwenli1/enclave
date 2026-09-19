@@ -1,6 +1,7 @@
 use crate::flags::{classify, FlagClass};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -345,6 +346,45 @@ pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf
     find_chrome(&extract_dir(paths, k))
 }
 
+async fn seed_search_engine(user_data_dir: &Path) -> Result<()> {
+    let default_dir = user_data_dir.join("Default");
+    tokio::fs::create_dir_all(&default_dir).await?;
+    let path = default_dir.join("Preferences");
+    let mut prefs = if path.exists() {
+        let raw = tokio::fs::read(&path).await?;
+        serde_json::from_slice::<Value>(&raw).unwrap_or_else(|_| json!({}))
+    } else {
+        json!({})
+    };
+    let has_search = prefs
+        .pointer("/default_search_provider_data/template_url_data/url")
+        .and_then(|v| v.as_str())
+        .map(|s| s.contains("{searchTerms}"))
+        .unwrap_or(false);
+    if has_search {
+        return Ok(());
+    }
+    prefs["default_search_provider_data"] = json!({
+        "template_url_data": {
+            "short_name": "DuckDuckGo",
+            "keyword": "duckduckgo.com",
+            "url": "https://duckduckgo.com/?q={searchTerms}",
+            "suggestions_url": "https://duckduckgo.com/ac/?q={searchTerms}&type=list",
+            "favicon_url": "https://duckduckgo.com/favicon.ico",
+            "safe_for_autoreplace": true,
+            "date_created": "0",
+            "last_modified": "0",
+            "prepopulate_id": 0,
+            "encodings": ["UTF-8"]
+        }
+    });
+    prefs["browser"]["has_seen_welcome_page"] = json!(true);
+    prefs["session"]["restore_on_startup"] = json!(4);
+    prefs["session"]["startup_urls"] = json!(["https://duckduckgo.com/"]);
+    tokio::fs::write(path, serde_json::to_vec_pretty(&prefs)?).await?;
+    Ok(())
+}
+
 pub async fn persist_status(paths: &HostPaths, status: &KernelStatus) -> Result<()> {
     tokio::fs::write(&paths.status, serde_json::to_vec_pretty(status)?).await?;
     Ok(())
@@ -569,6 +609,9 @@ pub async fn start_environment(
     tokio::fs::create_dir_all(&user_data_dir)
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
+    seed_search_engine(&user_data_dir)
+        .await
+        .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
 
     let mut args = vec![
         format!("--user-data-dir={}", user_data_dir.display()),
@@ -590,6 +633,7 @@ pub async fn start_environment(
         "--no-default-browser-check".into(),
         "--disable-sync".into(),
         "--mute-audio".into(),
+        "--disable-search-engine-choice-screen".into(),
     ];
     if force_headless() {
         args.push("--headless=new".into());
