@@ -37,4 +37,5 @@ cargo build --release -p enclave-host
 if (-not $?) { throw "host build failed" }
 
 Write-Host "Starting host and workbench. First kernel admit downloads ~190MB zip."
+$env:VITE_AUTH_ENABLED = "true"
 npm run dev

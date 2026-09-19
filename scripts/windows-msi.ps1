@@ -32,6 +32,7 @@ Copy-Item "target\release\enclave-host.exe" (Join-Path $binDir "enclave-host-x86
 Copy-Item "kernels.manifest.json" (Join-Path $binDir "kernels.manifest.json") -Force
 
 $env:VITE_ENCLAVE_DIRECT = "true"
+$env:VITE_AUTH_ENABLED = "true"
 npm run build
 if (-not $?) { throw "frontend build failed" }
 
