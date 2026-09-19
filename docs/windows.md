@@ -50,3 +50,39 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1
 
 产物在 `apps/desktop/src-tauri/target/release/bundle/msi/`。挂到 GitHub 仍标 pre-release。Authenticode 之前不能叫 1.0。
 
+## 5. 怎么签名
+
+自签证书只能本机玩，SmartScreen 仍会拦，**不能当 1.0**。对外必须用买来的 Authenticode。
+
+1. 买证书（三选一）
+   - **Azure Trusted Signing**（微软，推荐走这条）
+   - OV 代码签名（DigiCert / Sectigo / SSL.com）
+   - EV 代码签名（USB 钥匙或云签，SmartScreen 信誉建立更快）
+2. 安装 [Windows SDK](https://developer.microsoft.com/windows/downloads/windows-sdk/) 时勾选 **Windows SDK Signing Tools**，得到 `signtool.exe`。
+3. 证书进系统存储后：
+
+```powershell
+# 看指纹
+certutil -store My
+
+$env:ENCLAVE_CERT_THUMBPRINT = "你的SHA1指纹"
+powershell -ExecutionPolicy Bypass -File .\scripts\windows-sign.ps1
+```
+
+或 PFX：
+
+```powershell
+$env:ENCLAVE_CERT_PFX = "C:\certs\enclave.pfx"
+$env:ENCLAVE_CERT_PASSWORD = "..."
+powershell -ExecutionPolicy Bypass -File .\scripts\windows-sign.ps1
+```
+
+4. 再上传覆盖预览包：
+
+```powershell
+gh release upload v0.9.0-windows-preview ".\apps\desktop\src-tauri\target\release\bundle\msi\Enclave_0.9.0_x64_en-US.msi" --clobber
+```
+
+Tauri 以后也可以把指纹写进 `tauri.conf.json` 的 `bundle.windows.certificateThumbprint`，打 MSI 时顺带签。没有证书之前不要改。
+
+
