@@ -10,12 +10,13 @@
 
 | 模块 | 现在 | 1.0 |
 |---|---|---|
-| React 工作台 | 可用（验证预览） | 塞进 Tauri WebView |
-| Linux 内核 148 哈希准入 + 真 spawn | 可用 | 同一套适配器加 win-x64 / mac-arm64 |
-| 实验室：对照页 vs 内核 CDP | Linux 无头已跑通 | 采集本机内核窗口，`runtime: native` |
+| React 工作台 | 可用 | 塞进 Tauri WebView |
+| Linux / Windows 内核 148 哈希准入 + 真 spawn | Windows x64 已在客户机跑通 | 同一套适配器加 mac-arm64 |
+| 实验室：对照页 vs 内核 CDP | 采集本机内核窗口 | `runtime: native` |
+| GitHub 预览 tag | `v0.9.0-windows-preview` | 不是 1.0 |
 | 签过名的 `.msi` / `.dmg` | 未做 | 必须 |
 | 账号订阅与额度 | 未做 | 必须 |
-| Tauri Host | P1 进行中 | spawn / 校验 / 保险箱 / 更新全在 Rust |
+
 
 ## 仓库
 

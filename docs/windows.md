@@ -38,6 +38,15 @@ npm run dev
 
 哈希不符或没准入会拒启，不会假 Running。
 
-## 4. 之后才是 Release / MSI
+## 4. 预览 Release
 
-本机跑通 spawn 之后，再在这台机器上用 Tauri 打未签名 `.msi`，用 `gh release create` 挂到 GitHub。Authenticode 签名之前不能叫 1.0。
+源码 tag：`v0.9.0-windows-preview`（pre-release）。还不是安装包。
+
+未签名 MSI 在本机打：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1
+```
+
+产物在 `apps/desktop/src-tauri/target/release/bundle/msi/`。挂到 GitHub 仍标 pre-release。Authenticode 之前不能叫 1.0。
+

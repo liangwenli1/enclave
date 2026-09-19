@@ -26,3 +26,7 @@ AGENTS.project.md
 
 # OS
 /target/
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/binaries/*.exe
+

@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Enclave",
-  "version": "0.1.0",
+  "version": "0.9.0",
   "identifier": "com.enclave.workbench",
   "build": {
     "beforeDevCommand": "",
     "devUrl": "http://127.0.0.1:8080",
+    "beforeBuildCommand": "",
     "frontendDist": "../../../dist"
   },
   "app": {
@@ -21,8 +22,18 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": ["msi", "dmg"],
-    "icon": []
+    "active": true,
+    "targets": ["msi"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/256x256.png",
+      "icons/icon.ico"
+    ],
+    "resources": ["../../../kernels.manifest.json"],
+    "externalBin": ["binaries/enclave-host"],
+    "windows": {
+      "digestAlgorithm": "sha256"
+    }
   }
 }
