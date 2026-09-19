@@ -364,19 +364,24 @@ async fn apply_search_engine(
     }
     let chosen = chosen.unwrap();
     tokio::fs::create_dir_all(&ext_dir).await?;
+    let favicon = favicon_url_for(&chosen.keyword, &chosen.url);
+    let mut provider = json!({
+        "name": chosen.name,
+        "keyword": chosen.keyword,
+        "search_url": chosen.url,
+        "favicon_url": favicon,
+        "encoding": "UTF-8",
+        "is_default": true
+    });
+    if !chosen.suggest_url.is_empty() {
+        provider["suggest_url"] = json!(chosen.suggest_url);
+    }
     let manifest = json!({
         "manifest_version": 3,
         "name": "Enclave Search",
         "version": "1.0.0",
         "chrome_settings_overrides": {
-            "search_provider": {
-                "name": chosen.name,
-                "keyword": chosen.keyword,
-                "search_url": chosen.url,
-                "suggest_url": chosen.suggest_url,
-                "encoding": "UTF-8",
-                "is_default": true
-            }
+            "search_provider": provider
         }
     });
     tokio::fs::write(ext_dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest)?).await?;
@@ -441,6 +446,25 @@ fn resolve_search_provider(engine: Option<&str>, provider: Option<&SearchProvide
         }
     }
     preset_provider(engine.unwrap_or("none"))
+}
+
+fn favicon_url_for(keyword: &str, url: &str) -> String {
+    let hay = format!("{} {}", keyword, url).to_ascii_lowercase();
+    if hay.contains("google") {
+        "https://www.google.com/favicon.ico".into()
+    } else if hay.contains("bing") {
+        "https://www.bing.com/favicon.ico".into()
+    } else if hay.contains("baidu") {
+        "https://www.baidu.com/favicon.ico".into()
+    } else if hay.contains("duckduckgo") {
+        "https://duckduckgo.com/favicon.ico".into()
+    } else if hay.contains("sogou") {
+        "https://www.sogou.com/favicon.ico".into()
+    } else if hay.contains("so.com") {
+        "https://www.so.com/favicon.ico".into()
+    } else {
+        "https://www.google.com/favicon.ico".into()
+    }
 }
 
 pub fn list_search_engines(paths: &HostPaths, env_id: &str) -> Vec<SearchEngineRow> {
