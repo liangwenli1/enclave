@@ -1,0 +1,24 @@
+{
+  "channel": "stable",
+  "generatedAt": "2026-09-19T00:00:00.000Z",
+  "sourcePolicy": "github-release-only",
+  "kernels": [
+    {
+      "id": "fingerprint-chromium",
+      "version": "148.0.7778.215",
+      "platform": "linux-x64",
+      "channel": "stable",
+      "url": "https://github.com/adryfish/fingerprint-chromium/releases/download/148.0.7778.215/ungoogled-chromium-148.0.7778.215-1-x86_64_linux.tar.xz",
+      "filename": "ungoogled-chromium-148.0.7778.215-1-x86_64_linux.tar.xz",
+      "sha256": "70d239830332e5820aa34dfcb284161cac0429eee25da642830afe04bda717f4",
+      "bytes": 141269020,
+      "signature": "missing",
+      "publisher": "adryfish",
+      "releasedAt": "2026-06-21T04:34:00Z",
+      "upstream": "Ungoogled Chromium",
+      "license": "BSD-3-Clause",
+      "notes": "Patch source delayed about one major. Hash is the GitHub Release asset digest. Publisher GPG is not present."
+    }
+  ],
+  "previousStable": null
+}

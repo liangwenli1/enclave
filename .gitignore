@@ -1,0 +1,28 @@
+node_modules/
+.node_modules.lock
+.DS_Store
+.env
+.env.local
+*.log
+
+# Host runtime — kernels are downloaded and verified at runtime
+data/
+logs/
+.tanstack/
+.vercel/
+.output/
+dist/
+.nitro/
+
+# Sandbox / preview only
+.grok/
+.project_id
+screenshots/
+artifacts/
+attachments/
+tmp/
+AGENTS.md
+AGENTS.project.md
+
+# OS
+Thumbs.db

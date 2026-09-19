@@ -1,0 +1,108 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Segoe UI", "PingFang SC", "Noto Sans SC", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --color-canvas: var(--enclave-canvas);
+  --color-surface: var(--enclave-surface);
+  --color-surface-2: var(--enclave-surface-2);
+  --color-surface-3: var(--enclave-surface-3);
+  --color-ink: var(--enclave-ink);
+  --color-muted: var(--enclave-muted);
+  --color-subtle: var(--enclave-subtle);
+  --color-line: var(--enclave-line);
+  --color-line-strong: var(--enclave-line-strong);
+  --color-accent: var(--enclave-accent);
+  --color-accent-fg: var(--enclave-accent-fg);
+  --color-ok: var(--enclave-ok);
+  --color-warn: var(--enclave-warn);
+  --color-bad: var(--enclave-bad);
+
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+
+  --shadow-panel: 0 12px 40px color-mix(in oklab, #000 35%, transparent);
+}
+
+:root {
+  color-scheme: dark;
+  --enclave-canvas: #010102;
+  --enclave-surface: #0f1011;
+  --enclave-surface-2: #141516;
+  --enclave-surface-3: #18191a;
+  --enclave-ink: #f7f8f8;
+  --enclave-muted: #d0d6e0;
+  --enclave-subtle: #8a8f98;
+  --enclave-line: #23252a;
+  --enclave-line-strong: #34343a;
+  --enclave-accent: #c8ccd4;
+  --enclave-accent-fg: #0a0a0b;
+  --enclave-ok: #27a644;
+  --enclave-warn: #c9922a;
+  --enclave-bad: #d4544a;
+}
+
+html.light {
+  color-scheme: light;
+  --enclave-canvas: #f4f5f5;
+  --enclave-surface: #ffffff;
+  --enclave-surface-2: #f7f8f8;
+  --enclave-surface-3: #eef0f1;
+  --enclave-ink: #0f1011;
+  --enclave-muted: #3a3d42;
+  --enclave-subtle: #6a6e76;
+  --enclave-line: #e3e5e7;
+  --enclave-line-strong: #c9ccd1;
+  --enclave-accent: #1c1d1f;
+  --enclave-accent-fg: #f7f8f8;
+  --enclave-ok: #1f8a3a;
+  --enclave-warn: #a36b12;
+  --enclave-bad: #c13b34;
+}
+
+html,
+body,
+#app {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--enclave-canvas);
+  color: var(--enclave-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  * {
+    border-color: var(--enclave-line);
+  }
+
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--enclave-accent) 70%, transparent);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

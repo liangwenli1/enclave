@@ -1,0 +1,282 @@
+export const PROFILE_SCHEMA = "fingerprint-profile/v1" as const;
+
+export type PlatformId = "windows" | "macos" | "linux";
+export type BrowserBrand = "Chrome" | "Edge" | "Opera" | "Vivaldi";
+export type WebrtcMode = "replace" | "disable";
+export type EnvStatus = "stopped" | "starting" | "running" | "error";
+
+export type FingerprintProfile = {
+  schema: typeof PROFILE_SCHEMA;
+  seed: string;
+  seedLocked: boolean;
+  platform: PlatformId;
+  platformVersion: string;
+  brand: BrowserBrand;
+  brandVersion: string;
+  hardwareConcurrency: number;
+  locale: string;
+  languages: string[];
+  timezone: string;
+  screen: {
+    width: number;
+    height: number;
+    colorDepth: number;
+    pixelRatio: number;
+  };
+  webrtc: { mode: WebrtcMode };
+  disableSpoofing: string[];
+  lockedFields: string[];
+};
+
+export type ProxyAuth = {
+  username: string;
+  passwordRef: string;
+};
+
+export type ProxyItem = {
+  id: string;
+  name: string;
+  protocol: "http" | "https" | "socks5";
+  host: string;
+  port: number;
+  auth?: ProxyAuth;
+  country?: string;
+  city?: string;
+  lastProbe?: {
+    at: number;
+    ok: boolean;
+    latencyMs?: number;
+    exitIp?: string;
+    error?: string;
+  };
+};
+
+export type ExtensionItem = {
+  id: string;
+  name: string;
+  source: "local-crx" | "local-dir";
+  path: string;
+  version?: string;
+  permissions: string[];
+  highRisk: boolean;
+  enabledByDefault: boolean;
+};
+
+export type TimelineEvent = {
+  at: number;
+  kind: string;
+  message: string;
+  level: "info" | "warn" | "bad";
+};
+
+export type Environment = {
+  id: string;
+  name: string;
+  group: string;
+  tags: string[];
+  note: string;
+  profile: FingerprintProfile;
+  proxyId: string | null;
+  extensionIds: string[];
+  kernelPin: { id: string; version: string; sha256: string };
+  allowNoSandbox: boolean;
+  extraFlags: string[];
+  deletedAt: number | null;
+  lastIntegrity?: { at: number; ok: boolean; reason?: string };
+  lastLab?: { at: number; pass: boolean; summary: string };
+  createdAt: number;
+  updatedAt: number;
+  timeline: TimelineEvent[];
+};
+
+export type AuditEvent = {
+  id: string;
+  at: number;
+  action: string;
+  target?: string;
+  level: "info" | "warn" | "bad";
+  detail: string;
+};
+
+export type LabSnapshot = {
+  userAgent: string;
+  platform: string;
+  vendor: string;
+  language: string;
+  languages: string[];
+  hardwareConcurrency: number;
+  deviceMemory: number | null;
+  maxTouchPoints: number;
+  hardware: { screenW: number; screenH: number; colorDepth: number; dpr: number };
+  timezone: string;
+  locale: string;
+  webdriver: boolean | null;
+  canvasHash: string;
+  webglVendor: string;
+  webglRenderer: string;
+  webrtcIps: string[];
+  collectedAt: number;
+  source: "page" | "cdp";
+};
+
+export type AppSettings = {
+  locale: "zh" | "en";
+  theme: "dark" | "light";
+  density: "compact" | "comfortable";
+  masterPasswordSet: boolean;
+  apiEnabled: boolean;
+  apiPort: number;
+  confirmDangerousApi: boolean;
+  allowNoSandboxHost: boolean;
+};
+
+export function makeId(prefix: string): string {
+  const t = Date.now().toString(36);
+  const r = crypto.randomUUID().replace(/-/g, "").slice(0, 10);
+  return `${prefix}_${t}${r}`;
+}
+
+export function randomSeed(): string {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  const n = buf[0] === 0 ? 1 : buf[0];
+  return String(n);
+}
+
+function mulberry32(a: number) {
+  return function next() {
+    let t = (a += 0x6d2b79f5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const WIN_VERSIONS = ["10.0.19045", "10.0.22631", "10.0.26100"];
+const MAC_VERSIONS = ["14.6.1", "15.2.0", "15.5.0"];
+const LINUX_VERSIONS = ["6.8.0", "6.12.8"];
+const SCREENS = [
+  { width: 1920, height: 1080, pixelRatio: 1 },
+  { width: 2560, height: 1440, pixelRatio: 1 },
+  { width: 1680, height: 1050, pixelRatio: 1 },
+  { width: 1440, height: 900, pixelRatio: 2 },
+  { width: 1512, height: 982, pixelRatio: 2 },
+];
+const CORES = [4, 6, 8, 12, 16];
+
+export function profileFromSeed(
+  seed: string,
+  platform: PlatformId,
+  extras?: Partial<FingerprintProfile>,
+): FingerprintProfile {
+  const n = Number.parseInt(seed, 10) >>> 0;
+  const rnd = mulberry32(n || 1);
+  const pick = <T,>(arr: T[]) => arr[Math.floor(rnd() * arr.length)] as T;
+  const screen = pick(SCREENS);
+  const versions =
+    platform === "macos" ? MAC_VERSIONS : platform === "linux" ? LINUX_VERSIONS : WIN_VERSIONS;
+  const locale =
+    extras?.locale ??
+    (platform === "windows" ? "en-US" : platform === "macos" ? "en-US" : "en-US");
+  return {
+    schema: PROFILE_SCHEMA,
+    seed,
+    seedLocked: true,
+    platform,
+    platformVersion: extras?.platformVersion ?? pick(versions),
+    brand: extras?.brand ?? "Chrome",
+    brandVersion: extras?.brandVersion ?? "148.0.7778.215",
+    hardwareConcurrency: extras?.hardwareConcurrency ?? pick(CORES),
+    locale,
+    languages: extras?.languages ?? [locale, locale.split("-")[0] ?? "en"],
+    timezone: extras?.timezone ?? "America/Los_Angeles",
+    screen: extras?.screen ?? { ...screen, colorDepth: 24 },
+    webrtc: extras?.webrtc ?? { mode: "replace" },
+    disableSpoofing: extras?.disableSpoofing ?? [],
+    lockedFields: extras?.lockedFields ?? ["seed", "platform"],
+  };
+}
+
+export const KERNEL_PIN = {
+  id: "fingerprint-chromium",
+  version: "148.0.7778.215",
+  sha256: "70d239830332e5820aa34dfcb284161cac0429eee25da642830afe04bda717f4",
+};
+
+export const TIMEZONES = [
+  "America/Los_Angeles",
+  "America/New_York",
+  "America/Chicago",
+  "America/Sao_Paulo",
+  "Europe/London",
+  "Europe/Berlin",
+  "Europe/Paris",
+  "Europe/Moscow",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Asia/Singapore",
+  "Asia/Kolkata",
+  "Australia/Sydney",
+  "UTC",
+] as const;
+
+export const PROXY_GEO_TZ: Record<string, string[]> = {
+  US: ["America/Los_Angeles", "America/New_York", "America/Chicago", "America/Denver"],
+  GB: ["Europe/London"],
+  DE: ["Europe/Berlin"],
+  FR: ["Europe/Paris"],
+  JP: ["Asia/Tokyo"],
+  CN: ["Asia/Shanghai"],
+  SG: ["Asia/Singapore"],
+  IN: ["Asia/Kolkata"],
+  BR: ["America/Sao_Paulo"],
+  AU: ["Australia/Sydney"],
+  RU: ["Europe/Moscow"],
+};
+
+export function newEnvironment(partial?: Partial<Environment>): Environment {
+  const now = Date.now();
+  const seed = randomSeed();
+  return {
+    id: makeId("env"),
+    name: partial?.name ?? "Untitled",
+    group: partial?.group ?? "default",
+    tags: partial?.tags ?? [],
+    note: partial?.note ?? "",
+    profile: partial?.profile ?? profileFromSeed(seed, "windows"),
+    proxyId: partial?.proxyId ?? null,
+    extensionIds: partial?.extensionIds ?? [],
+    kernelPin: KERNEL_PIN,
+    allowNoSandbox: false,
+    extraFlags: [],
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    timeline: [
+      {
+        at: now,
+        kind: "created",
+        message: "Environment created",
+        level: "info",
+      },
+    ],
+    ...omitDefined(partial, [
+      "name",
+      "group",
+      "tags",
+      "note",
+      "profile",
+      "proxyId",
+      "extensionIds",
+    ]),
+  };
+}
+
+function omitDefined<T extends object, K extends keyof T>(
+  value: Partial<T> | undefined,
+  _keys: K[],
+): Partial<T> {
+  if (!value) return {};
+  const next = { ...value };
+  return next;
+}
