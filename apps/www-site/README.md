@@ -1,16 +1,11 @@
 # Enclave 官网
 
-产品介绍、套餐、下载 SHA256、文档、账号。**不是**桌面工作台，也不是内核 Host。
+静态页。本机映射 `3011`，前面用 Cloudflare Tunnel。
 
 ```bash
-docker build -t enclave-www .
-docker run --rm -p 3011:80 enclave-www
+git clone https://github.com/liangwenli1/enclave-www.git
+cd enclave-www
+docker compose up -d --build
 ```
 
-或在 `liangwenli1/enclave` 根目录：
-
-```bash
-docker compose up -d --build www
-```
-
-安装包未签发，下载页没有 `.msi` / `.dmg` 按钮。
+cloudflared 指到 `http://127.0.0.1:3011`（或这台机的 `http://<内网IP>:3011`）。
