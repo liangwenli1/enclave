@@ -30,6 +30,8 @@ function Ensure-Rust {
 Ensure-Rust
 Need cargo "rustup default stable should provide cargo. Reopen the terminal and retry."
 
+Get-Process enclave-host -ErrorAction SilentlyContinue | Stop-Process -Force
+
 npm ci
 cargo build --release -p enclave-host
 if (-not $?) { throw "host build failed" }

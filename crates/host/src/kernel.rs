@@ -335,8 +335,8 @@ pub async fn persist_runtimes(paths: &HostPaths, rows: &[RuntimeRow]) -> Result<
 }
 
 pub async fn verify_on_disk(paths: &HostPaths, k: &KernelRecord) -> (bool, Option<String>, Option<String>) {
-    if k.sha256.is_empty() || k.channel != "stable" {
-        return (false, None, Some("KERNEL_UNTRUSTED_SOURCE: not in stable".into()));
+    if k.sha256.is_empty() {
+        return (false, None, Some("KERNEL_UNTRUSTED_SOURCE: empty hash".into()));
     }
     let archive = archive_path(paths, k);
     if !archive.exists() {
