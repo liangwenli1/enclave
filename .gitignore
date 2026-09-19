@@ -12,6 +12,8 @@ logs/
 .vercel/
 .output/
 dist/
+apps/desktop/src-tauri/frontend/
+.nitro/
 .nitro/
 
 # Sandbox / preview only

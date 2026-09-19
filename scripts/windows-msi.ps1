@@ -29,15 +29,8 @@ $env:VITE_ENCLAVE_DIRECT = "true"
 npm run build
 if (-not $?) { throw "frontend build failed" }
 
-if (-not (Test-Path "dist\index.html")) {
-  if (Test-Path ".vercel\output\static\index.html") {
-    New-Item -ItemType Directory -Force -Path dist | Out-Null
-    Copy-Item ".vercel\output\static\*" dist -Recurse -Force
-  }
-}
-if (-not (Test-Path "dist\index.html")) {
-  throw "frontend dist/index.html missing. Desktop build must emit a static shell."
-}
+node scripts/desktop-static.mjs
+if (-not $?) { throw "desktop static shell failed" }
 
 npx --yes @tauri-apps/cli@2 build --config apps/desktop/src-tauri/tauri.conf.json --bundles msi
 if (-not $?) { throw "tauri msi failed" }
