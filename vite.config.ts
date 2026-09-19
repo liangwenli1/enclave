@@ -150,6 +150,9 @@ export default defineConfig(({ command, isPreview }) => ({
     host: "0.0.0.0",
     port: 8080,
     strictPort: true,
+    watch: {
+      ignored: ["**/data/**", "**/target/**", "**/logs/**"],
+    },
   },
   preview: {
     host: "127.0.0.1",
