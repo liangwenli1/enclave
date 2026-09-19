@@ -346,6 +346,20 @@ pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf
     find_chrome(&extract_dir(paths, k))
 }
 
+fn search_extension_dir() -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("crates").join("host").join("search-ext"));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("search-ext"));
+            candidates.push(dir.join("crates").join("host").join("search-ext"));
+        }
+    }
+    candidates.into_iter().find(|p| p.join("manifest.json").is_file())
+}
+
 async fn seed_search_engine(user_data_dir: &Path) -> Result<()> {
     let managed = user_data_dir.join("policies").join("managed");
     tokio::fs::create_dir_all(&managed).await?;
@@ -638,6 +652,9 @@ pub async fn start_environment(
         "--mute-audio".into(),
         "--disable-search-engine-choice-screen".into(),
     ];
+    if let Some(ext) = search_extension_dir() {
+        args.push(format!("--load-extension={}", ext.display()));
+    }
     if force_headless() {
         args.push("--headless=new".into());
         args.push("--disable-gpu".into());
