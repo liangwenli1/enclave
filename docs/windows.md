@@ -85,4 +85,15 @@ gh release upload v0.9.0-windows-preview ".\apps\desktop\src-tauri\target\releas
 
 Tauri 以后也可以把指纹写进 `tauri.conf.json` 的 `bundle.windows.certificateThumbprint`，打 MSI 时顺带签。没有证书之前不要改。
 
+本地先自签（仅这台电脑）：
+
+```powershell
+git pull
+powershell -ExecutionPolicy Bypass -File .\scripts\windows-selfsign.ps1
+gh release upload v0.9.0-windows-preview ".\apps\desktop\src-tauri\target\release\bundle\msi\Enclave_0.9.0_x64_en-US.msi" --clobber
+```
+
+会生成 `CN=Enclave Preview (self-signed)` 并签 MSI。别的电脑仍会 SmartScreen / 未知发布者。
+
+
 
