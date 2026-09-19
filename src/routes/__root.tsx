@@ -31,22 +31,29 @@ export const Route = createRootRoute({
 function RootDocument() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isWww = pathname === "/www" || pathname.startsWith("/www/");
+  const desktop = import.meta.env.VITE_ENCLAVE_DIRECT === "true";
+  const app = (
+    <>
+      <PreviewHostBridge />
+      <AuthProvider>
+        {isWww ? (
+          <Outlet />
+        ) : (
+          <AppShell>
+            <Outlet />
+          </AppShell>
+        )}
+      </AuthProvider>
+    </>
+  );
+  if (desktop) return app;
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <PreviewHostBridge />
-        <AuthProvider>
-          {isWww ? (
-            <Outlet />
-          ) : (
-            <AppShell>
-              <Outlet />
-            </AppShell>
-          )}
-        </AuthProvider>
+        {app}
         <Scripts />
       </body>
     </html>
