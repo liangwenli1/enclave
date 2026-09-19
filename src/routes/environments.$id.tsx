@@ -390,6 +390,4 @@ function FlagsForm({
   );
 }
 
-}
-
 
