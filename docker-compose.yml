@@ -1,0 +1,34 @@
+# Ports chosen to miss the existing host bindings:
+#   3000 meridian · 3010 trend-top · 8000 vaultwarden · 5432 postgres
+name: enclave
+
+services:
+  www:
+    build:
+      context: ./apps/www-site
+    image: enclave-www
+    container_name: enclave-www
+    restart: unless-stopped
+    ports:
+      - "3011:80"
+
+  workbench:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.workbench
+    image: enclave-workbench
+    container_name: enclave-workbench
+    restart: unless-stopped
+    # Loopback only. This is the Linux verification UI, not a public product.
+    ports:
+      - "127.0.0.1:3012:8080"
+    volumes:
+      - enclave-data:/app/data
+    shm_size: "2gb"
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ENCLAVE_HOST_BIND: 127.0.0.1:17891
+
+volumes:
+  enclave-data:
