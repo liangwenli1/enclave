@@ -1,5 +1,3 @@
-#![cfg_attr(all(not(debug_assertions), not(feature = "devtools")), windows_subsystem = "windows")]
-
 use tauri::Manager;
 use tauri_plugin_shell::ShellExt;
 
@@ -28,7 +26,7 @@ fn main() {
                 }
                 Err(e) => eprintln!("enclave-host sidecar: {e}"),
             }
-            for window in app.webview_windows() {
+            for (_label, window) in app.webview_windows() {
                 window.open_devtools();
                 let probe = window.clone();
                 std::thread::spawn(move || {
