@@ -850,6 +850,8 @@ pub async fn start_environment(
     }
     if profile.webrtc.mode == "disable" {
         args.push("--disable-webrtc".into());
+    } else {
+        args.push("--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into());
     }
     if !profile.disable_spoofing.is_empty() {
         args.push(format!("--disable-spoofing={}", profile.disable_spoofing.join(",")));

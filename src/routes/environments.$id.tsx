@@ -289,14 +289,14 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
         <Input value={profile.locale} onChange={(e) => patch({ locale: e.target.value })} />
       </Field>
       <Field label={t(locale, "webrtc")}>
-        <select
-          className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
+        <Select
           value={profile.webrtc.mode}
           onChange={(e) => patch({ webrtc: { mode: e.target.value as WebrtcMode } })}
         >
-          <option value="replace">replace</option>
-          <option value="disable">disable</option>
-        </select>
+          <option value="replace">{t(locale, "webrtcReplace")}</option>
+          <option value="disable">{t(locale, "webrtcDisable")}</option>
+        </Select>
+        <p className="text-xs text-subtle">{t(locale, "webrtcHint")}</p>
       </Field>
       <Field label={t(locale, "screen")}>
         <Input

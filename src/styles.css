@@ -567,3 +567,15 @@ body {
   flex: none;
   padding: 0;
 }
+
+.enclave-dialog {
+  color: var(--enclave-ink);
+  background: var(--enclave-surface);
+}
+
+html.light .enclave-dialog,
+html.light .enclave-dialog [data-dialog-title] {
+  color: #161412 !important;
+  background: #fffcf7;
+}
+

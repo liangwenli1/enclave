@@ -313,9 +313,10 @@ function CreateWizard({
               <button
                 key={id}
                 onClick={() => setSource(id)}
-                className={`rounded-lg border px-3 py-4 text-left text-sm text-ink ${
+                className={`rounded-lg border px-3 py-4 text-left text-sm ${
                   source === id ? "border-line-strong bg-surface-2" : "border-line bg-canvas"
                 }`}
+                style={{ color: "var(--enclave-ink)" }}
               >
                 {label}
               </button>
