@@ -1,4 +1,4 @@
-# 在 Windows 上打 MSI。这个包还没有 Authenticode 正式签名，不能叫 1.0。
+﻿# 在 Windows 上打 MSI。这个包还没有 Authenticode 正式签名，不能叫 1.0。
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 

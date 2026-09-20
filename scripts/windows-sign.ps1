@@ -48,4 +48,3 @@ if (-not $?) { throw "signtool failed" }
 if (-not $?) { throw "signature verify failed" }
 
 Write-Host "Signed $($msi.FullName)"
-Write-Host "Upload: gh release upload v0.9.0-windows-preview `"$($msi.FullName)`" --clobber"

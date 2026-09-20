@@ -40,5 +40,4 @@ if (-not $sig.SignerCertificate) { throw "self-sign failed" }
 Write-Host "Self-signed $($msi.Name)"
 Write-Host "Thumbprint $($cert.Thumbprint)"
 Write-Host "This machine should show publisher Enclave Preview (self-signed)."
-Write-Host "Other machines will still warn. Upload:"
-Write-Host "gh release upload v0.9.1-windows-preview `"$($msi.FullName)`" --clobber"
+Write-Host "Other machines will still warn."

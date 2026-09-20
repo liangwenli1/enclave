@@ -1,4 +1,4 @@
-# 在 Windows 上跑工作台（开发模式）。不是安装包。
+﻿# 在 Windows 上跑工作台（开发模式）。不是安装包。
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
