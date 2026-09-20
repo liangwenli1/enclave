@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Button, Field, Input, Panel } from "@/components/ui";
+import { Button, Field, Input, Panel, PageHeader } from "@/components/ui";
 import { useLocale } from "@/lib/use-locale";
 import { type CatalogEngine } from "@/lib/engines";
 import { t } from "@/lib/i18n";
@@ -42,13 +42,11 @@ function EnginesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-6">
-      <h1 className="text-xl font-semibold tracking-tight">{t(locale, "navEngines")}</h1>
-      <p className="mt-1 text-sm text-subtle">{t(locale, "enginesHint")}</p>
+    <div className="mx-auto max-w-3xl px-8 py-6">
+      <PageHeader title={t(locale, "navEngines")} status={`${catalog.length} 个引擎`} />
 
-      <Panel className="mt-5 p-4">
-        <div className="mb-3 text-sm font-medium">{t(locale, "engineAdd")}</div>
-        <div className="grid gap-3 md:grid-cols-2">
+      <Panel className="p-5">
+        <div className="grid gap-4 md:grid-cols-2">
           <Field label={t(locale, "name")}>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Google" />
           </Field>
@@ -63,27 +61,47 @@ function EnginesPage() {
             />
           </Field>
         </div>
-        <Button variant="primary" className="mt-3" onClick={add}>
+        <Button variant="primary" className="mt-4" onClick={add}>
           <Plus className="size-4" />
           {t(locale, "engineAdd")}
         </Button>
       </Panel>
 
-      <div className="mt-4 grid gap-2">
-        {catalog.map((engine) => (
-          <Panel key={engine.id} className="flex items-center gap-3 p-4">
-            <div className="min-w-0 flex-1">
-              <div className="font-medium">{engine.name}</div>
-              <div className="truncate text-sm text-subtle">{engine.keyword}</div>
-            </div>
-            {engine.builtin ? null : (
-              <Button variant="ghost" onClick={() => remove(engine.id)} aria-label={t(locale, "engineRemove")}>
-                <Trash2 className="size-4" />
-              </Button>
-            )}
-          </Panel>
-        ))}
-      </div>
+      <Panel className="mt-4 overflow-hidden">
+        <table className="app-table">
+          <thead>
+            <tr>
+              <th>{t(locale, "name")}</th>
+              <th>{t(locale, "engineKeyword")}</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {catalog.map((engine) => (
+              <tr key={engine.id}>
+                <td className="font-medium text-ink">{engine.name}</td>
+                <td className="app-mono text-xs">{engine.keyword}</td>
+                <td>
+                  <div className="flex justify-end">
+                    {engine.builtin ? (
+                      <span className="text-xs text-subtle">内置</span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title={t(locale, "engineRemove")}
+                        onClick={() => remove(engine.id)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Panel>
     </div>
   );
 }

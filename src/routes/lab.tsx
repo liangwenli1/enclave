@@ -37,7 +37,7 @@ function LabPage() {
   const rows = diffSnaps(lab.control, envSnap);
 
   return (
-    <div className="mx-auto max-w-6xl p-4 md:p-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6">
       <h1 className="text-[32px] leading-tight font-bold tracking-tight text-ink">
         {t(locale, "labTitle")}
       </h1>
@@ -107,19 +107,19 @@ function LabPage() {
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <Panel className="p-4">
-          <div className="mb-2 text-[12px] font-medium">{t(locale, "control")}</div>
+          <div className="mb-2 text-[13px] font-medium">{t(locale, "control")}</div>
           {lab.control ? (
             <Meta snap={lab.control} />
           ) : (
-            <p className="text-[12px] text-subtle">{t(locale, "notRun")}</p>
+            <p className="text-[13px] text-subtle">{t(locale, "notRun")}</p>
           )}
         </Panel>
         <Panel className="p-4">
-          <div className="mb-2 text-[12px] font-medium">{t(locale, "kernelWindow")}</div>
+          <div className="mb-2 text-[13px] font-medium">{t(locale, "kernelWindow")}</div>
           {envSnap ? (
             <Meta snap={envSnap} />
           ) : (
-            <p className="text-[12px] text-subtle">
+            <p className="text-[13px] text-subtle">
               {runtimes[envId]?.status === "running" ? t(locale, "notRun") : t(locale, "runtimeEmpty")}
             </p>
           )}
@@ -127,8 +127,8 @@ function LabPage() {
       </div>
 
       <Panel className="mt-3 p-4">
-        <div className="mb-2 text-[12px] font-medium">{t(locale, "consistency")}</div>
-        <ul className="grid gap-1 text-[12px]">
+        <div className="mb-2 text-[13px] font-medium">{t(locale, "consistency")}</div>
+        <ul className="grid gap-1 text-[13px]">
           {staticChecks.map((c) => (
             <li key={c.id} className="flex justify-between gap-3">
               <span>{c.label}</span>
@@ -145,14 +145,14 @@ function LabPage() {
       </Panel>
 
       <Panel className="mt-3 overflow-x-auto p-4">
-        <div className="mb-2 text-[12px] font-medium">{t(locale, "diff")}</div>
+        <div className="mb-2 text-[13px] font-medium">{t(locale, "diff")}</div>
         {rows.length === 0 ? (
-          <p className="text-[12px] text-subtle">{t(locale, "notRun")}</p>
+          <p className="text-[13px] text-subtle">{t(locale, "notRun")}</p>
         ) : (
-          <table className="w-full min-w-[640px] text-left text-[12px]">
+          <table className="w-full min-w-[640px] text-left text-[13px]">
             <thead className="text-subtle">
               <tr>
-                <th className="py-1">field</th>
+                <th className="py-1">项目</th>
                 <th>{t(locale, "control")}</th>
                 <th>{t(locale, "env")}</th>
               </tr>
@@ -163,7 +163,7 @@ function LabPage() {
                   <td className="py-1 font-mono">{r.field}</td>
                   <td className="max-w-[280px] truncate pr-3">{r.a}</td>
                   <td className="max-w-[280px] truncate">
-                    {r.b} {r.same ? <Badge tone="ok">same</Badge> : <Badge tone="warn">diff</Badge>}
+                    {r.b} {r.same ? <Badge tone="ok">一致</Badge> : <Badge tone="warn">不同</Badge>}
                   </td>
                 </tr>
               ))}
@@ -177,19 +177,19 @@ function LabPage() {
 
 function Meta({ snap }: { snap: { userAgent: string; timezone: string; canvasHash: string; webdriver: boolean | null; webglRenderer: string } }) {
   return (
-    <dl className="grid gap-1 text-[12px]">
+    <dl className="grid gap-1 text-[13px]">
       <div className="truncate text-muted">{snap.userAgent}</div>
       <div className="flex justify-between">
-        <span className="text-subtle">tz</span>
+        <span className="text-subtle">时区</span>
         <span>{snap.timezone}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-subtle">canvas</span>
+        <span className="text-subtle">Canvas</span>
         <span className="font-mono">{snap.canvasHash.slice(0, 12)}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-subtle">webdriver</span>
-        <span>{String(snap.webdriver)}</span>
+        <span className="text-subtle">webdriver 标记</span>
+        <span>{snap.webdriver === true ? "暴露了" : "未暴露"}</span>
       </div>
       <div className="truncate text-subtle">{snap.webglRenderer}</div>
     </dl>

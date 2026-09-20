@@ -37,7 +37,7 @@ function EnvDetail() {
   const status = runtime?.status ?? "stopped";
 
   return (
-    <div className="mx-auto grid max-w-[1400px] gap-4 p-4 lg:grid-cols-[1fr_320px] md:p-6">
+    <div className="mx-auto grid max-w-[1280px] gap-4 px-8 py-6 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Button variant="ghost" onClick={() => void navigate({ to: "/" })}>
@@ -123,10 +123,10 @@ function EnvDetail() {
             </Field>
             <ExtensionPicker envId={env.id} selected={env.extensionIds} />
             <Panel className="md:col-span-2 p-4">
-              <div className="mb-2 text-[12px] font-medium">{t(locale, "consistency")}</div>
+              <div className="mb-2 text-[13px] font-medium">{t(locale, "consistency")}</div>
               <div className="grid gap-2">
                 {checks.map((c) => (
-                  <div key={c.id} className="flex items-start justify-between gap-3 text-[12px]">
+                  <div key={c.id} className="flex items-start justify-between gap-3 text-[13px]">
                     <span className="text-muted">{c.label}</span>
                     <span className={c.ok ? "text-ok" : c.warn ? "text-warn" : "text-bad"}>
                       {c.detail}
@@ -155,7 +155,7 @@ function EnvDetail() {
         {tab === "timeline" ? (
           <ol className="grid gap-2">
             {env.timeline.map((ev, i) => (
-              <li key={`${ev.at}-${i}`} className="rounded-md border border-line px-3 py-2 text-[12px]">
+              <li key={`${ev.at}-${i}`} className="rounded-md border border-line px-3 py-2 text-[13px]">
                 <div className="flex justify-between gap-3">
                   <span className="font-medium">{ev.kind}</span>
                   <span className="text-subtle tabular-nums">{new Date(ev.at).toLocaleString()}</span>
@@ -402,8 +402,8 @@ function FlagsForm({
       <Field label={t(locale, "extraFlags")}>
         <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
       </Field>
-      <p className="text-[12px] text-subtle">{t(locale, "extraFlagsHint")}</p>
-      <ul className="grid gap-1 text-[12px]">
+      <p className="text-[13px] text-subtle">{t(locale, "extraFlagsHint")}</p>
+      <ul className="grid gap-1 text-[13px]">
         {classified.map((f) => (
           <li key={f.raw} className="flex justify-between gap-2 border-b border-line py-1">
             <span className="font-mono">{f.raw}</span>
