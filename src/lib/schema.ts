@@ -1,3 +1,5 @@
+import { defaultPlatformVersion } from "@/lib/os";
+
 export const PROFILE_SCHEMA = "fingerprint-profile/v1" as const;
 
 export type PlatformId = "windows" | "macos" | "linux";
@@ -17,15 +19,9 @@ export type FingerprintProfile = {
   locale: string;
   languages: string[];
   timezone: string;
-  screen: {
-    width: number;
-    height: number;
-    colorDepth: number;
-    pixelRatio: number;
-  };
+  screen: { width: number; height: number };
   webrtc: { mode: WebrtcMode };
   disableSpoofing: string[];
-  lockedFields: string[];
 };
 
 /**
@@ -149,17 +145,14 @@ function mulberry32(a: number) {
   };
 }
 
-const WIN_VERSIONS = ["10.0.19045", "10.0.22631", "10.0.26100"];
-const MAC_VERSIONS = ["14.6.1", "15.2.0", "15.5.0"];
-const LINUX_VERSIONS = ["6.8.0", "6.12.8"];
-const SCREENS = [
-  { width: 1920, height: 1080, pixelRatio: 1 },
-  { width: 2560, height: 1440, pixelRatio: 1 },
-  { width: 1680, height: 1050, pixelRatio: 1 },
-  { width: 1440, height: 900, pixelRatio: 2 },
-  { width: 1512, height: 982, pixelRatio: 2 },
+export const SCREENS = [
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+  { width: 1680, height: 1050 },
+  { width: 1440, height: 900 },
+  { width: 1512, height: 982 },
 ];
-const CORES = [4, 6, 8, 12, 16];
+export const CORES = [4, 6, 8, 12, 16];
 
 export function profileFromSeed(
   seed: string,
@@ -170,27 +163,22 @@ export function profileFromSeed(
   const rnd = mulberry32(n || 1);
   const pick = <T,>(arr: T[]) => arr[Math.floor(rnd() * arr.length)] as T;
   const screen = pick(SCREENS);
-  const versions =
-    platform === "macos" ? MAC_VERSIONS : platform === "linux" ? LINUX_VERSIONS : WIN_VERSIONS;
-  const locale =
-    extras?.locale ??
-    (platform === "windows" ? "en-US" : platform === "macos" ? "en-US" : "en-US");
+  const locale = extras?.locale ?? "en-US";
   return {
     schema: PROFILE_SCHEMA,
     seed,
     seedLocked: true,
     platform,
-    platformVersion: extras?.platformVersion ?? pick(versions),
+    platformVersion: extras?.platformVersion ?? defaultPlatformVersion(platform),
     brand: extras?.brand ?? "Chrome",
     brandVersion: extras?.brandVersion ?? "148.0.7778.215",
     hardwareConcurrency: extras?.hardwareConcurrency ?? pick(CORES),
     locale,
     languages: extras?.languages ?? [locale, locale.split("-")[0] ?? "en"],
     timezone: extras?.timezone ?? "America/Los_Angeles",
-    screen: extras?.screen ?? { ...screen, colorDepth: 24 },
+    screen: extras?.screen ?? screen,
     webrtc: extras?.webrtc ?? { mode: "replace" },
     disableSpoofing: extras?.disableSpoofing ?? [],
-    lockedFields: extras?.lockedFields ?? ["seed", "platform"],
   };
 }
 

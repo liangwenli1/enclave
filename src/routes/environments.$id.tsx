@@ -7,9 +7,16 @@ import { classifyAll } from "@/lib/kernel/flags";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
 import { t, runtimeLabel } from "@/lib/i18n";
 import { engineToProvider } from "@/lib/engines";
-import { defaultWinVersion, windowsEdition } from "@/lib/os";
+import { defaultPlatformVersion, defaultWinVersion, windowsEdition } from "@/lib/os";
 import { staticConsistency } from "@/lib/lab";
-import { TIMEZONES, type FingerprintProfile, type PlatformId, type WebrtcMode } from "@/lib/schema";
+import {
+  CORES,
+  SCREENS,
+  TIMEZONES,
+  type FingerprintProfile,
+  type PlatformId,
+  type WebrtcMode,
+} from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/environments/$id")({ component: EnvDetail });
@@ -269,35 +276,54 @@ function ExtensionPicker({ envId, selected }: { envId: string; selected: string[
 function FingerprintForm({ envId, profile }: { envId: string; profile: FingerprintProfile }) {
   const locale = useLocale();
   const patch = (next: Partial<FingerprintProfile>) => {
-    const locked = new Set(profile.lockedFields);
-    const filtered = { ...next };
-    if (locked.has("seed")) delete filtered.seed;
-    if (locked.has("platform") && filtered.platform && filtered.platform !== profile.platform) {
-      delete filtered.platform;
-    }
-    useEnclave.getState().patchEnv(envId, { profile: { ...profile, ...filtered } });
+    useEnclave.getState().patchEnv(envId, { profile: { ...profile, ...next } });
   };
+  // 种子只在输入合法时才落库，草稿另存，避免半截输入把环境写坏。
+  const [seedDraft, setSeedDraft] = useState(profile.seed);
+  const seedBad = !/^\d{1,10}$/.test(seedDraft);
+  const screens = SCREENS.some(
+    (s) => s.width === profile.screen.width && s.height === profile.screen.height,
+  )
+    ? SCREENS
+    : [profile.screen, ...SCREENS];
+  const cores = CORES.includes(profile.hardwareConcurrency)
+    ? CORES
+    : [profile.hardwareConcurrency, ...CORES];
 
   return (
     <div className="grid gap-3 md:grid-cols-2">
-      <Field label={t(locale, "seed")}>
+      <Field
+        label={t(locale, "seed")}
+        hint={profile.seedLocked ? undefined : t(locale, "seedHint")}
+        error={seedBad ? t(locale, "seedBad") : undefined}
+      >
         <div className="flex gap-2">
-          <Input value={profile.seed} readOnly={profile.seedLocked} onChange={(e) => patch({ seed: e.target.value })} />
+          <Input
+            className="app-mono"
+            inputMode="numeric"
+            value={seedDraft}
+            readOnly={profile.seedLocked}
+            onChange={(e) => {
+              const seed = e.target.value.trim();
+              setSeedDraft(seed);
+              if (/^\d{1,10}$/.test(seed)) patch({ seed });
+            }}
+          />
           <Button
-            onClick={() =>
-              patch({
-                seedLocked: !profile.seedLocked,
-              })
-            }
+            disabled={seedBad}
+            onClick={() => patch({ seedLocked: !profile.seedLocked })}
           >
-            {profile.seedLocked ? t(locale, "seedLocked") : t(locale, "unlockSeed")}
+            {profile.seedLocked ? t(locale, "unlockSeed") : t(locale, "lockSeed")}
           </Button>
         </div>
       </Field>
       <Field label={t(locale, "platform")}>
         <Select
           value={profile.platform}
-          onChange={(e) => patch({ platform: e.target.value as PlatformId })}
+          onChange={(e) => {
+            const platform = e.target.value as PlatformId;
+            patch({ platform, platformVersion: defaultPlatformVersion(platform) });
+          }}
         >
           <option value="windows">Windows</option>
           <option value="macos">macOS</option>
@@ -327,11 +353,14 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
         </Select>
       </Field>
       <Field label={t(locale, "cores")}>
-        <Input
-          type="number"
+        <Select
           value={profile.hardwareConcurrency}
           onChange={(e) => patch({ hardwareConcurrency: Number(e.target.value) })}
-        />
+        >
+          {cores.map((n) => (
+            <option key={n}>{n}</option>
+          ))}
+        </Select>
       </Field>
       <Field label={t(locale, "timezone")}>
         <Select value={profile.timezone} onChange={(e) => patch({ timezone: e.target.value })}>
@@ -354,21 +383,19 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
         <p className="text-xs text-subtle">{t(locale, "webrtcHint")}</p>
       </Field>
       <Field label={t(locale, "screen")}>
-        <Input
-          value={`${profile.screen.width}x${profile.screen.height}@${profile.screen.pixelRatio}`}
+        <Select
+          value={`${profile.screen.width}x${profile.screen.height}`}
           onChange={(e) => {
-            const m = e.target.value.match(/(\d+)x(\d+)@([\d.]+)/);
-            if (!m) return;
-            patch({
-              screen: {
-                width: Number(m[1]),
-                height: Number(m[2]),
-                pixelRatio: Number(m[3]),
-                colorDepth: 24,
-              },
-            });
+            const [width, height] = e.target.value.split("x").map(Number);
+            patch({ screen: { width: width!, height: height! } });
           }}
-        />
+        >
+          {screens.map((sc) => (
+            <option key={`${sc.width}x${sc.height}`} value={`${sc.width}x${sc.height}`}>
+              {sc.width} × {sc.height}
+            </option>
+          ))}
+        </Select>
       </Field>
     </div>
   );
