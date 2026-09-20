@@ -12,6 +12,7 @@ import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from
 import path from "node:path";
 import { openDb } from "./db.js";
 import { PLANS, planOf, effectivePlan, issueLicense, loadOrCreateKeys, publicKeyRaw } from "./license.js";
+import { parseKernel, signKernelList } from "./kernels.js";
 
 const PORT = Number(process.env.PORT || 3012);
 const DATA_DIR = process.env.ENCLAVE_DATA_DIR || "/data";
@@ -115,6 +116,15 @@ const q = {
   ),
   insertMessage: db.prepare("INSERT INTO messages (id, topic, email, message, created_at) VALUES (?, ?, ?, ?, ?)"),
   recentMessages: db.prepare("SELECT * FROM messages ORDER BY created_at DESC LIMIT 200"),
+  kernels: db.prepare("SELECT * FROM kernels ORDER BY created_at DESC"),
+  upsertKernel: db.prepare(
+    `INSERT INTO kernels (version, platform, channel, url, filename, sha256, bytes, notes, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (version, platform) DO UPDATE SET
+       channel = excluded.channel, url = excluded.url, filename = excluded.filename,
+       sha256 = excluded.sha256, bytes = excluded.bytes, notes = excluded.notes`,
+  ),
+  deleteKernel: db.prepare("DELETE FROM kernels WHERE version = ? AND platform = ?"),
 };
 
 function licenseRowOf(userId) {
@@ -433,6 +443,34 @@ route("POST", "/admin/plan", async (req, res) => {
   const extra = q.devicesOf.all(user.id).slice(deviceLimit);
   for (const d of extra) q.deleteDevice.run(d.id, user.id);
   return ok(res, { email: user.email, plan, expiresAt, deviceLimit, devicesUnbound: extra.length });
+});
+
+/* 工作台：已上架的内核清单。是公开的（和下载页上的哈希一样），可信靠的是签名，不是靠藏。 */
+route("GET", "/v1/kernels", async (_req, res) => ok(res, { signed: signKernelList(keys.privateKey, q.kernels.all()) }));
+
+/* 上架 / 改一个内核版本。同一个 version + platform 再登记一次就是修改（比如预览转稳定）。 */
+route("POST", "/admin/kernels", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const { record, error } = parseKernel(await readJson(req));
+  if (error) return fail(res, 400, "BAD_KERNEL", error);
+  q.upsertKernel.run(
+    record.version, record.platform, record.channel, record.url,
+    record.filename, record.sha256, record.bytes, record.notes, now(),
+  );
+  return ok(res, { kernel: record, listed: q.kernels.all().length });
+});
+
+route("GET", "/admin/kernels", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  return ok(res, { kernels: q.kernels.all() });
+});
+
+/* 下架。已经下载到用户机器上的不受影响，只是不能再下载。 */
+route("DELETE", "/admin/kernels/:version/:platform", async (req, res, params) => {
+  if (!requireAdmin(req, res)) return;
+  const { changes } = q.deleteKernel.run(params.version, params.platform);
+  if (!changes) return fail(res, 404, "NOT_FOUND", "没有上架过这个版本。");
+  return ok(res);
 });
 
 route("GET", "/admin/requests", async (req, res) => {

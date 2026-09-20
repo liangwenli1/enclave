@@ -62,6 +62,20 @@ const SCHEMA = [
     created_at INTEGER NOT NULL
   );
   `,
+  `
+  CREATE TABLE IF NOT EXISTS kernels (
+    version    TEXT NOT NULL,
+    platform   TEXT NOT NULL,
+    channel    TEXT NOT NULL,
+    url        TEXT NOT NULL,
+    filename   TEXT NOT NULL,
+    sha256     TEXT NOT NULL,
+    bytes      INTEGER NOT NULL,
+    notes      TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (version, platform)
+  );
+  `,
 ];
 
 export function openDb(file) {
