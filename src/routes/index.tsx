@@ -46,7 +46,7 @@ function atEnvLimit(): boolean {
   store.addAudit({
     action: "create_blocked",
     level: "warn",
-    detail: `PLAN_ENV_LIMIT ${limits.label} max ${limits.envLimit}`,
+    detail: `${limits.label} 最多 ${limits.envLimit} 个环境`,
   });
   return true;
 }

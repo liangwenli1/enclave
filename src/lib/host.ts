@@ -86,7 +86,7 @@ export async function startEnv(env: Environment) {
       action: "start_blocked",
       target: env.id,
       level: "warn",
-      detail: `${code} ${limits.label} max ${limits.concurrent}`,
+      detail: `${env.name} · ${limits.label} 最多同时运行 ${limits.concurrent} 个`,
     });
     return { ok: false as const, code, message: `${limits.label} 同时运行上限 ${limits.concurrent}` };
   }
@@ -103,13 +103,13 @@ export async function startEnv(env: Environment) {
   if (!view.online) {
     const code = "HOST_UNAVAILABLE";
     failRuntime(env.id, code, "连不上本机服务，重启工作台再试。");
-    store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: code });
+    store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: `${env.name} · 连不上本机服务` });
     return { ok: false as const, code, message: "连不上本机服务" };
   }
   if (view.status.state !== "admitted") {
     const code = "KERNEL_UNTRUSTED_SOURCE";
     failRuntime(env.id, code, "内核还没准入，先到内核页准入。", false);
-    store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: "内核未准入" });
+    store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: `${env.name} · 内核未准入` });
     return { ok: false as const, code, message: "内核还没准入" };
   }
 
@@ -132,12 +132,12 @@ export async function startEnv(env: Environment) {
       action: "start_failed",
       target: env.id,
       level: "bad",
-      detail: `${result.code}: ${result.message}`,
+      detail: `${env.name} · ${result.message}`,
     });
     store.patchEnv(env.id, {}, {
       at: Date.now(),
       kind: "start_failed",
-      message: `${result.code}: ${result.message}`,
+      message: result.message,
       level: "bad",
     });
     return result;
@@ -157,7 +157,7 @@ export async function startEnv(env: Environment) {
     action: "start",
     target: env.id,
     level: env.allowNoSandbox ? "warn" : "info",
-    detail: `pid ${result.pid} port ${result.port}`,
+    detail: env.name,
   });
   store.patchEnv(
     env.id,
@@ -165,7 +165,7 @@ export async function startEnv(env: Environment) {
     {
       at: Date.now(),
       kind: "running",
-      message: `pid ${result.pid}`,
+      message: "已启动",
       level: env.allowNoSandbox ? "warn" : "info",
     },
   );
@@ -175,9 +175,10 @@ export async function startEnv(env: Environment) {
 export async function stopEnv(envId: string) {
   await stopEnvironment(envId);
   const store = useEnclave.getState();
+  const name = store.environments.find((e) => e.id === envId)?.name ?? envId;
   store.setRuntime(envId, null);
   store.patchEnv(envId, {}, { at: Date.now(), kind: "stop", message: "已停止", level: "info" });
-  store.addAudit({ action: "stop", target: envId, level: "info", detail: "stopped" });
+  store.addAudit({ action: "stop", target: envId, level: "info", detail: name });
 }
 
 export async function trashEnv(envId: string) {
@@ -190,9 +191,10 @@ export async function purgeEnv(envId: string): Promise<{ ok: boolean; message?: 
   const result = await purgeEnvironment(envId);
   if (!result.ok) return result;
   const store = useEnclave.getState();
+  const name = store.environments.find((e) => e.id === envId)?.name ?? envId;
   store.setRuntime(envId, null);
   store.destroyEnv(envId);
-  store.addAudit({ action: "purge_env", target: envId, level: "warn", detail: "磁盘数据已删除" });
+  store.addAudit({ action: "purge_env", target: envId, level: "warn", detail: `${name} · 磁盘数据已删除` });
   return { ok: true };
 }
 

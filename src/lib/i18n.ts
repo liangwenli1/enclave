@@ -329,6 +329,35 @@ const REASON: Record<Locale, Record<string, string>> = {
   },
 };
 
+/** 审计动作和时间线事件的显示名。存的是稳定的代码，显示时才翻成人话。 */
+const EVENT: Record<string, string> = {
+  api_toggle: "本机 API 开关",
+  api_token_rotate: "更换 API 令牌",
+  create_blocked: "新建被拦下",
+  create_env: "新建环境",
+  import: "导入",
+  kernel_admit: "内核准入",
+  preview_kernel_consent: "预览内核同意项",
+  proxy_add: "添加代理",
+  proxy_remove: "删除代理",
+  purge_env: "彻底删除环境",
+  sandbox_consent: "无沙箱同意项",
+  sandbox_flag: "无沙箱启动",
+  sign_in: "登录",
+  start: "启动",
+  start_blocked: "启动被拦下",
+  start_failed: "启动失败",
+  stop: "停止",
+  created: "创建",
+  flag: "启动参数",
+  running: "运行中",
+  trash: "移入回收站",
+};
+
+export function eventLabel(code: string): string {
+  return EVENT[code] ?? code;
+}
+
 export function runtimeLabel(locale: Locale, status: string, error?: string): string {
   if (status === "running") return t(locale, "running");
   if (status === "starting") return t(locale, "starting");

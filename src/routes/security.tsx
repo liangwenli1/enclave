@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Badge, Button, Panel, PanelHeader, PageHeader } from "@/components/ui";
 import { useLocale } from "@/lib/use-locale";
 import { getKernelView, type KernelView } from "@/lib/kernel/host-api";
-import { t } from "@/lib/i18n";
+import { eventLabel, t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/security")({ component: SecurityPage });
@@ -150,7 +150,7 @@ previewChannel
               {audit.map((ev) => (
                 <li key={ev.id} className="border-t border-line px-5 py-3 first:border-t-0">
                   <div className="flex flex-wrap justify-between gap-2 text-[13px]">
-                    <span className="font-medium text-ink">{ev.action}</span>
+                    <span className="font-medium text-ink">{eventLabel(ev.action)}</span>
                     <span className="app-mono text-xs text-subtle">
                       {new Date(ev.at).toLocaleString("zh-CN")}
                     </span>

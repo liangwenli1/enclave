@@ -128,7 +128,7 @@ export const useEnclave = create<Store>()(
                     {
                       at: Date.now(),
                       kind: "trash",
-                      message: "Moved to trash",
+                      message: "已移入回收站",
                       level: "warn",
                     },
                     ...e.timeline,

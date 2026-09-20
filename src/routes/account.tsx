@@ -42,7 +42,7 @@ function AccountPage() {
         action: "sign_in",
         target: next.email ?? "",
         level: "info",
-        detail: `plan=${next.limits.plan}`,
+        detail: next.limits.label,
       });
     } catch (err) {
       setError(err instanceof VendorError ? err.message : "登录失败，请重试。");

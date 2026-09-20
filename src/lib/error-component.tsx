@@ -1,29 +1,19 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { TriangleAlert } from "lucide-react";
+import { Button } from "@/components/ui";
 
-const FALLBACK_MESSAGE = "An unexpected error occurred. Try reloading the page.";
-
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message;
-  if (typeof error === "string" && error) return error;
-  return FALLBACK_MESSAGE;
-}
-
+/** 页面渲染抛错时的兜底。只说发生了什么、下一步做什么。 */
 export function AppErrorComponent({ error }: ErrorComponentProps) {
+  const message = error instanceof Error && error.message ? error.message : String(error);
   return (
-    <main
-      className={
-        "flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center " +
-        "bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-50"
-      }
-    >
-      <span className="text-red-500" aria-hidden="true">
-        <TriangleAlert className="size-10" strokeWidth={2} />
-      </span>
-      <h1 className="text-lg font-semibold">Something went wrong</h1>
-      <p className="max-w-md text-sm break-words text-zinc-500 dark:text-zinc-400">
-        {errorMessage(error)}
-      </p>
+    <main className="grid min-h-screen place-items-center bg-canvas px-6 text-center">
+      <div className="grid max-w-md justify-items-center gap-3">
+        <h1 className="text-xl font-bold tracking-tight text-ink">这个页面出错了</h1>
+        <p className="text-[13px] text-muted">重新加载通常能恢复。你的环境和设置都还在。</p>
+        <p className="app-mono text-xs break-words text-subtle">{message}</p>
+        <Button variant="primary" className="mt-2" onClick={() => window.location.reload()}>
+          重新加载
+        </Button>
+      </div>
     </main>
   );
 }

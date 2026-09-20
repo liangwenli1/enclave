@@ -29,9 +29,10 @@ function NetworkPage() {
   const [removing, setRemoving] = useState<{ id: string; name: string; used: number } | null>(null);
 
   const remove = (id: string) => {
+    const name = proxies.find((p) => p.id === id)?.name ?? id;
     void removeSecret(`proxy:${id}`);
     useEnclave.getState().removeProxy(id);
-    useEnclave.getState().addAudit({ action: "proxy_remove", target: id, level: "warn", detail: "" });
+    useEnclave.getState().addAudit({ action: "proxy_remove", target: id, level: "warn", detail: name });
     setRemoving(null);
   };
 

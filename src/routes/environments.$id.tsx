@@ -5,7 +5,7 @@ import { Badge, Button, Field, Input, Panel, Select, Textarea } from "@/componen
 import { useLocale } from "@/lib/use-locale";
 import { classifyAll } from "@/lib/kernel/flags";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
-import { t, runtimeLabel } from "@/lib/i18n";
+import { eventLabel, t, runtimeLabel } from "@/lib/i18n";
 import { engineToProvider } from "@/lib/engines";
 import { defaultPlatformVersion, defaultWinVersion, windowsEdition } from "@/lib/os";
 import { staticConsistency } from "@/lib/lab";
@@ -170,7 +170,7 @@ function EnvDetail() {
             {env.timeline.map((ev, i) => (
               <li key={`${ev.at}-${i}`} className="rounded-md border border-line px-3 py-2 text-[13px]">
                 <div className="flex justify-between gap-3">
-                  <span className="font-medium">{ev.kind}</span>
+                  <span className="font-medium">{eventLabel(ev.kind)}</span>
                   <span className="text-subtle tabular-nums">{new Date(ev.at).toLocaleString()}</span>
                 </div>
                 <div className={ev.level === "bad" ? "text-bad" : ev.level === "warn" ? "text-warn" : "text-muted"}>
@@ -448,7 +448,7 @@ function FlagsForm({
               {
                 at: Date.now(),
                 kind: "flag",
-                message: e.target.checked ? "--no-sandbox enabled" : "--no-sandbox cleared",
+                message: e.target.checked ? "允许无沙箱启动" : "取消无沙箱启动",
                 level: e.target.checked ? "warn" : "info",
               },
             );
@@ -456,7 +456,7 @@ function FlagsForm({
               action: "sandbox_flag",
               target: envId,
               level: e.target.checked ? "warn" : "info",
-              detail: e.target.checked ? "allow --no-sandbox" : "disallow --no-sandbox",
+              detail: e.target.checked ? "允许 --no-sandbox" : "已撤销",
             });
           }}
         />
