@@ -145,7 +145,9 @@ export const useEnclave = create<Store>()(
         })),
       upsertProxy: (proxy) =>
         set((s) => ({
-          proxies: [proxy, ...s.proxies.filter((p) => p.id !== proxy.id)],
+          proxies: s.proxies.some((p) => p.id === proxy.id)
+            ? s.proxies.map((p) => (p.id === proxy.id ? proxy : p))
+            : [proxy, ...s.proxies],
         })),
       removeProxy: (id) =>
         set((s) => ({
@@ -215,13 +217,22 @@ export const useEnclave = create<Store>()(
           ...current,
           ...p,
           settings: { ...initialSettings, ...p.settings },
+          // 0.9.1 把代理密码明文存在 auth.password 里。读进来就丢掉，只留"没有密码"的状态，
+          // 让用户到代理页补填进保险箱；否则明文会被原样写回磁盘，一直留着。
+          proxies: (p.proxies ?? []).map((proxy) =>
+            proxy.auth
+              ? {
+                  ...proxy,
+                  auth: {
+                    username: proxy.auth.username,
+                    hasPassword: proxy.auth.hasPassword === true,
+                  },
+                }
+              : proxy,
+          ),
           searchCatalog: p.searchCatalog?.length ? p.searchCatalog : BUILTIN_ENGINES,
         };
       },
     },
   ),
 );
-
-export function liveEnvironments() {
-  return useEnclave.getState().environments.filter((e) => !e.deletedAt);
-}

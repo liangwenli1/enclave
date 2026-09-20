@@ -19,6 +19,7 @@ const ALLOW = new Set([
   "fingerprint-hardware-concurrency",
   "disable-spoofing",
   "disable-non-proxied-udp",
+  "disable-webrtc",
   "remote-debugging-port",
   "remote-debugging-address",
   "remote-allow-origins",
@@ -91,10 +92,4 @@ export function classifyAll(flags: string[]): ClassifiedFlag[] {
   return flags.map(classifyFlag);
 }
 
-export function rejectedFlags(flags: string[]): ClassifiedFlag[] {
-  return classifyAll(flags).filter((f) => f.cls === "reject");
-}
 
-export function warnedFlags(flags: string[]): ClassifiedFlag[] {
-  return classifyAll(flags).filter((f) => f.cls === "warn");
-}

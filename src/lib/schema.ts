@@ -5,7 +5,6 @@ export const PROFILE_SCHEMA = "fingerprint-profile/v1" as const;
 export type PlatformId = "windows" | "macos" | "linux";
 export type BrowserBrand = "Chrome" | "Edge" | "Opera" | "Vivaldi";
 export type WebrtcMode = "replace" | "disable";
-export type EnvStatus = "stopped" | "starting" | "running" | "error";
 
 export type FingerprintProfile = {
   schema: typeof PROFILE_SCHEMA;
@@ -228,6 +227,7 @@ export function newEnvironment(partial?: Partial<Environment>): Environment {
     profile: partial?.profile ?? profileFromSeed(seed, "windows"),
     proxyId: partial?.proxyId ?? null,
     searchEngine: partial?.searchEngine ?? "none",
+    searchProvider: partial?.searchProvider,
     extensionIds: partial?.extensionIds ?? [],
     kernelPin: KERNEL_PIN,
     allowNoSandbox: false,
@@ -243,25 +243,6 @@ export function newEnvironment(partial?: Partial<Environment>): Environment {
         level: "info",
       },
     ],
-    ...omitDefined(partial, [
-      "name",
-      "group",
-      "tags",
-      "note",
-      "profile",
-      "proxyId",
-      "searchEngine",
-      "searchProvider",
-      "extensionIds",
-    ]),
   };
 }
 
-function omitDefined<T extends object, K extends keyof T>(
-  value: Partial<T> | undefined,
-  _keys: K[],
-): Partial<T> {
-  if (!value) return {};
-  const next = { ...value };
-  return next;
-}

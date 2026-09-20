@@ -192,8 +192,10 @@ export async function refresh(force = false): Promise<AccountState> {
       token: stored.token,
     });
     const verified = await verifyLicense(res.license);
-    if (verified.ok) {
-      write({ ...stored, email: res.email, license: res.license, lastSyncAt: Date.now() });
+    // 请求在路上时用户可能已经退出登录了；只在还是同一次登录时才写回。
+    const now = read();
+    if (verified.ok && now?.token === stored.token) {
+      write({ ...now, email: res.email, license: res.license, lastSyncAt: Date.now() });
     }
   } catch (err) {
     if (err instanceof VendorError && (err.code === "DEVICE_REVOKED" || err.code === "UNAUTHENTICATED")) {

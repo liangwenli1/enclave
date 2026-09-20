@@ -98,24 +98,13 @@ function notify() {
 }
 notify();
 
-/** 第一次设置主密码，或改主密码（会把已存的密码重新加密）。 */
-export async function setMasterPassword(password: string, current?: string): Promise<void> {
+/**
+ * 第一次设置主密码，或改主密码（已存的密码会用新密码重新加密）。
+ * 保险箱锁着时整个界面都被锁屏挡住，所以走到这里时要么还没有保险箱，要么已经解锁。
+ */
+export async function setMasterPassword(password: string): Promise<void> {
   if (password.length < 8) throw new Error("主密码至少 8 位。");
-
-  let items: Record<string, string> = {};
-  const existing = readFile();
-  if (existing) {
-    if (unlockedKey) {
-      items = { ...cache };
-    } else {
-      if (!current) throw new Error("改主密码要先输入当前的主密码。");
-      const oldKey = await deriveKey(current, fromB64(existing.salt), existing.iterations);
-      const probe = await open(oldKey, existing.check);
-      if (probe !== CHECK_PLAINTEXT) throw new Error("当前主密码不对。");
-      const json = await open(oldKey, existing.items);
-      items = json ? (JSON.parse(json) as Record<string, string>) : {};
-    }
-  }
+  const items = { ...cache };
 
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const key = await deriveKey(password, salt, ITERATIONS);
@@ -141,6 +130,20 @@ export async function unlockVault(password: string): Promise<boolean> {
   cache = json ? (JSON.parse(json) as Record<string, string>) : {};
   notify();
   return true;
+}
+
+/**
+ * 忘了主密码的唯一出路：扔掉保险箱。里面的代理密码一起没了，
+ * 所以把每个代理的"已保存密码"标记也清掉，界面才不会说谎。
+ */
+export function resetVault(): void {
+  writeFile(null);
+  unlockedKey = null;
+  cache = {};
+  useEnclave.setState((s) => ({
+    proxies: s.proxies.map((p) => (p.auth ? { ...p, auth: { ...p.auth, hasPassword: false } } : p)),
+  }));
+  notify();
 }
 
 export function lockVault(): void {
@@ -182,6 +185,7 @@ export function allSecrets(): Record<string, string> {
 
 /** 导入环境包时用。 */
 export async function mergeSecrets(items: Record<string, string>): Promise<void> {
+  if (!readFile()) throw new Error("文件里有代理密码，但这台机器还没设主密码。先在上面设好，再导入一次。");
   if (!unlockedKey) throw new Error("保险箱是锁着的，先解锁再导入密码。");
   cache = { ...cache, ...items };
   await persist();

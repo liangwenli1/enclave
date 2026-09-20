@@ -152,6 +152,7 @@ const REASON: Record<string, string> = {
   SPAWN_FAILED: "进程启动失败",
   HOST_UNAVAILABLE: "连不上本机服务",
   VAULT_LOCKED: "保险箱锁着",
+  PROXY_PASSWORD_MISSING: "缺代理密码",
   PLAN_CONCURRENT_LIMIT: "同时运行已达上限",
 };
 
@@ -170,6 +171,8 @@ const EVENT: Record<string, string> = {
   sandbox_consent: "无沙箱同意项",
   sandbox_flag: "无沙箱启动",
   sign_in: "登录",
+  vault_reset: "清空保险箱",
+  proxy_password: "补填代理密码",
   start: "启动",
   start_blocked: "启动被拦下",
   start_failed: "启动失败",

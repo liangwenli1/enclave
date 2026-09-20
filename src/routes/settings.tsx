@@ -15,7 +15,7 @@ import { t } from "@/lib/i18n";
 import { envCount } from "@/lib/license/plans";
 import { useEnclave } from "@/lib/store";
 import { buildExport, downloadExport, importSecrets, parseExport } from "@/lib/transfer";
-import { setMasterPassword } from "@/lib/vault";
+import { getSecret, setMasterPassword } from "@/lib/vault";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -37,7 +37,6 @@ function SettingsPage() {
 /** 主密码：保险箱的唯一钥匙。没设之前不保存任何代理密码。 */
 function VaultPanel() {
   const { exists, unlocked } = useEnclave((s) => s.vault);
-  const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState("");
@@ -51,8 +50,7 @@ function VaultPanel() {
       return;
     }
     try {
-      await setMasterPassword(next, current || undefined);
-      setCurrent("");
+      await setMasterPassword(next);
       setNext("");
       setAgain("");
       setDone(exists ? "主密码已更新，保险箱里的密码已用新密码重新加密。" : "主密码已设置，保险箱已解锁。");
@@ -80,17 +78,7 @@ function VaultPanel() {
           void submit();
         }}
       >
-        <p className="text-[13px] text-warn">主密码无法找回，忘了只能清空保险箱重填。</p>
-        {exists && !unlocked ? (
-          <Field label="当前主密码">
-            <Input
-              type="password"
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-              autoComplete="current-password"
-            />
-          </Field>
-        ) : null}
+        <p className="text-[13px] text-warn">主密码无法找回。忘了只能清空保险箱，代理密码要重填。</p>
         <Field label={exists ? "新主密码（至少 8 位）" : "主密码（至少 8 位）"}>
           <Input
             type="password"
@@ -239,19 +227,22 @@ function TransferPanel() {
         );
         return;
       }
-      for (const proxy of file.proxies) store.upsertProxy(proxy);
+      // 先导密码，再导代理："已保存密码"以保险箱里真有为准，不照抄文件里的标记。
+      const secretCount = file.secrets && importPass ? await importSecrets(file, importPass) : 0;
+      for (const proxy of file.proxies) {
+        store.upsertProxy(
+          proxy.auth
+            ? { ...proxy, auth: { ...proxy.auth, hasPassword: getSecret(`proxy:${proxy.id}`) !== null } }
+            : proxy,
+        );
+      }
       for (const engine of file.engines ?? []) store.upsertEngine(engine);
       for (const env of incoming) store.upsertEnv(env);
-
-      let secretCount = 0;
-      if (file.secrets) {
-        if (!importPass) {
-          setMessage(
-            `已导入 ${incoming.length} 个环境。文件里还有加密的代理密码，填上导出口令再导入一次即可带上密码。`,
-          );
-          return;
-        }
-        secretCount = await importSecrets(file, importPass);
+      if (file.secrets && !importPass) {
+        setMessage(
+          `已导入 ${incoming.length} 个环境。文件里还有加密的代理密码，填上导出口令再导入一次即可带上密码。`,
+        );
+        return;
       }
       store.addAudit({
         action: "import",

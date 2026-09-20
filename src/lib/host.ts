@@ -97,6 +97,14 @@ export async function startEnv(env: Environment) {
     failRuntime(env.id, code, "代理密码在锁着的保险箱里，先解锁。");
     return { ok: false as const, code, message: "代理密码在锁着的保险箱里" };
   }
+  // 代理要用户名却拿不到密码（旧版本升级上来、或导入时没带密码）：
+  // 不能拿空密码去连，那样认证失败后流量走向不可控。
+  const proxy = store.proxies.find((p) => p.id === env.proxyId);
+  if (proxy?.auth?.username && getSecret(`proxy:${proxy.id}`) === null) {
+    const code = "PROXY_PASSWORD_MISSING";
+    failRuntime(env.id, code, `代理「${proxy.name}」的密码不在这台机器上，到代理页补填。`);
+    return { ok: false as const, code, message: "代理密码不在这台机器上" };
+  }
 
   // 3. 内核必须已准入
   const view = await getKernelView();
@@ -176,7 +184,10 @@ export async function stopEnv(envId: string) {
   await stopEnvironment(envId);
   const store = useEnclave.getState();
   const name = store.environments.find((e) => e.id === envId)?.name ?? envId;
+  // 没在运行的环境（比如直接移进回收站）不记"已停止"：审计不能写没发生过的事。
+  const wasLive = Boolean(store.runtimes[envId]);
   store.setRuntime(envId, null);
+  if (!wasLive) return;
   store.patchEnv(envId, {}, { at: Date.now(), kind: "stop", message: "已停止", level: "info" });
   store.addAudit({ action: "stop", target: envId, level: "info", detail: name });
 }

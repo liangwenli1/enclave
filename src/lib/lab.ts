@@ -250,12 +250,3 @@ export function diffSnaps(a?: LabSnapshot, b?: LabSnapshot): { field: string; a:
   }));
 }
 
-export function restartStable(previous?: LabSnapshot, next?: LabSnapshot): boolean {
-  if (!previous || !next) return false;
-  return (
-    previous.canvasHash === next.canvasHash &&
-    previous.webglRenderer === next.webglRenderer &&
-    previous.userAgent === next.userAgent &&
-    previous.hardwareConcurrency === next.hardwareConcurrency
-  );
-}

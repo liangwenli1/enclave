@@ -24,7 +24,7 @@ import { currentAccount, refresh } from "@/lib/license/client";
 import { launchSpec, needsLockedSecret, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
-import { lockVault, unlockVault } from "@/lib/vault";
+import { lockVault, resetVault, unlockVault } from "@/lib/vault";
 
 const NAV = [
   { to: "/", key: "navEnv" as const, icon: Box },
@@ -331,6 +331,7 @@ function LockScreen() {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
 
   const submit = async () => {
     setBusy(true);
@@ -369,6 +370,41 @@ function LockScreen() {
         <Button variant="primary" size="md" className="mt-4 w-full" type="submit" disabled={busy}>
           {t("unlock")}
         </Button>
+        {forgot ? (
+          <div className="mt-5 border-t border-line pt-4">
+            <p className="text-[13px] leading-relaxed text-muted">
+              清空后，保存过的<span className="text-bad">代理密码会全部删除</span>
+              ，要到代理页重新填。环境和其他设置不受影响。
+            </p>
+            <div className="mt-3 flex justify-end gap-2">
+              <Button type="button" onClick={() => setForgot(false)}>
+                {t("cancel")}
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => {
+                  resetVault();
+                  useEnclave.getState().addAudit({
+                    action: "vault_reset",
+                    level: "warn",
+                    detail: "忘记主密码，保险箱已清空",
+                  });
+                }}
+              >
+                清空保险箱
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="mt-4 w-full text-center text-[13px] text-subtle hover:text-ink"
+            onClick={() => setForgot(true)}
+          >
+            忘了主密码
+          </button>
+        )}
       </form>
     </div>
   );

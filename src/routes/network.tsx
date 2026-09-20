@@ -24,6 +24,8 @@ function NetworkPage() {
   const proxies = useEnclave((s) => s.proxies);
   const environments = useEnclave((s) => s.environments);
   const [open, setOpen] = useState(false);
+  const vault = useEnclave((s) => s.vault);
+  const [filling, setFilling] = useState<ProxyItem | null>(null);
   const [removing, setRemoving] = useState<{ id: string; name: string; used: number } | null>(null);
 
   const remove = (id: string) => {
@@ -95,7 +97,16 @@ function NetworkPage() {
                       </td>
                       <td className="text-subtle">{used ? `${used} 个环境` : "未使用"}</td>
                       <td>
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1.5">
+                          {p.auth?.username && !p.auth.hasPassword ? (
+                            <Button
+                              disabled={!vault.unlocked}
+                              title={vault.unlocked ? undefined : "先在设置页设主密码"}
+                              onClick={() => setFilling(p)}
+                            >
+                              填密码
+                            </Button>
+                          ) : null}
                           <Button
                             variant="danger"
                             onClick={() =>
@@ -116,6 +127,7 @@ function NetworkPage() {
       </Panel>
 
       {open ? <ProxyDialog onClose={() => setOpen(false)} /> : null}
+      {filling ? <PasswordDialog proxy={filling} onClose={() => setFilling(null)} /> : null}
 
       {removing ? (
         <Dialog open onOpenChange={(o) => !o && setRemoving(null)}>
@@ -134,6 +146,59 @@ function NetworkPage() {
         </Dialog>
       ) : null}
     </div>
+  );
+}
+
+/** 给已有的代理补密码：旧版本升级上来的、或导入时没带密码的代理都走这里。 */
+function PasswordDialog({ proxy, onClose }: { proxy: ProxyItem; onClose: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!password) {
+      setError("填这个代理的密码。");
+      return;
+    }
+    try {
+      await putSecret(`proxy:${proxy.id}`, password);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    const store = useEnclave.getState();
+    store.upsertProxy({ ...proxy, auth: { username: proxy.auth!.username, hasPassword: true } });
+    store.addAudit({ action: "proxy_password", target: proxy.id, level: "info", detail: proxy.name });
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title={`「${proxy.name}」的密码`}>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save();
+          }}
+        >
+          <Field label={`用户名 ${proxy.auth?.username ?? ""}`} error={error} hint="存进保险箱，只以密文落盘">
+            <Input
+              type="password"
+              autoFocus
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
+          <div className="mt-6 flex justify-end gap-2">
+            <Button type="button" onClick={onClose}>
+              {t("cancel")}
+            </Button>
+            <Button variant="primary" type="submit">
+              {t("save")}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
