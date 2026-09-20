@@ -278,8 +278,33 @@ async fn kill_pid(pid: u32) {
     }
     #[cfg(unix)]
     {
-        let _ = Command::new("kill").args(["-KILL", &format!("-{pid}")]).status().await;
-        let _ = Command::new("kill").args(["-KILL", &pid.to_string()]).status().await;
+        signal_tree(pid, SIGKILL);
+    }
+}
+
+#[cfg(unix)]
+const SIGTERM: i32 = 15;
+#[cfg(unix)]
+const SIGKILL: i32 = 9;
+
+/// 给一个环境的进程组发信号（spawn 时用 process_group(0) 让它自成一组）。
+///
+/// 直接用 kill(2)，**绝不**经由外部 `kill` 命令：procps-ng 会用 getopt 把 `-12345`
+/// 逐位拆成选项，先读到 `-1`，而 `kill -TERM -1` 是给系统上所有进程发信号 ——
+/// 任何以 1 开头的 pid 都会触发，root 下等于把整台机器打挂。
+/// pid <= 1 一律拒绝：0 是调用者自己的进程组，1 是 init，-1 是所有进程。
+#[cfg(unix)]
+fn signal_tree(pid: u32, sig: i32) {
+    extern "C" {
+        fn kill(pid: i32, sig: i32) -> i32;
+    }
+    let Ok(pid) = i32::try_from(pid) else { return };
+    if pid <= 1 {
+        return;
+    }
+    unsafe {
+        kill(-pid, sig);
+        kill(pid, sig);
     }
 }
 
@@ -1031,11 +1056,59 @@ pub fn pid_alive(pid: u32) -> bool {
     }
     #[cfg(unix)]
     {
-        std::process::Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
+        extern "C" {
+            fn kill(pid: i32, sig: i32) -> i32;
+        }
+        // 信号 0 只探测进程在不在，不发任何东西。pid <= 1 不可能是我们启动的内核。
+        match i32::try_from(pid) {
+            Ok(p) if p > 1 => unsafe { kill(p, 0) == 0 },
+            _ => false,
+        }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod signal_tests {
+    use super::*;
+
+    /// 2026-09-20 的事故：stop_environment 调外部 `kill -TERM -<pid>`，procps 把它解析成
+    /// `kill -TERM -1`，root 下给整台机器的所有进程发了 SIGTERM。
+    #[test]
+    fn never_signals_init_or_everyone() {
+        // 这三个值如果真的发出去，测试进程自己（乃至整台机器）都会收到信号。
+        // 能跑到断言就说明被挡住了。
+        signal_tree(0, SIGTERM);
+        signal_tree(1, SIGTERM);
+        signal_tree(u32::MAX, SIGTERM);
+        assert!(!pid_alive(0));
+        assert!(!pid_alive(1));
+    }
+
+    #[test]
+    fn kills_only_the_target_group() {
+        use std::os::unix::process::CommandExt;
+        let mut bystander = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+        let mut target = std::process::Command::new("sleep")
+            .arg("30")
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        assert!(pid_alive(target.id()));
+
+        signal_tree(target.id(), SIGKILL);
+        let _ = target.wait();
+
+        assert!(!pid_alive(target.id()), "目标应该被杀掉");
+        assert!(pid_alive(bystander.id()), "无关进程必须活着");
+        let _ = bystander.kill();
+        let _ = bystander.wait();
+    }
+
+    #[test]
+    fn source_never_shells_out_to_kill() {
+        let src = include_str!("kernel.rs");
+        let needle = ["Command::new(\"", "kill\")"].concat();
+        assert!(!src.contains(&needle), "不许再通过外部 kill 命令发信号");
     }
 }
 
@@ -1069,11 +1142,9 @@ pub async fn stop_environment(
         }
         #[cfg(unix)]
         {
-            let _ = Command::new("kill").args(["-TERM", &format!("-{}", rt.pid)]).status().await;
-            let _ = Command::new("kill").args(["-TERM", &rt.pid.to_string()]).status().await;
+            signal_tree(rt.pid, SIGTERM);
             sleep(Duration::from_millis(400)).await;
-            let _ = Command::new("kill").args(["-KILL", &format!("-{}", rt.pid)]).status().await;
-            let _ = Command::new("kill").args(["-KILL", &rt.pid.to_string()]).status().await;
+            signal_tree(rt.pid, SIGKILL);
         }
     }
     let rows: Vec<_> = runtimes.lock().await.values().cloned().collect();
