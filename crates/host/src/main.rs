@@ -575,7 +575,10 @@ async fn api_start(State(state): State<Arc<App>>, Path(id): Path<String>) -> Res
 }
 
 async fn api_stop(State(state): State<Arc<App>>, Path(id): Path<String>) -> Response {
-    if !state.api.lock().await.envs.contains_key(&id) {
+    // 锁上保险箱后，带密码代理的环境会从推送列表里消失；但脚本启动过的环境必须还能停。
+    let known = state.api.lock().await.envs.contains_key(&id)
+        || state.runtimes.lock().await.contains_key(&id);
+    if !known {
         return not_found();
     }
     let _ = stop_environment(&state.paths, &id, &state.runtimes).await;
