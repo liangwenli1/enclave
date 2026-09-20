@@ -1,0 +1,12 @@
+{
+  "name": "enclave-vendor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Enclave 许可证服务：账号、档位、设备绑定、签名许可证。零依赖。",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test \"test/*.test.js\""
+  }
+}
