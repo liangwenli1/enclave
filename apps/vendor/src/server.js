@@ -264,6 +264,8 @@ route("GET", "/auth/me", async (req, res) => {
     license: {
       plan: row.plan,
       label: p.label,
+      envLimit: p.envLimit,
+      concurrent: p.concurrent,
       expiresAt: row.expires_at,
       deviceLimit: row.device_limit ?? p.deviceLimit,
     },
@@ -272,13 +274,16 @@ route("GET", "/auth/me", async (req, res) => {
   });
 });
 
+/* 官网：档位表。档位只在这个服务里定义，页面从这里取，不自己抄。 */
+route("GET", "/plans", async (_req, res) => ok(res, { plans: Object.values(PLANS) }));
+
 /* 官网：升级申请 */
 route("POST", "/license/request", async (req, res) => {
   const user = currentUser(req);
   if (!user) return fail(res, 401, "UNAUTHENTICATED", "请先登录。");
   const body = await readJson(req);
   const plan = String(body.plan || "");
-  if (!["solo", "pro", "team"].includes(plan)) return fail(res, 400, "BAD_PLAN", "档位不对。");
+  if (!PLANS[plan] || plan === "free") return fail(res, 400, "BAD_PLAN", "档位不对。");
   if (q.openRequest.all(user.id).length) return fail(res, 409, "ALREADY_OPEN", "你已经有一条待处理的申请了。");
   q.insertRequest.run(randomUUID(), user.id, plan, String(body.note || "").slice(0, 200), now());
   return ok(res);
