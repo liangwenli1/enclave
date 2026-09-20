@@ -1,15 +1,33 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Plus, Play, Square, Trash2, AppWindow } from "lucide-react";
+import { AppWindow, Boxes, Play, Plus, Square, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Button, Dialog, DialogContent, Field, Input, Select, StatusDot } from "@/components/ui";
-import { startEnv, stopEnv, trashEnv, purgeEnv } from "@/lib/host";
-import { t, runtimeLabel } from "@/lib/i18n";
-import { KERNEL_PIN, TIMEZONES, newEnvironment, profileFromSeed, randomSeed, type PlatformId } from "@/lib/schema";
-import { defaultPlatformVersion, platformLabel } from "@/lib/os";
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  Empty,
+  Field,
+  Input,
+  Panel,
+  PageHeader,
+  Select,
+  StatusDot,
+} from "@/components/ui";
+import { useLocale } from "@/lib/use-locale";
+import { purgeEnv, startEnv, stopEnv, trashEnv } from "@/lib/host";
+import { runtimeLabel, t } from "@/lib/i18n";
 import { engineToProvider, findEngine } from "@/lib/engines";
-import { envCount, planOf } from "@/lib/license";
+import { envCount } from "@/lib/license/plans";
+import { defaultPlatformVersion, platformLabel } from "@/lib/os";
+import {
+  KERNEL_PIN,
+  TIMEZONES,
+  newEnvironment,
+  profileFromSeed,
+  randomSeed,
+  type PlatformId,
+} from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
-import { useLocale } from "@/components/shell";
 
 export const Route = createFileRoute("/")({ component: EnvironmentsPage });
 
@@ -17,189 +35,191 @@ function EnvironmentsPage() {
   const locale = useLocale();
   const navigate = useNavigate();
   const environments = useEnclave((s) => s.environments);
-  const planId = useEnclave((s) => s.settings.plan);
+  const limits = useEnclave((s) => s.account.limits);
   const runtimes = useEnclave((s) => s.runtimes);
-  const selected = useEnclave((s) => s.selectedIds);
+  const proxies = useEnclave((s) => s.proxies);
   const [query, setQuery] = useState("");
   const [trash, setTrash] = useState(false);
   const [wizard, setWizard] = useState(false);
 
+  const live = useMemo(() => environments.filter((e) => !e.deletedAt), [environments]);
+  const runningNow = Object.values(runtimes).filter((r) => r.status === "running").length;
+
   const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
     return environments.filter((e) => {
-      const inTrash = Boolean(e.deletedAt);
-      if (trash !== inTrash) return false;
-      const q = query.trim().toLowerCase();
+      if (trash !== Boolean(e.deletedAt)) return false;
       if (!q) return true;
-      return `${e.name} ${e.group} ${e.tags.join(" ")} ${e.profile.platform}`.toLowerCase().includes(q);
+      return `${e.name} ${e.group} ${e.tags.join(" ")} ${e.profile.platform}`
+        .toLowerCase()
+        .includes(q);
     });
   }, [environments, query, trash]);
 
-  return (
-    <div className="mx-auto flex max-w-[1400px] flex-col gap-4 p-4 md:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-[20px] font-semibold tracking-tight">{t(locale, "navEnv")}</h1>
-          <p className="mt-1 max-w-xl text-[13px] text-subtle">
-            {t(locale, "tagline")} · {t(locale, "plan")} {planOf(planId).label}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setTrash((v) => !v)}>{trash ? t(locale, "navEnv") : t(locale, "trash")}</Button>
-          <Button
-            variant="primary"
-            onClick={() => {
-              const store = useEnclave.getState();
-              const plan = planOf(store.settings.plan);
-              if (envCount(store.environments) >= plan.envLimit) {
-                store.setPlanNotice({
-                  title: "环境数量已达上限",
-                  body: `当前套餐 ${plan.label} 最多 ${plan.envLimit} 个环境。删除不用的环境，或升级套餐。`,
-                });
-                return;
-              }
-              setWizard(true);
-            }}
-          >
-            <Plus className="size-3.5" />
-            {t(locale, "newEnv")}
-          </Button>
-        </div>
-      </div>
+  const tryCreate = () => {
+    const store = useEnclave.getState();
+    if (envCount(store.environments) >= limits.envLimit) {
+      store.setPlanNotice({
+        title: "环境数量已达上限",
+        body: `${limits.label} 最多 ${limits.envLimit} 个环境。删掉不用的，或者升级档位。`,
+      });
+      store.addAudit({
+        action: "create_blocked",
+        level: "warn",
+        detail: `PLAN_ENV_LIMIT ${limits.label} max ${limits.envLimit}`,
+      });
+      return;
+    }
+    setWizard(true);
+  };
 
-      <div className="flex flex-wrap items-center gap-2">
+  return (
+    <div className="mx-auto max-w-[1280px] px-8 py-6">
+      <PageHeader
+        title={t(locale, "navEnv")}
+        status={`${live.length} / ${limits.envLimit} 个环境 · ${runningNow} / ${limits.concurrent} 个运行中 · ${limits.label}`}
+        actions={
+          <>
+            <Button onClick={() => setTrash((v) => !v)}>
+              {trash ? t(locale, "navEnv") : t(locale, "trash")}
+            </Button>
+            <Button variant="primary" onClick={tryCreate}>
+              <Plus className="size-3.5" />
+              {t(locale, "newEnv")}
+            </Button>
+          </>
+        }
+      />
+
+      {live.length > 0 || trash ? (
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t(locale, "search")}
-          className="max-w-sm"
+          className="mb-4 max-w-sm"
         />
-        {selected.length ? (
-          <span className="text-[12px] text-subtle">
-            {t(locale, "selected")} {selected.length}
-          </span>
-        ) : null}
-      </div>
+      ) : null}
 
-      {rows.length === 0 ? (
-        <div className="grid place-items-center rounded-xl border border-dashed border-line py-20 text-center">
-          <div className="text-[15px] font-medium">{t(locale, "emptyEnv")}</div>
-          <p className="mt-2 max-w-md text-[13px] text-subtle">{t(locale, "emptyEnvHint")}</p>
-          <Button variant="primary" className="mt-4" onClick={() => setWizard(true)}>
-            {t(locale, "newEnv")}
-          </Button>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-line">
-          <table className="w-full min-w-[720px] text-left text-[13px]">
-            <thead className="bg-surface-2 text-[11px] uppercase tracking-wide text-subtle">
-              <tr>
-                <th className="w-8 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={rows.length > 0 && rows.every((r) => selected.includes(r.id))}
-                    onChange={(e) =>
-                      useEnclave.getState().setSelected(e.target.checked ? rows.map((r) => r.id) : [])
-                    }
-                  />
-                </th>
-                <th className="px-3 py-2">{t(locale, "name")}</th>
-                <th className="px-3 py-2">{t(locale, "platform")}</th>
-                <th className="px-3 py-2">{t(locale, "proxy")}</th>
-                <th className="px-3 py-2">{t(locale, "group")}</th>
-                <th className="px-3 py-2">{t(locale, "runtime")}</th>
-                <th className="px-3 py-2" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((env) => {
-                const rt = runtimes[env.id];
-                const status = rt?.status ?? "stopped";
-                const tone =
-                  status === "running" ? "run" : status === "error" ? "bad" : status === "starting" ? "warn" : "idle";
-                return (
-                  <tr key={env.id} className="border-t border-line hover:bg-surface-2/60">
-                    <td className="px-3 py-2">
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(env.id)}
-                        onChange={(e) => {
-                          const next = e.target.checked
-                            ? [...selected, env.id]
-                            : selected.filter((id) => id !== env.id);
-                          useEnclave.getState().setSelected(next);
-                        }}
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <Link
-                        to="/environments/$id"
-                        params={{ id: env.id }}
-                        className="font-medium hover:underline"
-                      >
-                        {env.name}
-                      </Link>
-                      <div className="text-[11px] text-subtle">{env.group}</div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <span className="inline-flex items-center gap-1.5 text-muted">
-                        <AppWindow className="size-4" />
-                        {platformLabel(env.profile)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-subtle">
-                      {useEnclave.getState().proxies.find((p) => p.id === env.proxyId)?.name ??
-                        t(locale, "noProxy")}
-                    </td>
-                    <td className="px-3 py-2 text-subtle">{env.group}</td>
-                    <td className="px-3 py-2">
-                      <span className="inline-flex items-center gap-1.5">
-                        <StatusDot tone={tone} />
-                        {runtimeLabel(locale, status, rt?.error)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="flex justify-end gap-1">
-                        {trash ? (
-                          <>
-                            <Button onClick={() => useEnclave.getState().restoreEnv(env.id)}>
-                              {t(locale, "restore")}
-                            </Button>
-                            <Button variant="danger" onClick={() => void purgeEnv(env.id)}>
-                              {t(locale, "destroy")}
-                            </Button>
-                          </>
-                        ) : (
-                          <>
-                            {status === "running" ? (
-                              <Button onClick={() => void stopEnv(env.id)}>
-                                <Square className="size-3" />
-                                {t(locale, "stop")}
+      <Panel className="overflow-hidden">
+        {rows.length === 0 ? (
+          <Empty
+            icon={<Boxes className="size-8" />}
+            title={trash ? "回收站是空的" : t(locale, "emptyEnv")}
+            body={trash ? "删掉的环境会先进这里，可以恢复或彻底销毁。" : t(locale, "emptyEnvHint")}
+            action={
+              trash ? undefined : (
+                <Button variant="primary" onClick={tryCreate}>
+                  {t(locale, "newEnv")}
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="app-table min-w-[820px]">
+              <thead>
+                <tr>
+                  <th>{t(locale, "name")}</th>
+                  <th>{t(locale, "platform")}</th>
+                  <th>{t(locale, "proxy")}</th>
+                  <th>{t(locale, "statusCol")}</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((env) => {
+                  const rt = runtimes[env.id];
+                  const status = rt?.status ?? "stopped";
+                  const tone =
+                    status === "running"
+                      ? "ok"
+                      : status === "error"
+                        ? "bad"
+                        : status === "starting"
+                          ? "warn"
+                          : "idle";
+                  return (
+                    <tr key={env.id}>
+                      <td>
+                        <Link
+                          to="/environments/$id"
+                          params={{ id: env.id }}
+                          className="font-medium text-ink hover:text-accent"
+                        >
+                          {env.name}
+                        </Link>
+                        <div className="text-xs text-subtle">{env.group}</div>
+                      </td>
+                      <td>
+                        <span className="inline-flex items-center gap-2">
+                          <AppWindow className="size-4 text-faint" />
+                          {platformLabel(env.profile)}
+                        </span>
+                      </td>
+                      <td className="text-subtle">
+                        {proxies.find((p) => p.id === env.proxyId)?.name ?? t(locale, "noProxy")}
+                      </td>
+                      <td>
+                        <span className="inline-flex items-center gap-2">
+                          <StatusDot tone={tone} />
+                          <span className={status === "error" ? "text-bad" : undefined}>
+                            {runtimeLabel(locale, status, rt?.error)}
+                          </span>
+                        </span>
+                      </td>
+                      <td>
+                        <div className="flex justify-end gap-1.5">
+                          {trash ? (
+                            <>
+                              <Button onClick={() => useEnclave.getState().restoreEnv(env.id)}>
+                                {t(locale, "restore")}
                               </Button>
-                            ) : (
-                              <Button variant="primary" onClick={() => void startEnv(env)}>
-                                <Play className="size-3" />
-                                {t(locale, "start")}
+                              <Button variant="danger" onClick={() => void purgeEnv(env.id)}>
+                                {t(locale, "destroy")}
                               </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              onClick={() => {
-                                void trashEnv(env.id);
-                              }}
-                            >
-                              <Trash2 className="size-3.5" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                            </>
+                          ) : (
+                            <>
+                              {status === "running" ? (
+                                <Button onClick={() => void stopEnv(env.id)}>
+                                  <Square className="size-3" />
+                                  {t(locale, "stop")}
+                                </Button>
+                              ) : (
+                                <Button onClick={() => void startEnv(env)}>
+                                  <Play className="size-3 text-accent" />
+                                  {t(locale, "start")}
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                title={t(locale, "trash")}
+                                onClick={() => void trashEnv(env.id)}
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+
+      {rows.some((r) => runtimes[r.id]?.error === "KERNEL_UNTRUSTED_SOURCE") ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-[13px] text-warn">
+          <span>{t(locale, "kernelNeed")}</span>
+          <Link to="/kernels" className="font-semibold underline">
+            {t(locale, "goKernels")}
+          </Link>
         </div>
-      )}
+      ) : null}
 
       {wizard ? (
         <CreateWizard
@@ -209,15 +229,6 @@ function EnvironmentsPage() {
             void navigate({ to: "/environments/$id", params: { id } });
           }}
         />
-      ) : null}
-
-      {rows.some((r) => runtimes[r.id]?.error === "KERNEL_UNTRUSTED_SOURCE") ? (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-[13px]">
-          <span>{t(locale, "kernelNeed")}</span>
-          <Link to="/kernels" className="underline">
-            {t(locale, "goKernels")}
-          </Link>
-        </div>
       ) : null}
     </div>
   );
@@ -234,19 +245,20 @@ function CreateWizard({
   const proxies = useEnclave((s) => s.proxies);
   const allEnvs = useEnclave((s) => s.environments);
   const existing = useMemo(() => allEnvs.filter((e) => !e.deletedAt), [allEnvs]);
+  const catalog = useEnclave((s) => s.searchCatalog) ?? [];
+
   const [step, setStep] = useState(0);
-  const [source, setSource] = useState<"blank" | "exit" | "template" | "copy">("blank");
+  const [source, setSource] = useState<"blank" | "template" | "copy">("blank");
   const [name, setName] = useState("");
   const [group, setGroup] = useState("default");
   const [platform, setPlatform] = useState<PlatformId>("windows");
   const [winEdition, setWinEdition] = useState<"10" | "11">("11");
   const [engineId, setEngineId] = useState("none");
   const [timezone, setTimezone] = useState("America/Los_Angeles");
-  const [proxyId, setProxyId] = useState<string>("");
+  const [proxyId, setProxyId] = useState("");
   const [copyId, setCopyId] = useState("");
-
-  const catalog = useEnclave((s) => s.searchCatalog) ?? [];
   const [error, setError] = useState("");
+
   const create = () => {
     try {
       if (!name.trim()) {
@@ -255,21 +267,26 @@ function CreateWizard({
         return;
       }
       const store = useEnclave.getState();
-      const plan = planOf(store.settings.plan);
-      if (envCount(store.environments) >= plan.envLimit) {
+      const limits = store.account.limits;
+      if (envCount(store.environments) >= limits.envLimit) {
         onClose();
         store.setPlanNotice({
           title: "环境数量已达上限",
-          body: `当前套餐 ${plan.label} 最多 ${plan.envLimit} 个环境。删除不用的环境，或升级套餐。`,
+          body: `${limits.label} 最多 ${limits.envLimit} 个环境。删掉不用的，或者升级档位。`,
         });
         store.addAudit({
           action: "create_blocked",
           level: "warn",
-          detail: `PLAN_ENV_LIMIT ${plan.label} max ${plan.envLimit}`,
+          detail: `PLAN_ENV_LIMIT ${limits.label} max ${limits.envLimit}`,
         });
         return;
       }
-      if (source === "copy" && copyId) {
+      if (source === "copy") {
+        if (!copyId) {
+          setError(locale === "zh" ? "请选择要复制的环境。" : "Pick an environment to copy.");
+          setStep(1);
+          return;
+        }
         const copy = store.duplicateEnv(copyId);
         if (copy) {
           store.patchEnv(copy.id, { name: name.trim() || copy.name });
@@ -277,13 +294,12 @@ function CreateWizard({
         }
         return;
       }
-      const seed = randomSeed();
       const engine = findEngine(Array.isArray(catalog) ? catalog : [], engineId);
       const env = newEnvironment({
         name: name.trim(),
         group,
         proxyId: proxyId || null,
-        profile: profileFromSeed(seed, platform, {
+        profile: profileFromSeed(randomSeed(), platform, {
           timezone,
           platformVersion: defaultPlatformVersion(platform, winEdition),
         }),
@@ -305,131 +321,143 @@ function CreateWizard({
     }
   };
 
+  const steps = [t(locale, "step1"), t(locale, "step2"), t(locale, "step3")];
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={t(locale, "createTitle")}>
-        <div className="mb-4 flex gap-2 text-[11px] text-subtle">
-          <span className={step === 0 ? "text-ink" : ""}>1 {t(locale, "step1")}</span>
-          <span>/</span>
-          <span className={step === 1 ? "text-ink" : ""}>2 {t(locale, "step2")}</span>
-          <span>/</span>
-          <span className={step === 2 ? "text-ink" : ""}>3 {t(locale, "step3")}</span>
+        <div className="mb-5 flex items-center gap-2">
+          {steps.map((label, i) => (
+            <span
+              key={label}
+              className={
+                i === step
+                  ? "rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-fg"
+                  : "rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-subtle"
+              }
+            >
+              {i + 1} {label}
+            </span>
+          ))}
         </div>
+
         {step === 0 ? (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {(
               [
                 ["blank", t(locale, "blank")],
-                ["exit", t(locale, "fromExit")],
                 ["template", t(locale, "template")],
                 ["copy", t(locale, "fromCopy")],
               ] as const
             ).map(([id, label]) => (
               <button
                 key={id}
+                type="button"
                 onClick={() => setSource(id)}
-                className={`rounded-lg border px-3 py-4 text-left text-sm ${
-                  source === id ? "border-line-strong bg-surface-2" : "border-line bg-canvas"
-                }`}
-                style={{ color: "var(--enclave-ink)" }}
+                className={
+                  source === id
+                    ? "rounded-lg border border-accent bg-surface-2 px-3 py-4 text-left text-sm text-ink"
+                    : "rounded-lg border border-line bg-surface px-3 py-4 text-left text-sm text-muted hover:bg-surface-2"
+                }
               >
                 {label}
               </button>
             ))}
           </div>
         ) : null}
+
         {step === 1 ? (
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             <Field label={t(locale, "name")}>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={locale === "zh" ? "例如 test" : "e.g. test"}
+                placeholder={locale === "zh" ? "例如 shop-us-01" : "e.g. shop-us-01"}
                 required
               />
             </Field>
             <Field label={t(locale, "group")}>
               <Input value={group} onChange={(e) => setGroup(e.target.value)} />
             </Field>
-            <Field label={t(locale, "platform")}>
-              <Select
-                value={platform}
-                onChange={(e) => setPlatform(e.target.value as PlatformId)}
-              >
-                <option value="windows">Windows</option>
-                <option value="macos">macOS</option>
-                <option value="linux">Linux</option>
-              </Select>
-            </Field>
-            {platform === "windows" ? (
-              <Field label={t(locale, "osVersion")}>
-                <Select value={winEdition} onChange={(e) => setWinEdition(e.target.value as "10" | "11")}>
-                  <option value="10">{t(locale, "win10")}</option>
-                  <option value="11">{t(locale, "win11")}</option>
-                </Select>
-              </Field>
-            ) : null}
-            <Field label={t(locale, "searchEngine")}>
-              <Select value={engineId} onChange={(e) => setEngineId(e.target.value)}>
-                <option value="none">{t(locale, "searchEngineNone")}</option>
-                {catalog.map((engine) => (
-                  <option key={engine.id} value={engine.id}>
-                    {engine.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
             {source === "copy" ? (
               <Field label={t(locale, "fromCopy")}>
-                <select
-                  className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
-                  value={copyId}
-                  onChange={(e) => setCopyId(e.target.value)}
-                >
+                <Select value={copyId} onChange={(e) => setCopyId(e.target.value)}>
                   <option value="">—</option>
                   {existing.map((e) => (
                     <option key={e.id} value={e.id}>
                       {e.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </Field>
-            ) : null}
+            ) : (
+              <>
+                <Field label={t(locale, "platform")}>
+                  <Select
+                    value={platform}
+                    onChange={(e) => setPlatform(e.target.value as PlatformId)}
+                  >
+                    <option value="windows">Windows</option>
+                    <option value="macos">macOS</option>
+                    <option value="linux">Linux</option>
+                  </Select>
+                </Field>
+                {platform === "windows" ? (
+                  <Field label={t(locale, "osVersion")} hint={t(locale, "osHint")}>
+                    <Select
+                      value={winEdition}
+                      onChange={(e) => setWinEdition(e.target.value as "10" | "11")}
+                    >
+                      <option value="10">{t(locale, "win10")}</option>
+                      <option value="11">{t(locale, "win11")}</option>
+                    </Select>
+                  </Field>
+                ) : null}
+                <Field label={t(locale, "searchEngine")}>
+                  <Select value={engineId} onChange={(e) => setEngineId(e.target.value)}>
+                    <option value="none">{t(locale, "searchEngineNone")}</option>
+                    {catalog.map((engine) => (
+                      <option key={engine.id} value={engine.id}>
+                        {engine.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </>
+            )}
           </div>
         ) : null}
+
         {step === 2 ? (
-          <div className="grid gap-3">
+          <div className="grid gap-4">
             <Field label={t(locale, "timezone")}>
-              <select
-                className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
-                value={timezone}
-                onChange={(e) => setTimezone(e.target.value)}
-              >
+              <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>
                     {tz}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
-            <Field label={t(locale, "proxy")}>
-              <select
-                className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
-                value={proxyId}
-                onChange={(e) => setProxyId(e.target.value)}
-              >
+            <Field
+              label={t(locale, "proxy")}
+              hint={proxies.length ? undefined : "还没有代理。可以先建环境，之后在网络页加。"}
+            >
+              <Select value={proxyId} onChange={(e) => setProxyId(e.target.value)}>
                 <option value="">{t(locale, "noProxy")}</option>
                 {proxies.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </Field>
           </div>
         ) : null}
-        {error ? <p className="mt-3 text-sm text-bad">{error}</p> : null}
-        <div className="mt-5 flex justify-between">
+
+        {error ? <p className="mt-4 text-[13px] text-bad">{error}</p> : null}
+
+        <div className="mt-6 flex justify-between">
           <Button type="button" onClick={step === 0 ? onClose : () => setStep((s) => s - 1)}>
             {step === 0 ? t(locale, "cancel") : t(locale, "back")}
           </Button>

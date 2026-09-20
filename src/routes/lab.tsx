@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
-import { useLocale } from "@/components/shell";
+import { useLocale } from "@/lib/use-locale";
 import { collectEnvCdp } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { collectPageFingerprint, diffSnaps, snapshotChecks, staticConsistency } from "@/lib/lab";
@@ -38,13 +38,16 @@ function LabPage() {
 
   return (
     <div className="mx-auto max-w-6xl p-4 md:p-6">
-      <h1 className="text-[20px] font-semibold tracking-tight">{t(locale, "labTitle")}</h1>
-      <p className="mt-1 max-w-2xl text-[13px] text-subtle">
-        {t(locale, "hostHeadless")} <span className="font-mono text-[11px]">runtime: native</span>
+      <h1 className="text-[32px] leading-tight font-bold tracking-tight text-ink">
+        {t(locale, "labTitle")}
+      </h1>
+      <p className="mt-2 max-w-[68ch] text-[13px] text-subtle">
+        左边是工作台这一页（对照），右边是真正的内核窗口。两边并排比，就知道这个环境在外面长什么样。
+        内核窗口的数据通过本机调试端口采集，采不到就说采不到，不会拿对照组顶替。
       </p>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-5 flex flex-wrap items-center gap-2">
         <select
-          className="h-8 rounded-md border border-line bg-surface px-2 text-[13px]"
+          className="h-8 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] text-ink"
           value={envId}
           onChange={(e) => setEnvId(e.target.value)}
         >
@@ -83,6 +86,13 @@ function LabPage() {
         </Button>
         <Button
           variant="primary"
+          title={
+            !env
+              ? "先选一个环境"
+              : runtimes[envId]?.status !== "running"
+                ? "这个环境还没运行，先在环境页启动它"
+                : undefined
+          }
           disabled={!env || runtimes[envId]?.status !== "running" || busy}
           onClick={async () => {
             if (!env) return;

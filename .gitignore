@@ -1,34 +1,20 @@
 node_modules/
-.node_modules.lock
 .DS_Store
 .env
 .env.local
 *.log
 
-# Host runtime — kernels are downloaded and verified at runtime
+# 运行时数据：内核在这里下载和校验，永远不进 Git
 data/
 logs/
-.tanstack/
-.vercel/
-.output/
+
+# 构建产物
 dist/
-apps/desktop/src-tauri/frontend/
-.nitro/
-.nitro/
-
-# Sandbox / preview only
-.grok/
-.project_id
-screenshots/
-artifacts/
-attachments/
-tmp/
-AGENTS.md
-AGENTS.project.md
-
-# OS
 /target/
+.cargo-docker/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/binaries/*.exe
 
+# 路由插件生成
+src/routeTree.gen.ts

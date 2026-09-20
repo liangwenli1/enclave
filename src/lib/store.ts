@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { BUILTIN_ENGINES, type CatalogEngine } from "@/lib/engines";
+import { SIGNED_OUT, type AccountState } from "@/lib/license/client";
 import {
   type AppSettings,
   type AuditEvent,
@@ -44,8 +45,10 @@ type Store = {
   locked: boolean;
   selectedIds: string[];
   planNotice: { title: string; body: string } | null;
+  /** 账号与额度。来自厂商签名的许可证，不持久化在这里——见 lib/license/client.ts。 */
+  account: AccountState;
+  setAccount: (account: AccountState) => void;
   setLocale: (locale: AppSettings["locale"]) => void;
-  setTheme: (theme: AppSettings["theme"]) => void;
   setDensity: (density: AppSettings["density"]) => void;
   setLocked: (locked: boolean) => void;
   setPlanNotice: (notice: { title: string; body: string } | null) => void;
@@ -71,14 +74,9 @@ type Store = {
 
 const initialSettings: AppSettings = {
   locale: "zh",
-  theme: "dark",
   density: "compact",
-  masterPasswordSet: false,
-  apiEnabled: false,
-  apiPort: 18765,
-  confirmDangerousApi: true,
   allowNoSandboxHost: false,
-  plan: "free",
+  allowPreviewKernel: false,
   onboarded: false,
 };
 
@@ -96,10 +94,10 @@ export const useEnclave = create<Store>()(
       locked: false,
       selectedIds: [],
       planNotice: null,
+      account: SIGNED_OUT,
+      setAccount: (account) => set({ account }),
       setLocale: (locale) =>
         set((s) => ({ settings: { ...s.settings, locale } })),
-      setTheme: (theme) =>
-        set((s) => ({ settings: { ...s.settings, theme } })),
       setDensity: (density) =>
         set((s) => ({ settings: { ...s.settings, density } })),
       setLocked: (locked) => set({ locked }),

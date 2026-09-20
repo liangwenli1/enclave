@@ -1,66 +1,88 @@
-import { collectCdpFn, getKernelStatusFn, startEnvFn, stopEnvFn } from "@/lib/kernel/functions";
-import { planOf, runningCount } from "@/lib/license";
+import {
+  collectCdp,
+  getKernelView,
+  startEnvironment,
+  stopEnvironment,
+} from "@/lib/kernel/host-api";
+import { runningCount } from "@/lib/license/plans";
 import type { Environment, ProxyItem } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
+import { getSecret, vaultUnlocked } from "@/lib/vault";
 
+/**
+ * 代理地址。密码来自保险箱，保险箱锁着就拿不到 —— 这时宁可报错，
+ * 也不会静默地用一个没有密码的代理去连（那会直接以本机 IP 出网）。
+ */
 export function proxyUrl(proxy: ProxyItem | undefined): string | undefined {
   if (!proxy) return undefined;
-  if (proxy.auth?.username) {
-    const pass = encodeURIComponent(proxy.auth.password ?? "");
-    const user = encodeURIComponent(proxy.auth.username);
-    return `${proxy.protocol}://${user}:${pass}@${proxy.host}:${proxy.port}`;
-  }
-  return `${proxy.protocol}://${proxy.host}:${proxy.port}`;
+  if (!proxy.auth?.username) return `${proxy.protocol}://${proxy.host}:${proxy.port}`;
+  const user = encodeURIComponent(proxy.auth.username);
+  const pass = encodeURIComponent(getSecret(`proxy:${proxy.id}`) ?? "");
+  return `${proxy.protocol}://${user}:${pass}@${proxy.host}:${proxy.port}`;
+}
+
+function failRuntime(envId: string, error: string, hashOk = true) {
+  useEnclave.getState().setRuntime(envId, {
+    envId,
+    pid: null,
+    debugPort: null,
+    debugAddress: "127.0.0.1",
+    status: "error",
+    startedAt: null,
+    hashOk,
+    error,
+  });
 }
 
 export async function startEnv(env: Environment) {
   const store = useEnclave.getState();
-  const plan = planOf(store.settings.plan);
-  if (runningCount(store.runtimes) >= plan.concurrent && store.runtimes[env.id]?.status !== "running") {
+  const limits = store.account.limits;
+
+  // 1. 档位：同时运行数
+  const alreadyRunning = store.runtimes[env.id]?.status === "running";
+  if (!alreadyRunning && runningCount(store.runtimes) >= limits.concurrent) {
     const code = "PLAN_CONCURRENT_LIMIT";
-    store.setRuntime(env.id, {
-      envId: env.id,
-      pid: null,
-      debugPort: null,
-      debugAddress: "127.0.0.1",
-      status: "error",
-      startedAt: null,
-      hashOk: true,
-      error: "PLAN_CONCURRENT_LIMIT",
-    });
+    failRuntime(env.id, code);
     store.setPlanNotice({
       title: "同时运行已达上限",
-      body: `当前套餐 ${plan.label} 最多同时运行 ${plan.concurrent} 个环境。先停止正在运行的环境，或升级套餐。`,
+      body: `${limits.label} 最多同时运行 ${limits.concurrent} 个环境。先停掉一个正在运行的环境，或者升级档位。`,
     });
     store.addAudit({
       action: "start_blocked",
       target: env.id,
       level: "warn",
-      detail: `${code} ${plan.label} max ${plan.concurrent}`,
+      detail: `${code} ${limits.label} max ${limits.concurrent}`,
     });
-    return { ok: false as const, code, message: `${plan.label} concurrent limit ${plan.concurrent}` };
+    return { ok: false as const, code, message: `${limits.label} 同时运行上限 ${limits.concurrent}` };
   }
-  const kernel = await getKernelStatusFn();
-  if (kernel.status.state !== "admitted") {
-    store.setRuntime(env.id, {
-      envId: env.id,
-      pid: null,
-      debugPort: null,
-      debugAddress: "127.0.0.1",
-      status: "error",
-      startedAt: null,
-      hashOk: false,
-      error: "KERNEL_UNTRUSTED_SOURCE",
-    });
-    store.addAudit({
-      action: "start_blocked",
-      target: env.id,
-      level: "bad",
-      detail: "Kernel not admitted",
-    });
-    return { ok: false as const, code: "KERNEL_UNTRUSTED_SOURCE", message: "Kernel not admitted" };
-  }
+
+  // 2. 代理密码：保险箱锁着就先解锁，别让用户以为在走代理
   const proxy = store.proxies.find((p) => p.id === env.proxyId);
+  if (proxy?.auth?.hasPassword && !vaultUnlocked()) {
+    const code = "VAULT_LOCKED";
+    failRuntime(env.id, code);
+    store.setPlanNotice({
+      title: "保险箱是锁着的",
+      body: `环境「${env.name}」绑定的代理需要密码，密码在保险箱里。先解锁保险箱再启动，否则这个环境会用你本机的网络出网。`,
+    });
+    return { ok: false as const, code, message: "代理密码在锁着的保险箱里" };
+  }
+
+  // 3. 内核必须已准入
+  const view = await getKernelView();
+  if (!view.online) {
+    const code = "HOST_UNAVAILABLE";
+    failRuntime(env.id, code, true);
+    store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: code });
+    return { ok: false as const, code, message: "连不上本机服务" };
+  }
+  if (view.status.state !== "admitted") {
+    const code = "KERNEL_UNTRUSTED_SOURCE";
+    failRuntime(env.id, code, false);
+    store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: "内核未准入" });
+    return { ok: false as const, code, message: "内核还没准入" };
+  }
+
   store.setRuntime(env.id, {
     envId: env.id,
     pid: null,
@@ -70,35 +92,29 @@ export async function startEnv(env: Environment) {
     startedAt: Date.now(),
     hashOk: true,
   });
-  store.patchEnv(env.id, {}, {
-    at: Date.now(),
-    kind: "start",
-    message: "Start requested",
-    level: "info",
+  store.patchEnv(env.id, {}, { at: Date.now(), kind: "start", message: "已请求启动", level: "info" });
+
+  // 环境勾选的扩展：内核只能加载解压后的文件夹，添加时已经挡掉 .crx。
+  const extensionPaths = env.extensionIds
+    .map((id) => store.extensions.find((x) => x.id === id)?.path)
+    .filter((p): p is string => Boolean(p));
+  const extraFlags = extensionPaths.length
+    ? [...env.extraFlags, `--load-extension=${extensionPaths.join(",")}`]
+    : env.extraFlags;
+
+  const result = await startEnvironment({
+    envId: env.id,
+    profile: env.profile,
+    extraFlags,
+    allowNoSandbox: env.allowNoSandbox || store.settings.allowNoSandboxHost,
+    allowPreviewChannel: store.settings.allowPreviewKernel,
+    proxyServer: proxyUrl(proxy),
+    searchEngine: env.searchEngine ?? "none",
+    searchProvider: env.searchProvider,
   });
-  const allowNoSandbox = env.allowNoSandbox || store.settings.allowNoSandboxHost;
-  const result = await startEnvFn({
-    data: {
-      envId: env.id,
-      profile: env.profile,
-      extraFlags: env.extraFlags,
-      allowNoSandbox,
-      proxyServer: proxyUrl(proxy),
-      searchEngine: env.searchEngine ?? "none",
-      searchProvider: env.searchProvider,
-    },
-  });
+
   if (!result.ok) {
-    store.setRuntime(env.id, {
-      envId: env.id,
-      pid: null,
-      debugPort: null,
-      debugAddress: "127.0.0.1",
-      status: "error",
-      startedAt: null,
-      hashOk: result.code !== "KERNEL_HASH_MISMATCH",
-      error: result.message,
-    });
+    failRuntime(env.id, result.message, result.code !== "KERNEL_HASH_MISMATCH");
     store.addAudit({
       action: "start_failed",
       target: env.id,
@@ -108,11 +124,12 @@ export async function startEnv(env: Environment) {
     store.patchEnv(env.id, {}, {
       at: Date.now(),
       kind: "start_failed",
-      message: result.message,
+      message: `${result.code}: ${result.message}`,
       level: "bad",
     });
     return result;
   }
+
   store.setRuntime(env.id, {
     envId: env.id,
     pid: result.pid,
@@ -131,9 +148,7 @@ export async function startEnv(env: Environment) {
   });
   store.patchEnv(
     env.id,
-    {
-      lastIntegrity: { at: Date.now(), ok: true },
-    },
+    { lastIntegrity: { at: Date.now(), ok: true } },
     {
       at: Date.now(),
       kind: "running",
@@ -145,19 +160,10 @@ export async function startEnv(env: Environment) {
 }
 
 export async function stopEnv(envId: string) {
-  try {
-    await stopEnvFn({ data: { envId } });
-  } catch {
-    /* host down */
-  }
+  await stopEnvironment(envId);
   const store = useEnclave.getState();
   store.setRuntime(envId, null);
-  store.patchEnv(envId, {}, {
-    at: Date.now(),
-    kind: "stop",
-    message: "Stopped",
-    level: "info",
-  });
+  store.patchEnv(envId, {}, { at: Date.now(), kind: "stop", message: "已停止", level: "info" });
   store.addAudit({ action: "stop", target: envId, level: "info", detail: "stopped" });
 }
 
@@ -172,7 +178,7 @@ export async function purgeEnv(envId: string) {
 }
 
 export async function collectEnvCdp(envId: string) {
-  const snap = await collectCdpFn({ data: { envId } });
+  const snap = await collectCdp(envId);
   useEnclave.getState().setEnvSnap(envId, snap);
   return snap;
 }

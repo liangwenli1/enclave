@@ -1,118 +1,128 @@
-import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Button, Panel } from "@/components/ui";
-import { startKernelDownloadFn, getKernelStatusFn } from "@/lib/kernel/functions";
-import { t } from "@/lib/i18n";
-import { PLANS, type PlanId } from "@/lib/license";
+import { useState } from "react";
+import { Badge, Button, Panel } from "@/components/ui";
+import { admitKernel, getKernelView } from "@/lib/kernel/host-api";
+import { t, type Locale } from "@/lib/i18n";
 import { KERNEL_PIN, newEnvironment, profileFromSeed, randomSeed } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
-import type { Locale } from "@/lib/i18n";
 
+/**
+ * 首次引导。三步，每一步都是用户真的要做的事：
+ * 知道内核在哪跑 → 准入内核 → 建第一个环境。
+ * 这里不选档位 —— 档位只能来自厂商签发的许可证。
+ */
 export function Onboarding() {
   const locale = useEnclave((s) => s.settings.locale) as Locale;
+  const allowPreview = useEnclave((s) => s.settings.allowPreviewKernel);
+  const onboarded = useEnclave((s) => s.settings.onboarded);
   const navigate = useNavigate();
-  const settings = useEnclave((s) => s.settings);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [kernelState, setKernelState] = useState("…");
+  const [error, setError] = useState<string | null>(null);
+  const [admitted, setAdmitted] = useState(false);
 
-  if (settings.onboarded) return null;
+  if (onboarded) return null;
 
   const finish = () => {
     useEnclave.getState().patchSettings({ onboarded: true });
-    void navigate({ to: "/lab" });
+  };
+
+  const admit = async () => {
+    setBusy(true);
+    setError(null);
+    const res = (await admitKernel(allowPreview)) as { code?: string; message?: string };
+    if (res?.code === "KERNEL_CHANNEL_BLOCKED") {
+      setError("这个平台的内核还在预览通道，需要先到安全中心同意使用。");
+      setBusy(false);
+      return;
+    }
+    // 下载是后台进行的，这里轮询到准入或出错为止。
+    for (let i = 0; i < 600; i += 1) {
+      const view = await getKernelView();
+      if (view.status.state === "admitted") {
+        setAdmitted(true);
+        break;
+      }
+      if (view.status.state === "hash_mismatch" || view.status.state === "error") {
+        setError(view.status.error ?? "内核准入失败，去内核页看看详情。");
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    setBusy(false);
   };
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-canvas/90 p-4">
-      <Panel className="w-full max-w-lg p-5">
-        <div className="text-[11px] uppercase tracking-wide text-subtle">
+    <div className="fixed inset-0 z-40 grid place-items-center bg-canvas p-4">
+      <Panel className="w-full max-w-lg p-6">
+        <div className="text-xs font-semibold tracking-[1.5px] text-subtle uppercase">
           {t(locale, "onboard")} · {step + 1}/3
         </div>
-        <h2 className="mt-1 text-[18px] font-semibold tracking-tight">{t(locale, "onboardTitle")}</h2>
+        <h2 className="mt-2 text-2xl font-bold tracking-tight text-ink">
+          {t(locale, "onboardTitle")}
+        </h2>
+
         {step === 0 ? (
-          <div className="mt-4 grid gap-2">
-            <p className="text-[13px] text-subtle">{t(locale, "onboardPlanHint")}</p>
-            {(Object.keys(PLANS) as PlanId[]).map((id) => {
-              const p = PLANS[id];
-              const active = settings.plan === id;
-              return (
-                <button
-                  key={id}
-                  onClick={() => useEnclave.getState().patchSettings({ plan: id })}
-                  className={`rounded-lg border px-3 py-2 text-left ${active ? "border-accent bg-surface-2" : "border-line"}`}
-                >
-                  <div className="text-[13px] font-medium">{p.label}</div>
-                  <div className="text-[11px] text-subtle">
-                    {p.envLimit} env · {p.concurrent} concurrent · API {p.api}
-                  </div>
-                </button>
-              );
-            })}
+          <div className="mt-5 grid gap-3 text-[13px] leading-relaxed text-muted">
+            <p>
+              Enclave 在<span className="text-ink">你这台电脑上</span>启动独立的浏览器内核。
+              每个环境有自己的 Cookie、指纹和出口，互不串数据。
+            </p>
+            <p>
+              内核不在安装包里：下一步会按清单下载并校验哈希，大约 190 MB，只下一次。
+              之后每次启动环境，都会重新核对磁盘上那个要执行的文件。
+            </p>
           </div>
         ) : null}
+
         {step === 1 ? (
-          <div className="mt-4 grid gap-3">
-            <p className="text-[13px] text-subtle">{t(locale, "kernelNeed")}</p>
-            <div className="font-mono text-[12px] text-muted">{kernelState}</div>
-            {err ? <div className="text-[12px] text-bad">{err}</div> : null}
-            <Button
-              variant="primary"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setErr(null);
-                try {
-                  await startKernelDownloadFn();
-                  const d = await getKernelStatusFn();
-                  setKernelState(d.status.state);
-                  if (d.status.state !== "admitted" && d.status.state !== "downloading") {
-                    setErr(d.status.error ?? d.status.state);
-                  }
-                } catch (e) {
-                  setErr(e instanceof Error ? e.message : String(e));
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              {t(locale, "download")}
-            </Button>
+          <div className="mt-5 grid gap-4">
+            <p className="text-[13px] leading-relaxed text-muted">{t(locale, "kernelNeed")}</p>
+            {admitted ? <Badge tone="ok">已准入</Badge> : null}
+            {error ? <p className="text-[13px] text-bad">{error}</p> : null}
+            <div>
+              <Button variant="primary" disabled={busy || admitted} onClick={() => void admit()}>
+                {busy ? "下载并校验中…" : admitted ? "已完成" : t(locale, "download")}
+              </Button>
+            </div>
           </div>
         ) : null}
+
         {step === 2 ? (
-          <div className="mt-4 grid gap-3">
-            <p className="text-[13px] text-subtle">{t(locale, "onboardSample")}</p>
-            <Button
-              variant="primary"
-              onClick={() => {
-                const store = useEnclave.getState();
-                if (store.environments.filter((e) => !e.deletedAt).length === 0) {
-                  const env = newEnvironment({
-                    name: locale === "zh" ? "样例 · 结账" : "Sample · checkout",
-                    group: "sample",
-                    profile: profileFromSeed(randomSeed(), "windows"),
-                    kernelPin: KERNEL_PIN,
-                  });
-                  store.upsertEnv(env);
-                  store.addAudit({ action: "create_env", target: env.id, level: "info", detail: "onboarding sample" });
-                }
-                finish();
-              }}
-            >
-              {t(locale, "onboardGoLab")}
-            </Button>
+          <div className="mt-5 grid gap-4">
+            <p className="text-[13px] leading-relaxed text-muted">{t(locale, "onboardSample")}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="primary"
+                onClick={() => {
+                  const store = useEnclave.getState();
+                  if (store.environments.filter((e) => !e.deletedAt).length === 0) {
+                    const env = newEnvironment({
+                      name: locale === "zh" ? "第一个环境" : "First environment",
+                      group: "default",
+                      profile: profileFromSeed(randomSeed(), "windows"),
+                      kernelPin: KERNEL_PIN,
+                    });
+                    store.upsertEnv(env);
+                    store.addAudit({
+                      action: "create_env",
+                      target: env.id,
+                      level: "info",
+                      detail: "引导创建",
+                    });
+                  }
+                  finish();
+                  void navigate({ to: "/" });
+                }}
+              >
+                建一个环境
+              </Button>
+            </div>
           </div>
         ) : null}
-        <div className="mt-5 flex justify-between">
-          <Button
-            onClick={() => {
-              useEnclave.getState().patchSettings({ onboarded: true });
-            }}
-          >
-            {t(locale, "onboardSkip")}
-          </Button>
+
+        <div className="mt-6 flex justify-between">
+          <Button onClick={finish}>{t(locale, "onboardSkip")}</Button>
           {step < 2 ? (
             <Button variant="primary" onClick={() => setStep((s) => s + 1)}>
               {t(locale, "next")}

@@ -2,25 +2,34 @@ import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cva, type VariantProps } from "class-variance-authority";
-import { X } from "lucide-react";
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { Check, Copy, X } from "lucide-react";
+import { useState } from "react";
+import type {
+  ButtonHTMLAttributes,
+  InputHTMLAttributes,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from "react";
 import { cn } from "@/lib/cn";
 
+/* 组件规格见 DESIGN.md 第 4 节。主色 #faff69 只给主操作，一屏一个。 */
+
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 rounded-md font-medium select-none transition-[opacity,transform,background-color] duration-150 disabled:pointer-events-none disabled:opacity-40 active:scale-[0.98]",
+  "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold select-none transition-colors duration-150 disabled:pointer-events-none",
   {
     variants: {
       variant: {
-        primary: "bg-accent text-accent-fg hover:opacity-90",
+        primary: "bg-accent text-accent-fg hover:bg-[#e6eb52] disabled:bg-accent-dim disabled:text-subtle",
         secondary:
-          "bg-surface-2 text-ink border border-line hover:bg-surface-3",
-        ghost: "text-muted hover:bg-surface-2 hover:text-ink",
-        danger: "bg-bad/15 text-bad border border-bad/30 hover:bg-bad/25",
+          "bg-surface text-ink border border-line hover:bg-surface-2 disabled:text-faint disabled:hover:bg-surface",
+        ghost: "text-muted hover:bg-surface hover:text-ink disabled:text-faint",
+        danger: "text-bad border border-bad/40 hover:bg-bad/10 disabled:text-faint",
       },
       size: {
-        sm: "h-9 px-3 text-sm",
-        md: "h-10 px-4 text-sm",
-        icon: "size-10 p-0",
+        sm: "h-8 px-3 text-[13px]",
+        md: "h-10 px-5 text-sm",
+        icon: "size-8 p-0",
       },
     },
     defaultVariants: { variant: "secondary", size: "sm" },
@@ -36,68 +45,56 @@ export function Button({
   return <button className={cn(buttonVariants({ variant, size }), className)} {...props} />;
 }
 
+const fieldBase =
+  "h-10 w-full rounded-md border border-line-strong bg-surface px-3.5 text-sm text-ink placeholder:text-faint " +
+  "focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
+
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select
-      className={cn(
-        "h-10 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink",
-        className,
-      )}
-      {...props}
-    >
+    <select className={cn(fieldBase, className)} {...props}>
       {children}
     </select>
   );
 }
 
 export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      className={cn(
-        "h-10 w-full rounded-md border border-line bg-surface px-3 text-sm text-ink placeholder:text-subtle",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <input className={cn(fieldBase, className)} {...props} />;
 }
 
 export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
     <textarea
-      className={cn(
-        "min-h-20 w-full rounded-md border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-subtle",
-        className,
-      )}
+      className={cn(fieldBase, "min-h-20 py-2.5 leading-relaxed", className)}
       {...props}
     />
   );
 }
 
+/** 状态徽章。颜色只表示状态，永远配文字，不靠颜色单独传达信息。 */
 export function Badge({
   className,
   tone = "neutral",
   children,
 }: {
   className?: string;
-  tone?: "neutral" | "ok" | "warn" | "bad" | "run";
+  tone?: "neutral" | "ok" | "warn" | "bad";
   children: ReactNode;
 }) {
   const tones = {
-    neutral: "text-subtle bg-surface-2 border-line",
-    ok: "text-ok bg-ok/10 border-ok/25",
-    warn: "text-warn bg-warn/10 border-warn/25",
-    bad: "text-bad bg-bad/10 border-bad/25",
-    run: "text-ink bg-accent/10 border-line-strong",
+    neutral: "text-subtle",
+    ok: "text-ok",
+    warn: "text-warn",
+    bad: "text-bad",
   };
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium tabular-nums",
+        "inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-0.5 text-xs font-medium whitespace-nowrap",
         tones[tone],
         className,
       )}
     >
+      <span className="size-1.5 rounded-full bg-current" />
       {children}
     </span>
   );
@@ -105,16 +102,102 @@ export function Badge({
 
 export function Field({
   label,
+  hint,
+  error,
   children,
 }: {
   label: string;
+  hint?: string;
+  error?: string;
   children: ReactNode;
 }) {
   return (
-    <label className="grid gap-2 text-sm text-subtle">
-      <span className="tracking-wide">{label}</span>
+    <label className="grid gap-2 text-sm">
+      <span className="font-medium text-muted">{label}</span>
       {children}
+      {error ? <span className="text-[13px] text-bad">{error}</span> : null}
+      {!error && hint ? <span className="text-[13px] text-subtle">{hint}</span> : null}
     </label>
+  );
+}
+
+/** 页面标题 + 一行状态。每个页面顶部都用它，保持节奏一致。 */
+export function PageHeader({
+  title,
+  status,
+  actions,
+}: {
+  title: string;
+  status?: ReactNode;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 className="text-[32px] leading-tight font-bold tracking-tight">{title}</h1>
+        {status ? <div className="mt-2 text-[13px] text-subtle">{status}</div> : null}
+      </div>
+      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+    </header>
+  );
+}
+
+/** 空状态：一句说明 + 一个下一步。没有下一步的空页不允许存在。 */
+export function Empty({
+  icon,
+  title,
+  body,
+  action,
+}: {
+  icon?: ReactNode;
+  title: string;
+  body: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="grid place-items-center gap-3 px-6 py-16 text-center">
+      {icon ? <div className="text-faint">{icon}</div> : null}
+      <div className="text-base font-semibold text-ink">{title}</div>
+      <p className="max-w-[46ch] text-[13px] text-subtle">{body}</p>
+      {action ? <div className="mt-1">{action}</div> : null}
+    </div>
+  );
+}
+
+/** 哈希 / 路径 / 原因码块，右上角常驻复制。工作台的招牌元素。 */
+export function CodeBlock({
+  label,
+  value,
+  className,
+}: {
+  label?: string;
+  value: string;
+  className?: string;
+}) {
+  const [done, setDone] = useState(false);
+  return (
+    <div className={cn("relative rounded-lg border border-line bg-surface p-4 pr-24", className)}>
+      {label ? (
+        <div className="mb-2 text-xs font-semibold tracking-[1.5px] text-subtle uppercase">{label}</div>
+      ) : null}
+      <code className="block font-mono text-[13px] leading-relaxed break-all text-muted">{value}</code>
+      <button
+        type="button"
+        className={cn(
+          "absolute top-3 right-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface-2 px-3 text-xs font-semibold transition-colors",
+          done ? "text-ok" : "text-muted hover:bg-accent hover:text-accent-fg",
+        )}
+        onClick={() => {
+          void navigator.clipboard.writeText(value).then(() => {
+            setDone(true);
+            setTimeout(() => setDone(false), 1600);
+          });
+        }}
+      >
+        {done ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
+        {done ? "已复制" : "复制"}
+      </button>
+    </div>
   );
 }
 
@@ -132,24 +215,19 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
       <DialogPrimitive.Content
         className={cn(
-          "enclave-dialog fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-line p-5 shadow-panel",
+          "enclave-dialog fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line p-6",
           className,
         )}
-        style={{ color: "var(--enclave-ink)", background: "var(--enclave-surface)" }}
       >
         {title ? (
-          <div className="mb-4 flex items-center justify-between">
-            <DialogPrimitive.Title
-              data-dialog-title
-              className="text-base font-semibold tracking-tight"
-              style={{ color: "inherit" }}
-            >
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <DialogPrimitive.Title className="text-lg font-bold tracking-tight text-ink">
               {title}
             </DialogPrimitive.Title>
-            <DialogPrimitive.Close className="grid size-8 place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-ink">
+            <DialogPrimitive.Close className="grid size-8 flex-none place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-ink">
               <X className="size-4" />
             </DialogPrimitive.Close>
           </div>
@@ -176,7 +254,8 @@ export function MenuContent({
     <DropdownMenuPrimitive.Portal>
       <DropdownMenuPrimitive.Content
         align={align}
-        className="z-50 min-w-40 rounded-lg border border-line bg-surface p-1 shadow-panel"
+        sideOffset={6}
+        className="z-50 min-w-44 rounded-lg border border-line bg-surface p-1"
       >
         {children}
       </DropdownMenuPrimitive.Content>
@@ -188,17 +267,20 @@ export function MenuItem({
   children,
   onSelect,
   danger,
+  disabled,
 }: {
   children: ReactNode;
   onSelect?: () => void;
   danger?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <DropdownMenuPrimitive.Item
       onSelect={onSelect}
+      disabled={disabled}
       className={cn(
-        "flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] outline-none",
-        danger ? "text-bad hover:bg-bad/10" : "text-ink hover:bg-surface-2",
+        "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-[13px] outline-none data-[disabled]:cursor-not-allowed data-[disabled]:text-faint",
+        danger ? "text-bad hover:bg-bad/10" : "text-muted hover:bg-surface-2 hover:text-ink",
       )}
     >
       {children}
@@ -206,13 +288,7 @@ export function MenuItem({
   );
 }
 
-export function Tooltip({
-  content,
-  children,
-}: {
-  content: string;
-  children: ReactNode;
-}) {
+export function Tooltip({ content, children }: { content: string; children: ReactNode }) {
   return (
     <TooltipPrimitive.Provider delayDuration={200}>
       <TooltipPrimitive.Root>
@@ -220,7 +296,7 @@ export function Tooltip({
         <TooltipPrimitive.Portal>
           <TooltipPrimitive.Content
             sideOffset={6}
-            className="z-50 rounded-md border border-line bg-surface-2 px-2 py-1 text-[11px] text-muted"
+            className="z-50 max-w-[42ch] rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-xs text-muted"
           >
             {content}
           </TooltipPrimitive.Content>
@@ -230,27 +306,40 @@ export function Tooltip({
   );
 }
 
-export function Panel({
-  className,
-  children,
-}: {
-  className?: string;
-  children: ReactNode;
-}) {
+export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <section className={cn("rounded-2xl border border-line bg-surface", className)}>
+    <section className={cn("rounded-lg border border-line bg-surface", className)}>
       {children}
     </section>
   );
 }
 
-export function StatusDot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" | "run" }) {
+export function PanelHeader({
+  title,
+  hint,
+  actions,
+}: {
+  title: string;
+  hint?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+      <div>
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
+        {hint ? <p className="mt-0.5 text-[13px] text-subtle">{hint}</p> : null}
+      </div>
+      {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function StatusDot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" }) {
   const color = {
     ok: "bg-ok",
     warn: "bg-warn",
     bad: "bg-bad",
-    idle: "bg-subtle",
-    run: "bg-ok",
+    idle: "bg-faint",
   }[tone];
-  return <span className={cn("inline-block size-1.5 rounded-full", color)} />;
+  return <span className={cn("inline-block size-1.5 flex-none rounded-full", color)} />;
 }

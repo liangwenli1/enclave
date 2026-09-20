@@ -1,76 +1,118 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import { Badge, Button, Dialog, DialogContent, Field, Input, Panel } from "@/components/ui";
-import { useLocale } from "@/components/shell";
-import { probeProxyFn } from "@/lib/kernel/functions";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { Globe } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  Empty,
+  Field,
+  Input,
+  Panel,
+  Select,
+} from "@/components/ui";
+import { PageHeader } from "@/components/ui";
+import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { makeId, type ProxyItem } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
+import { putSecret, removeSecret, subscribeVault, vaultExists, vaultUnlocked } from "@/lib/vault";
 
 export const Route = createFileRoute("/network")({ component: NetworkPage });
 
 function NetworkPage() {
   const locale = useLocale();
   const proxies = useEnclave((s) => s.proxies);
+  const environments = useEnclave((s) => s.environments);
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-5xl p-4 md:p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-[20px] font-semibold tracking-tight">{t(locale, "netTitle")}</h1>
-          <p className="mt-1 text-[13px] text-subtle">{t(locale, "passwordStored")}</p>
-        </div>
-        <Button variant="primary" onClick={() => setOpen(true)}>
-          {t(locale, "addProxy")}
-        </Button>
-      </div>
-      <div className="grid gap-2">
+    <div className="mx-auto max-w-4xl px-8 py-6">
+      <PageHeader
+        title={t(locale, "netTitle")}
+        status="代理绑定到环境后，内核启动时会同时关掉 QUIC 和 DoH，避免绕过代理直连。"
+        actions={
+          <Button variant="primary" onClick={() => setOpen(true)}>
+            {t(locale, "addProxy")}
+          </Button>
+        }
+      />
+
+      <Panel className="overflow-hidden">
         {proxies.length === 0 ? (
-          <Panel className="p-8 text-center text-[13px] text-subtle">{t(locale, "none")}</Panel>
+          <Empty
+            icon={<Globe className="size-8" />}
+            title="还没有代理"
+            body="添加 HTTP / HTTPS / SOCKS5 代理，然后在环境详情里绑定。不绑代理的环境走你本机的网络。"
+            action={
+              <Button variant="primary" onClick={() => setOpen(true)}>
+                {t(locale, "addProxy")}
+              </Button>
+            }
+          />
         ) : (
-          proxies.map((p) => (
-            <Panel key={p.id} className="flex flex-wrap items-center justify-between gap-3 p-4">
-              <div>
-                <div className="font-medium">{p.name}</div>
-                <div className="font-mono text-[12px] text-subtle">
-                  {p.protocol}://{p.host}:{p.port}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {p.lastProbe ? (
-                  <Badge tone={p.lastProbe.ok ? "ok" : "bad"}>
-                    {p.lastProbe.ok ? t(locale, "probeOk") : t(locale, "probeFail")}
-                    {p.lastProbe.exitIp ? ` · ${p.lastProbe.exitIp}` : ""}
-                  </Badge>
-                ) : null}
-                <Button
-                  onClick={async () => {
-                    const res = await probeProxyFn({
-                      data: { protocol: p.protocol, host: p.host, port: p.port },
-                    });
-                    useEnclave.getState().upsertProxy({
-                      ...p,
-                      lastProbe: {
-                        at: Date.now(),
-                        ok: res.ok,
-                        latencyMs: res.latencyMs,
-                        exitIp: "exitIp" in res ? res.exitIp : undefined,
-                        error: "error" in res ? res.error : undefined,
-                      },
-                    });
-                  }}
-                >
-                  {t(locale, "probe")}
-                </Button>
-                <Button variant="danger" onClick={() => useEnclave.getState().removeProxy(p.id)}>
-                  {t(locale, "delete")}
-                </Button>
-              </div>
-            </Panel>
-          ))
+          <div className="overflow-x-auto">
+            <table className="app-table min-w-[720px]">
+              <thead>
+                <tr>
+                  <th>{t(locale, "name")}</th>
+                  <th>地址</th>
+                  <th>认证</th>
+                  <th>被使用</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {proxies.map((p) => {
+                  const used = environments.filter((e) => !e.deletedAt && e.proxyId === p.id).length;
+                  return (
+                    <tr key={p.id}>
+                      <td>
+                        <div className="font-medium text-ink">{p.name}</div>
+                        {p.country ? <div className="text-xs text-subtle">{p.country}</div> : null}
+                      </td>
+                      <td className="app-mono text-xs">
+                        {p.protocol}://{p.host}:{p.port}
+                      </td>
+                      <td>
+                        {p.auth?.username ? (
+                          <Badge tone={p.auth.hasPassword ? "ok" : "warn"}>
+                            {p.auth.hasPassword ? `${p.auth.username} · 密码已保存` : `${p.auth.username} · 没有密码`}
+                          </Badge>
+                        ) : (
+                          <span className="text-subtle">不需要</span>
+                        )}
+                      </td>
+                      <td className="text-subtle">{used ? `${used} 个环境` : "未使用"}</td>
+                      <td>
+                        <div className="flex justify-end">
+                          <Button
+                            variant="danger"
+                            onClick={() => {
+                              void removeSecret(`proxy:${p.id}`);
+                              useEnclave.getState().removeProxy(p.id);
+                            }}
+                            title={used ? "删除后这些环境会退回用本机网络出网" : undefined}
+                          >
+                            {t(locale, "delete")}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
+      </Panel>
+
+      <p className="mt-4 max-w-[68ch] text-[13px] leading-relaxed text-subtle">
+        工作台不会替你去探测代理的出口 IP —— 那样探到的是本机网络，不是环境真正的出口，容易看错。
+        要确认出口，启动环境后在那个窗口里打开查 IP 的网站。
+      </p>
+
       {open ? <ProxyDialog onClose={() => setOpen(false)} /> : null}
     </div>
   );
@@ -87,27 +129,83 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
     password: "",
     country: "",
   });
+  const [error, setError] = useState("");
+  const [vault, setVault] = useState({ exists: false, unlocked: false });
+
+  useEffect(() => {
+    const sync = () => setVault({ exists: vaultExists(), unlocked: vaultUnlocked() });
+    sync();
+    return subscribeVault(sync);
+  }, []);
+
+  const canStorePassword = vault.exists && vault.unlocked;
+
+  const save = async () => {
+    setError("");
+    if (!draft.host.trim()) {
+      setError("请填写代理地址。");
+      return;
+    }
+    if (draft.password && !canStorePassword) {
+      setError(
+        vault.exists
+          ? "保险箱是锁着的，先解锁再保存带密码的代理。"
+          : "要保存代理密码，得先在设置页设一个主密码。密码只会以密文存在本机。",
+      );
+      return;
+    }
+    const id = makeId("prx");
+    if (draft.password) await putSecret(`proxy:${id}`, draft.password);
+    useEnclave.getState().upsertProxy({
+      id,
+      name: draft.name.trim() || `${draft.host}:${draft.port}`,
+      protocol: draft.protocol,
+      host: draft.host.trim(),
+      port: draft.port,
+      country: draft.country || undefined,
+      auth: draft.username
+        ? { username: draft.username.trim(), hasPassword: Boolean(draft.password) }
+        : undefined,
+    });
+    useEnclave.getState().addAudit({
+      action: "proxy_add",
+      target: id,
+      level: "info",
+      detail: `${draft.protocol}://${draft.host}:${draft.port}${draft.password ? " · 密码存入保险箱" : ""}`,
+    });
+    onClose();
+  };
+
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={t(locale, "addProxy")}>
-        <div className="grid gap-3">
+        <div className="grid gap-4">
           <Field label={t(locale, "name")}>
-            <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+            <Input
+              value={draft.name}
+              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+              placeholder="留空就用地址"
+            />
           </Field>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-[1fr_2fr_1fr] gap-3">
             <Field label={t(locale, "protocol")}>
-              <select
-                className="h-8 w-full rounded-md border border-line bg-surface px-2 text-[13px]"
+              <Select
                 value={draft.protocol}
-                onChange={(e) => setDraft({ ...draft, protocol: e.target.value as ProxyItem["protocol"] })}
+                onChange={(e) =>
+                  setDraft({ ...draft, protocol: e.target.value as ProxyItem["protocol"] })
+                }
               >
                 <option value="http">HTTP</option>
                 <option value="https">HTTPS</option>
                 <option value="socks5">SOCKS5</option>
-              </select>
+              </Select>
             </Field>
             <Field label={t(locale, "host")}>
-              <Input value={draft.host} onChange={(e) => setDraft({ ...draft, host: e.target.value })} />
+              <Input
+                value={draft.host}
+                onChange={(e) => setDraft({ ...draft, host: e.target.value })}
+                placeholder="proxy.example.com"
+              />
             </Field>
             <Field label={t(locale, "port")}>
               <Input
@@ -117,17 +215,35 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               />
             </Field>
           </div>
-          <Field label={t(locale, "username")}>
-            <Input value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })} />
+          <Field label={t(locale, "username")} hint="不需要认证就留空">
+            <Input
+              value={draft.username}
+              onChange={(e) => setDraft({ ...draft, username: e.target.value })}
+            />
           </Field>
-          <Field label={t(locale, "password")}>
+          <Field
+            label={t(locale, "password")}
+            hint={
+              canStorePassword
+                ? "存进保险箱，只以密文落盘"
+                : vault.exists
+                  ? "保险箱锁着，解锁后才能保存密码"
+                  : "需要先在设置页设主密码"
+            }
+          >
             <Input
               type="password"
               value={draft.password}
               onChange={(e) => setDraft({ ...draft, password: e.target.value })}
+              disabled={!canStorePassword}
             />
           </Field>
-          <Field label={t(locale, "country")}>
+          {!canStorePassword ? (
+            <Link to="/settings" className="text-[13px] font-medium text-accent underline">
+              去设置主密码
+            </Link>
+          ) : null}
+          <Field label={t(locale, "country")} error={error}>
             <Input
               value={draft.country}
               onChange={(e) => setDraft({ ...draft, country: e.target.value.toUpperCase() })}
@@ -135,32 +251,9 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
             />
           </Field>
         </div>
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button onClick={onClose}>{t(locale, "cancel")}</Button>
-          <Button
-            variant="primary"
-            onClick={() => {
-              const id = makeId("prx");
-              useEnclave.getState().upsertProxy({
-                id,
-                name: draft.name || `${draft.host}:${draft.port}`,
-                protocol: draft.protocol,
-                host: draft.host,
-                port: draft.port,
-                country: draft.country || undefined,
-                auth: draft.username
-                  ? { username: draft.username, password: draft.password }
-                  : undefined,
-              });
-              useEnclave.getState().addAudit({
-                action: "proxy_add",
-                target: id,
-                level: "info",
-                detail: "proxy stored",
-              });
-              onClose();
-            }}
-          >
+          <Button variant="primary" onClick={() => void save()}>
             {t(locale, "save")}
           </Button>
         </div>

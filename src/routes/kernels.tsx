@@ -1,134 +1,189 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Badge, Button, Panel } from "@/components/ui";
-import { useLocale } from "@/components/shell";
-import { getKernelStatusFn, startKernelDownloadFn } from "@/lib/kernel/functions";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
+import { Badge, Button, CodeBlock, Panel, PanelHeader, PageHeader } from "@/components/ui";
+import { useLocale } from "@/lib/use-locale";
+import { admitKernel, getKernelView, type KernelView } from "@/lib/kernel/host-api";
 import { t } from "@/lib/i18n";
 import { KERNEL_PIN } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/kernels")({ component: KernelsPage });
 
+/** 内部状态 → 用户能看懂的话。界面上不出现 admitted / hash_mismatch 这种词。 */
+const STATE_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "bad" }> = {
+  absent: { text: "未下载", tone: "warn" },
+  downloading: { text: "下载中", tone: "warn" },
+  verifying: { text: "校验中", tone: "warn" },
+  extracting: { text: "解压中", tone: "warn" },
+  admitted: { text: "已准入", tone: "ok" },
+  hash_mismatch: { text: "哈希不符，已拒用", tone: "bad" },
+  error: { text: "出错了", tone: "bad" },
+};
+
+const ERROR_HINT: Record<string, string> = {
+  KERNEL_HASH_MISMATCH:
+    "下载到的文件和清单里的哈希对不上。可能是网络中间被改写，也可能下载没完成。删掉重下；反复出现请联系我们。",
+  KERNEL_CHANNEL_BLOCKED:
+    "这个平台的内核还在预览通道。到安全中心明确同意后才能准入。",
+  KERNEL_UNTRUSTED_SOURCE: "清单里没有这个平台的哈希，或者文件不在了。",
+  HOST_UNAVAILABLE: "连不上本机服务。重启工作台再试。",
+};
+
 function KernelsPage() {
   const locale = useLocale();
-  const [data, setData] = useState<Awaited<ReturnType<typeof getKernelStatusFn>> | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const allowPreview = useEnclave((s) => s.settings.allowPreviewKernel);
+  const [view, setView] = useState<KernelView | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState<string | null>(null);
 
-  const refresh = async () => {
-    try {
-      setData(await getKernelStatusFn());
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    }
-  };
-
-  useEffect(() => {
-    void refresh();
-    const id = window.setInterval(() => void refresh(), 1500);
-    return () => window.clearInterval(id);
+  const load = useCallback(async () => {
+    setView(await getKernelView());
   }, []);
 
-  const status = data?.status;
-  const kernel = data?.kernel.manifest;
+  useEffect(() => {
+    void load();
+    const id = window.setInterval(() => void load(), 1500);
+    return () => window.clearInterval(id);
+  }, [load]);
+
+  const status = view?.status;
+  const kernel = view?.kernel?.manifest;
+  const caps = view?.capabilities;
+  const state = status?.state ?? "absent";
+  const label = STATE_LABEL[state] ?? STATE_LABEL.error;
+  const isPreviewChannel = Boolean(kernel && kernel.channel !== "stable");
+  const busyState = state === "downloading" || state === "verifying" || state === "extracting";
   const pct =
     status && status.bytesExpected
       ? Math.min(100, Math.round((status.bytesReceived / status.bytesExpected) * 100))
       : 0;
 
+  const admit = async () => {
+    setBusy(true);
+    setBlocked(null);
+    const res = (await admitKernel(allowPreview)) as { code?: string; message?: string };
+    if (res?.code) setBlocked(ERROR_HINT[res.code] ?? res.message ?? res.code);
+    useEnclave.getState().addAudit({
+      action: "kernel_admit",
+      level: res?.code ? "warn" : "info",
+      detail: res?.code ?? KERNEL_PIN.version,
+    });
+    await load();
+    setBusy(false);
+  };
+
+  if (view && !view.online) {
+    return (
+      <div className="mx-auto max-w-3xl px-8 py-6">
+        <PageHeader title={t(locale, "kernelsTitle")} />
+        <Panel className="p-6">
+          <Badge tone="bad">连不上本机服务</Badge>
+          <p className="mt-3 text-[13px] leading-relaxed text-muted">
+            工作台找不到本机的 Enclave 服务，所有需要动内核的操作都不可用。重启工作台通常能解决。
+          </p>
+        </Panel>
+      </div>
+    );
+  }
+
   return (
-    <div className="mx-auto max-w-3xl p-4 md:p-6">
-      <h1 className="text-[20px] font-semibold tracking-tight">{t(locale, "kernelsTitle")}</h1>
-      <p className="mt-1 text-[13px] text-subtle">{t(locale, "delaySource")}</p>
+    <div className="mx-auto max-w-3xl px-8 py-6">
+      <PageHeader
+        title={t(locale, "kernelsTitle")}
+        status="内核在你本机下载、校验、运行。每次启动环境前都会重新核对要执行的那个文件。"
+      />
+
+      <Panel>
+        <PanelHeader
+          title={`${kernel?.id ?? KERNEL_PIN.id} ${kernel?.version ?? KERNEL_PIN.version}`}
+          hint={isPreviewChannel ? "预览通道" : "稳定通道"}
+          actions={<Badge tone={label.tone}>{label.text}</Badge>}
+        />
+        <div className="grid gap-4 p-5">
+          {busyState ? (
+            <div>
+              <div className="h-1 overflow-hidden rounded-full bg-surface-2">
+                <div className="h-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
+              </div>
+              <div className="app-mono mt-2 text-xs text-subtle">
+                {label.text} {pct}%
+              </div>
+            </div>
+          ) : null}
+
+          <CodeBlock label="清单哈希 SHA256" value={kernel?.sha256 ?? KERNEL_PIN.sha256} />
+
+          {status?.exeSha256 ? (
+            <CodeBlock label="本机可执行文件 SHA256" value={status.exeSha256} />
+          ) : null}
+
+          {status?.executable ? (
+            <div className="text-[13px] text-subtle">
+              安装位置 <span className="app-mono text-muted">{status.executable}</span>
+            </div>
+          ) : null}
+
+          {state === "hash_mismatch" || status?.error ? (
+            <p className="text-[13px] leading-relaxed text-bad">
+              {ERROR_HINT[status?.error ?? ""] ?? status?.error ?? ERROR_HINT.KERNEL_HASH_MISMATCH}
+            </p>
+          ) : null}
+
+          {blocked ? <p className="text-[13px] leading-relaxed text-warn">{blocked}</p> : null}
+
+          {isPreviewChannel && !allowPreview ? (
+            <div className="rounded-md border border-warn/30 bg-warn/10 px-4 py-3 text-[13px] text-warn">
+              这个平台的内核还在预览通道。到
+              <Link to="/security" className="mx-1 font-semibold underline">
+                安全中心
+              </Link>
+              明确同意后才能准入。
+            </div>
+          ) : null}
+
+          <div>
+            <Button
+              variant="primary"
+              size="md"
+              disabled={busy || busyState || state === "admitted" || (isPreviewChannel && !allowPreview)}
+              title={
+                state === "admitted"
+                  ? "已经准入，不需要重复下载"
+                  : isPreviewChannel && !allowPreview
+                    ? "需要先在安全中心同意使用预览通道内核"
+                    : undefined
+              }
+              onClick={() => void admit()}
+            >
+              {state === "admitted" ? t(locale, "admitted") : t(locale, "download")}
+            </Button>
+          </div>
+        </div>
+      </Panel>
 
       <Panel className="mt-4 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <div className="text-[15px] font-medium">
-              {kernel?.id ?? KERNEL_PIN.id} {kernel?.version ?? KERNEL_PIN.version}
-            </div>
-            <div className="mt-1 text-[12px] text-subtle">{kernel?.url}</div>
-          </div>
-          <Badge
-            tone={
-              status?.state === "admitted" ? "ok" : status?.state === "hash_mismatch" ? "bad" : "warn"
-            }
-          >
-            {status?.state ?? "…"}
-          </Badge>
-        </div>
-        <dl className="mt-4 grid gap-2 text-[12px]">
-          <Row k={t(locale, "hash")} v={kernel?.sha256 ?? KERNEL_PIN.sha256} />
-          <Row k="bytes" v={String(kernel?.bytes ?? "")} />
-          <Row
-            k={t(locale, "signatureMissing")}
-            v={kernel?.signature === "missing" ? t(locale, "signatureMissing") : kernel?.signature ?? ""}
+        <h2 className="text-base font-semibold text-ink">这台机器上的运行条件</h2>
+        <dl className="mt-3 grid gap-2 text-[13px]">
+          <Line
+            k="窗口"
+            v={caps?.headlessForced ? "没有显示器，内核以无头模式运行" : "内核会弹出可见窗口"}
           />
-          <Row k="publisher" v={kernel?.publisher ?? "adryfish"} />
-          {status?.sha256Actual ? <Row k="actual" v={status.sha256Actual} /> : null}
-          {status?.executable ? <Row k="exe" v={status.executable} /> : null}
+          <Line k="沙箱" v={caps?.sandboxLikely === false ? "当前环境可能无法启用沙箱" : "默认开启"} />
+          <Line k="调试端口" v="只绑 127.0.0.1，且要求本机令牌" />
         </dl>
-        {status?.state === "downloading" || status?.state === "verifying" || status?.state === "extracting" ? (
-          <div className="mt-4">
-            <div className="h-1 overflow-hidden rounded-full bg-surface-3">
-              <div className="h-full bg-accent" style={{ width: `${pct}%` }} />
-            </div>
-            <div className="mt-1 text-[11px] text-subtle tabular-nums">
-              {status.state} {pct}%
-            </div>
-          </div>
-        ) : null}
-        {status?.error ? <div className="mt-3 text-[12px] text-bad">{status.error}</div> : null}
-        {err ? <div className="mt-3 text-[12px] text-bad">{err}</div> : null}
-        <div className="mt-5 flex flex-wrap gap-2">
-          <Button
-            variant="primary"
-            disabled={status?.state === "downloading" || status?.state === "admitted"}
-            onClick={async () => {
-              await startKernelDownloadFn();
-              useEnclave.getState().addAudit({
-                action: "kernel_download",
-                level: "info",
-                detail: KERNEL_PIN.version,
-              });
-              await refresh();
-            }}
-          >
-            {status?.state === "admitted" ? t(locale, "admitted") : t(locale, "download")}
-          </Button>
-          <Button disabled>{t(locale, "noRollback")}</Button>
-        </div>
-      </Panel>
-
-      <Panel className="mt-3 p-4 text-[12px] text-subtle">
-        <div>{t(locale, "license")}</div>
-        <div className="mt-2">{t(locale, "hostHeadless")}</div>
-        {data?.capabilities ? (
-          <div className="mt-2 font-mono">
-            host {String((data.capabilities as { host?: string }).host ?? "node")} runtime=
-            {String((data.capabilities as { runtime?: string }).runtime ?? "verify")}{" "}
-            {data.capabilities.os}/{data.capabilities.arch} uid={String(data.capabilities.uid)} display=
-            {String(data.capabilities.display)} sandboxLikely={String(data.capabilities.sandboxLikely)}
-          </div>
-        ) : null}
-      </Panel>
-
-      <Panel className="mt-3 p-4">
-        <div className="text-[13px] font-medium">win-x64 / mac-arm64</div>
-        <p className="mt-1 text-[12px] text-subtle">{t(locale, "pendingKernels")}</p>
-        <ul className="mt-3 grid gap-2 font-mono text-[11px]">
-          <li>win-x64 candidate sha256 9ef3f471b7a6641b4224532522b29141ce3746e27d55788d88e2fd951f362579</li>
-          <li>mac-arm64 candidate sha256 b72f091e2e1a7583eed389c4b8e3534ed355e568af8c8bbf8fc30a25e23ca679</li>
-        </ul>
+        <p className="mt-4 text-[13px] leading-relaxed text-subtle">
+          内核基于 Ungoogled Chromium，BSD-3-Clause 许可证。我们不声称 100% 自研内核，也不声称做过完整安全审计。
+        </p>
       </Panel>
     </div>
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Line({ k, v }: { k: string; v: string }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="shrink-0 text-subtle">{k}</dt>
-      <dd className="break-all font-mono text-ink">{v}</dd>
+    <div className="flex flex-wrap justify-between gap-3">
+      <dt className="text-subtle">{k}</dt>
+      <dd className="text-muted">{v}</dd>
     </div>
   );
 }

@@ -1,190 +1,62 @@
-import { readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Plugin } from "vite";
-import { defineConfig } from "vite";
-import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import { defineConfig, type Plugin } from "vite";
+import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { nitro } from "nitro/vite";
-// @ts-expect-error JS plugin alongside the TS vite config
-import { grokPwaPlugin } from "./scripts/grok-pwa-plugin.mjs";
-// @ts-expect-error JS plugin alongside the TS vite config
-import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
-import { isMigrationFile } from "./scripts/migration-plan.mjs";
-
-/** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
-function hasGlobbedMigrations(root: string): boolean {
-  try {
-    return readdirSync(join(root, "migrations")).some(isMigrationFile);
-  } catch {
-    return false;
-  }
-}
 
 /**
- * Finish PGLite bootstrap during dev-server setup (before traffic). Vite awaits
- * async `configureServer` hooks. Production: `src/lib/db` kicks `ensureDbReady`
- * on import.
- *
- * Vite awaiting the hook puts this on time-to-first-render, so an app with no
- * migrations — no schema to apply — skips it entirely rather than paying for a
- * PGLite instance it never queries.
+ * 工作台是纯前端 SPA。构建产物是一堆静态文件，Tauri 直接装进安装包。
+ * 没有 SSR、没有 Node 服务端、没有数据库 —— 那些东西在桌面安装包里根本跑不起来，
+ * 留着只会让开发时"能用"、装完之后不能用。
  */
-function pgliteBootstrapPlugin(): Plugin {
-  return {
-    name: "app-builder:pglite-bootstrap",
-    apply: "serve",
-    async configureServer(server) {
-      if (!hasGlobbedMigrations(server.config.root)) return;
-      try {
-        const mod = (await server.ssrLoadModule("/src/lib/db.ts")) as {
-          ensureDbReady?: () => Promise<void>;
-        };
-        if (typeof mod.ensureDbReady === "function") {
-          await mod.ensureDbReady();
-        }
-      } catch (err) {
-        console.error("[app-builder] DB bootstrap failed:", err);
-        throw err;
-      }
-    },
-  };
-}
 
 /**
- * Live-preview OAuth popup — handled HERE so the agent never has to create a
- * `/auth/popup` route (and cannot break it by scaffolding a React page that
- * paints the full app shell in the popup).
+ * 开发专用：把本机 Host 的令牌交给开发服务器上的工作台。
  *
- * `signIn` (client.ts) opens `/auth/popup?providerId=…` in a top-level window.
- * This middleware runs before TanStack Start, calls `handleAuthPopupRequest`,
- * and returns the 302 / completion HTML. Deployed apps do not use the popup
- * (full-page OAuth redirect), so `apply: "serve"` is enough.
+ * 桌面版由 Tauri 壳注入令牌；`npm run dev` 没有壳，所以从磁盘上的
+ * data/host.token 读一次。**只在 vite dev 下注册**，构建产物里不存在这个接口。
  */
-function authPopupPlugin(): Plugin {
+function hostTokenDevPlugin(): Plugin {
   return {
-    name: "app-builder:auth-popup",
+    name: "enclave:host-token-dev",
     apply: "serve",
     configureServer(server) {
-      // Register immediately (not in a returned post-hook) so we run BEFORE
-      // TanStack Start / the SPA HTML fallback. A model-authored
-      // `src/routes/auth/popup.tsx` React page must never win this path.
-      server.middlewares.use(async (req, res, next) => {
+      server.middlewares.use("/__enclave/host-token", (_req, res) => {
+        res.setHeader("content-type", "application/json");
         try {
-          const rawUrl = req.url ?? "";
-          const pathOnly = rawUrl.split("?", 1)[0] ?? "";
-          if (pathOnly !== "/auth/popup") {
-            next();
-            return;
-          }
-          if ((req.method ?? "GET").toUpperCase() !== "GET") {
-            res.statusCode = 405;
-            res.setHeader("content-type", "text/plain; charset=utf-8");
-            res.end("Method Not Allowed");
-            return;
-          }
-
-          const host = String(
-            req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:8080",
-          );
-          const proto = String(
-            req.headers["x-forwarded-proto"] ??
-              ((req.socket as { encrypted?: boolean } | undefined)?.encrypted ? "https" : "http"),
-          );
-          const requestHeaders = new Headers();
-          for (const [key, value] of Object.entries(req.headers)) {
-            if (value === undefined) continue;
-            if (Array.isArray(value)) {
-              for (const v of value) requestHeaders.append(key, v);
-            } else {
-              requestHeaders.set(key, value);
-            }
-          }
-          // Ensure Host is the public preview host so Better Auth's dynamic
-          // baseURL / redirect_uri match the popup origin.
-          if (!requestHeaders.has("host")) requestHeaders.set("host", host);
-
-          const request = new Request(`${proto}://${host}${rawUrl}`, {
-            method: "GET",
-            headers: requestHeaders,
-          });
-
-          const mod = (await server.ssrLoadModule("/src/lib/auth/popup.server.ts")) as {
-            handleAuthPopupRequest: (req: Request) => Promise<Response>;
-          };
-          const response = await mod.handleAuthPopupRequest(request);
-
-          res.statusCode = response.status;
-          // Preserve multiple Set-Cookie headers (OAuth state + session).
-          const setCookies =
-            typeof response.headers.getSetCookie === "function"
-              ? response.headers.getSetCookie()
-              : [];
-          response.headers.forEach((value, key) => {
-            if (key.toLowerCase() === "set-cookie") return;
-            res.setHeader(key, value);
-          });
-          for (const cookie of setCookies) {
-            res.appendHeader("set-cookie", cookie);
-          }
-          const body = Buffer.from(await response.arrayBuffer());
-          res.end(body);
-        } catch (err) {
-          console.error("[app-builder] /auth/popup handler failed:", err);
-          if (!res.headersSent) {
-            res.statusCode = 500;
-            res.setHeader("content-type", "text/plain; charset=utf-8");
-            res.end("auth popup failed");
-          }
+          const token = readFileSync(join(server.config.root, "data", "host.token"), "utf8").trim();
+          res.end(JSON.stringify({ token, port: Number(process.env.ENCLAVE_HOST_PORT ?? 17891) }));
+        } catch {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ token: "", port: 0 }));
         }
       });
     },
   };
 }
 
-// `0.0.0.0:8080` is the live-preview contract — don't change host/port.
-// The dev server starts once `src/router.tsx` and `src/routes/` exist — see
-// AGENTS.md § "First scaffold".
-export default defineConfig(({ command, isPreview }) => {
-  const desktop = process.env.VITE_ENCLAVE_DIRECT === "true";
-  return {
-  base: desktop ? "./" : "/",
+export default defineConfig({
+  // 桌面端从 file:// 之上的自定义协议加载，必须用相对路径。
+  base: "./",
   server: {
-    host: "0.0.0.0",
+    // 开发服务器只绑回环：工作台会操作本机内核，不该在局域网里裸奔。
+    host: "127.0.0.1",
     port: 8080,
     strictPort: true,
-    watch: {
-      ignored: ["**/data/**", "**/target/**", "**/logs/**"],
-    },
+    watch: { ignored: ["**/data/**", "**/target/**", "**/logs/**"] },
   },
-  preview: {
-    host: "127.0.0.1",
-    port: 8081,
-    strictPort: true,
-  },
+  preview: { host: "127.0.0.1", port: 8081, strictPort: true },
   resolve: { tsconfigPaths: true },
   plugins: [
-    pgliteBootstrapPlugin(),
-    // Before tanstackStart so /auth/popup never falls through to the SPA.
-    authPopupPlugin(),
-    // Dev-only /__app-env, read by scripts/check-auth-invariant.mjs.
-    appEnvPlugin(),
-    // PWA head + ?install=1 tutorial page; runs before Start/Nitro.
-    grokPwaPlugin(),
+    hostTokenDevPlugin(),
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
     tailwindcss(),
-    tanstackStart(desktop ? { spa: { enabled: true } } : {}),
-    ...(!desktop && (command === "build" || isPreview)
-      ? [
-          nitro({
-            preset: "vercel",
-            // Auto-registers server/middleware/* (the PWA install page +
-            // manifest + head-tag middleware). Nitro v3 defaults serverDir to
-            // false, so removing this silently unwires /?install=1 on deploys.
-            serverDir: "./server",
-          }),
-        ]
-      : []),
     viteReact(),
   ],
-  };
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    sourcemap: false,
+  },
 });

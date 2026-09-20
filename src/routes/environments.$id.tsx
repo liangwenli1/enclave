@@ -1,8 +1,8 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FlaskConical, Play, Square } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Badge, Button, Field, Input, Panel, Select, StatusDot, Textarea } from "@/components/ui";
-import { useLocale } from "@/components/shell";
+import { Badge, Button, Field, Input, Panel, Select, Textarea } from "@/components/ui";
+import { useLocale } from "@/lib/use-locale";
 import { classifyAll } from "@/lib/kernel/flags";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
 import { t, runtimeLabel } from "@/lib/i18n";
@@ -44,9 +44,8 @@ function EnvDetail() {
             <ArrowLeft className="size-3.5" />
             {t(locale, "back")}
           </Button>
-          <h1 className="text-[18px] font-semibold tracking-tight">{env.name}</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">{env.name}</h1>
           <Badge tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}>
-            <StatusDot tone={status === "running" ? "run" : status === "error" ? "bad" : "idle"} />
             {runtimeLabel(locale, status, runtime?.error)}
           </Badge>
           <div className="ml-auto flex gap-2">
@@ -122,6 +121,7 @@ function EnvDetail() {
                 onChange={(e) => useEnclave.getState().patchEnv(env.id, { note: e.target.value })}
               />
             </Field>
+            <ExtensionPicker envId={env.id} selected={env.extensionIds} />
             <Panel className="md:col-span-2 p-4">
               <div className="mb-2 text-[12px] font-medium">{t(locale, "consistency")}</div>
               <div className="grid gap-2">
@@ -148,6 +148,7 @@ function EnvDetail() {
         ) : null}
 
         {tab === "fingerprint" ? <FingerprintForm envId={env.id} profile={env.profile} /> : null}
+
 
         {tab === "flags" ? <FlagsForm envId={env.id} extraFlags={env.extraFlags} allowNoSandbox={env.allowNoSandbox} /> : null}
 
@@ -209,6 +210,47 @@ function EngineSelect({ envId, value }: { envId: string; value: string }) {
         </option>
       ))}
     </Select>
+  );
+}
+
+/** 环境用哪些扩展。改完下次启动生效 —— 文案直接说清楚，别让人以为热更新。 */
+function ExtensionPicker({ envId, selected }: { envId: string; selected: string[] }) {
+  const extensions = useEnclave((s) => s.extensions);
+  if (extensions.length === 0) return null;
+
+  return (
+    <Panel className="p-4 md:col-span-2">
+      <div className="mb-1 text-[13px] font-medium text-ink">扩展</div>
+      <p className="mb-3 text-[13px] text-subtle">
+        勾选的扩展会在启动时加载到这个环境。改完需要重新启动环境才生效。
+      </p>
+      <div className="grid gap-2">
+        {extensions.map((ext) => (
+          <label key={ext.id} className="flex cursor-pointer items-start gap-2.5 text-[13px]">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 flex-none accent-[var(--enclave-accent)]"
+              checked={selected.includes(ext.id)}
+              onChange={(e) => {
+                const next = e.target.checked
+                  ? [...selected, ext.id]
+                  : selected.filter((id) => id !== ext.id);
+                useEnclave.getState().patchEnv(envId, { extensionIds: next });
+              }}
+            />
+            <span>
+              <span className="text-ink">{ext.name}</span>
+              {ext.highRisk ? (
+                <Badge tone="warn" className="ml-2">
+                  权限较大
+                </Badge>
+              ) : null}
+              <span className="app-mono mt-0.5 block text-xs break-all text-subtle">{ext.path}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </Panel>
   );
 }
 

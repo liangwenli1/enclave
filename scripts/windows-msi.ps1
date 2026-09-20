@@ -1,50 +1,47 @@
-# Unsigned Windows MSI. This is not Authenticode-signed and must not be called 1.0.
+# 在 Windows 上打 MSI。这个包还没有 Authenticode 正式签名，不能叫 1.0。
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
-if (Test-Path .git) {
-  git checkout -- apps/desktop/src-tauri/Cargo.toml 2>$null
-}
-
 function Need($cmd, $hint) {
   if (-not (Get-Command $cmd -ErrorAction SilentlyContinue)) {
-    throw "Missing $cmd. $hint"
+    throw "缺少 $cmd。$hint"
   }
 }
 
-Need git "Install Git for Windows."
-Need node "Install Node 22 LTS."
-Need rustup "Install Rust from https://rustup.rs"
-Need cargo "rustup default stable then reopen the terminal."
-Need npm "Node installer should provide npm."
+Need git "装 Git for Windows。"
+Need node "装 Node 22 LTS。"
+Need rustup "从 https://rustup.rs 装 Rust。"
+Need cargo "rustup default stable 之后重开终端。"
+Need npm "Node 安装包会带 npm。"
 
 rustup default stable
 Get-Process enclave-host, enclave-desktop, Enclave -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
 
+# 1. 本机 Host（会作为 sidecar 打进安装包）
 npm ci
 cargo build --release -p enclave-host
-if (-not $?) { throw "host build failed" }
+if (-not $?) { throw "host 构建失败" }
+cargo test -p enclave-host
+if (-not $?) { throw "host 测试没过" }
 
 $binDir = Join-Path $PWD "apps\desktop\src-tauri\binaries"
 New-Item -ItemType Directory -Force -Path $binDir | Out-Null
 Copy-Item "target\release\enclave-host.exe" (Join-Path $binDir "enclave-host-x86_64-pc-windows-msvc.exe") -Force
-Copy-Item "kernels.manifest.json" (Join-Path $binDir "kernels.manifest.json") -Force
 
-$env:VITE_ENCLAVE_DIRECT = "true"
-$env:VITE_AUTH_ENABLED = "true"
+# 2. 工作台（纯前端 SPA，产物在 dist/，Tauri 直接用）
+#    VITE_ENCLAVE_VENDOR_URL 指向许可证服务；不设就是不能登录，额度停在免费档。
+if (-not $env:VITE_ENCLAVE_VENDOR_URL) {
+  Write-Warning "没有设置 VITE_ENCLAVE_VENDOR_URL，这个包里的账号登录不可用。"
+}
 npm run build
-if (-not $?) { throw "frontend build failed" }
+if (-not $?) { throw "前端构建失败" }
+if (-not (Test-Path "dist\index.html")) { throw "dist/index.html 不存在" }
 
-node scripts/desktop-static.mjs
-if (-not $?) { throw "desktop static shell failed" }
-$index = Join-Path $PWD "apps\desktop\src-tauri\frontend\index.html"
-if (-not (Test-Path $index)) { throw "frontend/index.html missing after desktop-static" }
-Write-Host "frontend shell $($index) $((Get-Item $index).Length) bytes"
-
+# 3. 打包
 npx --yes @tauri-apps/cli@2 build --config (Join-Path $PWD "apps\desktop\src-tauri\tauri.conf.json") --bundles msi
-if (-not $?) { throw "tauri msi failed" }
-Copy-Item "kernels.manifest.json" "apps\desktop\src-tauri\target\release\kernels.manifest.json" -Force
+if (-not $?) { throw "tauri msi 失败" }
 
-Write-Host "Unsigned MSI is under apps/desktop/src-tauri/target/release/bundle/msi/"
-Write-Host "Do not call this 1.0. Upload with: gh release upload v0.9.1-windows-preview <msi> --clobber"
+Write-Host "MSI 在 apps/desktop/src-tauri/target/release/bundle/msi/"
+Write-Host "算哈希：Get-FileHash <msi> -Algorithm SHA256，把值更新到官网下载页。"
+Write-Host "没有 Authenticode 正式签名之前，不要叫 1.0。"

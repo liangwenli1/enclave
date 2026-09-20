@@ -10,26 +10,24 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountRouteImport } from './routes/account'
 import { Route as EnginesRouteImport } from './routes/engines'
 import { Route as ExtensionsRouteImport } from './routes/extensions'
 import { Route as KernelsRouteImport } from './routes/kernels'
 import { Route as LabRouteImport } from './routes/lab'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as NetworkRouteImport } from './routes/network'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as WwwRouteImport } from './routes/www'
 import { Route as EnvironmentsIdRouteImport } from './routes/environments.$id'
-import { Route as WwwAccountRouteImport } from './routes/www.account'
-import { Route as WwwDocsRouteImport } from './routes/www.docs'
-import { Route as WwwDownloadRouteImport } from './routes/www.download'
-import { Route as WwwLegalRouteImport } from './routes/www.legal'
-import { Route as WwwPricingRouteImport } from './routes/www.pricing'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountRoute = AccountRouteImport.update({
+  id: '/account',
+  path: '/account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EnginesRoute = EnginesRouteImport.update({
@@ -52,11 +50,6 @@ const LabRoute = LabRouteImport.update({
   path: '/lab',
   getParentRoute: () => rootRouteImport,
 } as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const NetworkRoute = NetworkRouteImport.update({
   id: '/network',
   path: '/network',
@@ -72,178 +65,99 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WwwRoute = WwwRouteImport.update({
-  id: '/www',
-  path: '/www',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const EnvironmentsIdRoute = EnvironmentsIdRouteImport.update({
   id: '/environments/$id',
   path: '/environments/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const WwwAccountRoute = WwwAccountRouteImport.update({
-  id: '/account',
-  path: '/account',
-  getParentRoute: () => WwwRoute,
-} as any)
-const WwwDocsRoute = WwwDocsRouteImport.update({
-  id: '/docs',
-  path: '/docs',
-  getParentRoute: () => WwwRoute,
-} as any)
-const WwwDownloadRoute = WwwDownloadRouteImport.update({
-  id: '/download',
-  path: '/download',
-  getParentRoute: () => WwwRoute,
-} as any)
-const WwwLegalRoute = WwwLegalRouteImport.update({
-  id: '/legal',
-  path: '/legal',
-  getParentRoute: () => WwwRoute,
-} as any)
-const WwwPricingRoute = WwwPricingRouteImport.update({
-  id: '/pricing',
-  path: '/pricing',
-  getParentRoute: () => WwwRoute,
-} as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
   '/lab': typeof LabRoute
-  '/login': typeof LoginRoute
   '/network': typeof NetworkRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
-  '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
-  '/www/account': typeof WwwAccountRoute
-  '/www/docs': typeof WwwDocsRoute
-  '/www/download': typeof WwwDownloadRoute
-  '/www/legal': typeof WwwLegalRoute
-  '/www/pricing': typeof WwwPricingRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
   '/lab': typeof LabRoute
-  '/login': typeof LoginRoute
   '/network': typeof NetworkRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
-  '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
-  '/www/account': typeof WwwAccountRoute
-  '/www/docs': typeof WwwDocsRoute
-  '/www/download': typeof WwwDownloadRoute
-  '/www/legal': typeof WwwLegalRoute
-  '/www/pricing': typeof WwwPricingRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account': typeof AccountRoute
   '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
   '/lab': typeof LabRoute
-  '/login': typeof LoginRoute
   '/network': typeof NetworkRoute
   '/security': typeof SecurityRoute
   '/settings': typeof SettingsRoute
-  '/www': typeof WwwRouteWithChildren
   '/environments/$id': typeof EnvironmentsIdRoute
-  '/www/account': typeof WwwAccountRoute
-  '/www/docs': typeof WwwDocsRoute
-  '/www/download': typeof WwwDownloadRoute
-  '/www/legal': typeof WwwLegalRoute
-  '/www/pricing': typeof WwwPricingRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/account'
     | '/engines'
     | '/extensions'
     | '/kernels'
     | '/lab'
-    | '/login'
     | '/network'
     | '/security'
     | '/settings'
-    | '/www'
     | '/environments/$id'
-    | '/www/account'
-    | '/www/docs'
-    | '/www/download'
-    | '/www/legal'
-    | '/www/pricing'
-    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/account'
     | '/engines'
     | '/extensions'
     | '/kernels'
     | '/lab'
-    | '/login'
     | '/network'
     | '/security'
     | '/settings'
-    | '/www'
     | '/environments/$id'
-    | '/www/account'
-    | '/www/docs'
-    | '/www/download'
-    | '/www/legal'
-    | '/www/pricing'
-    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
+    | '/account'
     | '/engines'
     | '/extensions'
     | '/kernels'
     | '/lab'
-    | '/login'
     | '/network'
     | '/security'
     | '/settings'
-    | '/www'
     | '/environments/$id'
-    | '/www/account'
-    | '/www/docs'
-    | '/www/download'
-    | '/www/legal'
-    | '/www/pricing'
-    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountRoute: typeof AccountRoute
   EnginesRoute: typeof EnginesRoute
   ExtensionsRoute: typeof ExtensionsRoute
   KernelsRoute: typeof KernelsRoute
   LabRoute: typeof LabRoute
-  LoginRoute: typeof LoginRoute
   NetworkRoute: typeof NetworkRoute
   SecurityRoute: typeof SecurityRoute
   SettingsRoute: typeof SettingsRoute
-  WwwRoute: typeof WwwRouteWithChildren
   EnvironmentsIdRoute: typeof EnvironmentsIdRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -253,6 +167,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account': {
+      id: '/account'
+      path: '/account'
+      fullPath: '/account'
+      preLoaderRoute: typeof AccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/engines': {
@@ -283,13 +204,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LabRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/network': {
       id: '/network'
       path: '/network'
@@ -311,13 +225,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/www': {
-      id: '/www'
-      path: '/www'
-      fullPath: '/www'
-      preLoaderRoute: typeof WwwRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/environments/$id': {
       id: '/environments/$id'
       path: '/environments/$id'
@@ -325,92 +232,21 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof EnvironmentsIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/www/account': {
-      id: '/www/account'
-      path: '/account'
-      fullPath: '/www/account'
-      preLoaderRoute: typeof WwwAccountRouteImport
-      parentRoute: typeof WwwRoute
-    }
-    '/www/docs': {
-      id: '/www/docs'
-      path: '/docs'
-      fullPath: '/www/docs'
-      preLoaderRoute: typeof WwwDocsRouteImport
-      parentRoute: typeof WwwRoute
-    }
-    '/www/download': {
-      id: '/www/download'
-      path: '/download'
-      fullPath: '/www/download'
-      preLoaderRoute: typeof WwwDownloadRouteImport
-      parentRoute: typeof WwwRoute
-    }
-    '/www/legal': {
-      id: '/www/legal'
-      path: '/legal'
-      fullPath: '/www/legal'
-      preLoaderRoute: typeof WwwLegalRouteImport
-      parentRoute: typeof WwwRoute
-    }
-    '/www/pricing': {
-      id: '/www/pricing'
-      path: '/pricing'
-      fullPath: '/www/pricing'
-      preLoaderRoute: typeof WwwPricingRouteImport
-      parentRoute: typeof WwwRoute
-    }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
-interface WwwRouteChildren {
-  WwwAccountRoute: typeof WwwAccountRoute
-  WwwDocsRoute: typeof WwwDocsRoute
-  WwwDownloadRoute: typeof WwwDownloadRoute
-  WwwLegalRoute: typeof WwwLegalRoute
-  WwwPricingRoute: typeof WwwPricingRoute
-}
-
-const WwwRouteChildren: WwwRouteChildren = {
-  WwwAccountRoute: WwwAccountRoute,
-  WwwDocsRoute: WwwDocsRoute,
-  WwwDownloadRoute: WwwDownloadRoute,
-  WwwLegalRoute: WwwLegalRoute,
-  WwwPricingRoute: WwwPricingRoute,
-}
-
-const WwwRouteWithChildren = WwwRoute._addFileChildren(WwwRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountRoute: AccountRoute,
   EnginesRoute: EnginesRoute,
   ExtensionsRoute: ExtensionsRoute,
   KernelsRoute: KernelsRoute,
   LabRoute: LabRoute,
-  LoginRoute: LoginRoute,
   NetworkRoute: NetworkRoute,
   SecurityRoute: SecurityRoute,
   SettingsRoute: SettingsRoute,
-  WwwRoute: WwwRouteWithChildren,
   EnvironmentsIdRoute: EnvironmentsIdRoute,
-  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

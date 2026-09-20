@@ -126,31 +126,31 @@ export function staticConsistency(
   checks.push({
     id: "schema",
     ok: p.schema === "fingerprint-profile/v1",
-    label: "Schema v1",
+    label: "画像格式",
     detail: p.schema,
   });
   checks.push({
     id: "seed",
     ok: /^\d+$/.test(p.seed) && p.seed !== "0",
-    label: "Seed",
-    detail: p.seedLocked ? `${p.seed} locked` : `${p.seed} unlocked`,
+    label: "画像种子",
+    detail: p.seedLocked ? `${p.seed} · 已锁定` : `${p.seed} · 未锁定`,
   });
   checks.push({
     id: "webrtc",
     ok: p.webrtc.mode !== ("real" as string),
     label: "WebRTC",
-    detail: p.webrtc.mode,
+    detail: p.webrtc.mode === "disable" ? "关闭" : "不使用非代理 UDP",
   });
   checks.push({
     id: "kernel",
     ok: Boolean(env.kernelPin.sha256 && env.kernelPin.version),
-    label: "Kernel pin",
+    label: "内核版本",
     detail: `${env.kernelPin.id} ${env.kernelPin.version}`,
   });
   checks.push({
     id: "tz",
     ok: Boolean(p.timezone),
-    label: "Timezone",
+    label: "时区",
     detail: p.timezone,
   });
   if (proxy?.country) {
@@ -160,10 +160,10 @@ export function staticConsistency(
       id: "geo",
       ok: aligned,
       warn: !aligned,
-      label: "Proxy geography",
+      label: "代理地区与时区",
       detail: aligned
         ? `${proxy.country} ↔ ${p.timezone}`
-        : `${proxy.country} vs ${p.timezone}`,
+        : `${proxy.country} 与 ${p.timezone} 对不上`,
     });
   }
   if (env.allowNoSandbox || env.extraFlags.some((f) => f.includes("no-sandbox"))) {
@@ -171,8 +171,8 @@ export function staticConsistency(
       id: "sandbox",
       ok: false,
       warn: true,
-      label: "Sandbox",
-      detail: "--no-sandbox present",
+      label: "沙箱",
+      detail: "这个环境会以 --no-sandbox 启动",
     });
   }
   return checks;
@@ -184,8 +184,8 @@ export function snapshotChecks(profile: FingerprintProfile, snap: LabSnapshot): 
     {
       id: "webdriver",
       ok: snap.webdriver !== true,
-      label: "webdriver",
-      detail: String(snap.webdriver),
+      label: "webdriver 标记",
+      detail: snap.webdriver === true ? "暴露了（异常）" : "未暴露",
     },
     {
       id: "ua",
@@ -198,20 +198,20 @@ export function snapshotChecks(profile: FingerprintProfile, snap: LabSnapshot): 
       id: "cores",
       ok: snap.hardwareConcurrency === profile.hardwareConcurrency || snap.source === "page",
       warn: snap.source === "page",
-      label: "hardwareConcurrency",
-      detail: `${snap.hardwareConcurrency} (profile ${profile.hardwareConcurrency})`,
+      label: "CPU 核数",
+      detail: `窗口 ${snap.hardwareConcurrency} · 画像 ${profile.hardwareConcurrency}`,
     },
     {
       id: "tz-live",
       ok: snap.timezone === profile.timezone || snap.source === "page",
       warn: snap.source === "page",
-      label: "Timezone live",
-      detail: `${snap.timezone} / ${profile.timezone}`,
+      label: "实际时区",
+      detail: `窗口 ${snap.timezone} · 画像 ${profile.timezone}`,
     },
     {
       id: "canvas",
       ok: Boolean(snap.canvasHash),
-      label: "Canvas hash",
+      label: "Canvas 指纹",
       detail: snap.canvasHash.slice(0, 16),
     },
     {
@@ -224,8 +224,8 @@ export function snapshotChecks(profile: FingerprintProfile, snap: LabSnapshot): 
       id: "webrtc",
       ok: profile.webrtc.mode !== "disable" || snap.webrtcIps.length === 0,
       warn: snap.webrtcIps.length > 0 && profile.webrtc.mode !== "disable",
-      label: "WebRTC IPs",
-      detail: snap.webrtcIps.join(", ") || "none",
+      label: "WebRTC 暴露的 IP",
+      detail: snap.webrtcIps.join(", ") || "没有暴露",
     },
   ];
 }

@@ -2,28 +2,30 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Command } from "cmdk";
 import {
   Box,
+  Cpu,
   FlaskConical,
   Globe,
+  KeyRound,
   Lock,
+  Menu as MenuIcon,
   Puzzle,
   Search,
+  SearchCode,
   Settings,
   Shield,
-  Cpu,
-  SearchCode,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
-import { cn } from "@/lib/cn";
-import { getKernelStatusFn } from "@/lib/kernel/functions";
-import { stopEnv } from "@/lib/host";
-import { t, type Locale } from "@/lib/i18n";
-import { useEnclave } from "@/lib/store";
 import { Onboarding } from "@/components/onboarding";
-import { SignedIn, SignedOut, UserButton } from "@/lib/auth/gates";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { getMyLicenseFn } from "@/lib/license-api";
+import { cn } from "@/lib/cn";
+import { getKernelView } from "@/lib/kernel/host-api";
+import { currentAccount, refresh } from "@/lib/license/client";
+import { stopEnv } from "@/lib/host";
+import { t } from "@/lib/i18n";
+import { useEnclave } from "@/lib/store";
+import { useLocale } from "@/lib/use-locale";
+import { lockVault, unlockVault, vaultExists } from "@/lib/vault";
 
 const NAV = [
   { to: "/", key: "navEnv" as const, icon: Box },
@@ -35,13 +37,8 @@ const NAV = [
   { to: "/security", key: "navSecurity" as const, icon: Shield },
 ];
 
-export function useLocale(): Locale {
-  return useEnclave((s) => s.settings.locale);
-}
-
 export function AppShell({ children }: { children: ReactNode }) {
   const locale = useLocale();
-  const theme = useEnclave((s) => s.settings.theme);
   const density = useEnclave((s) => s.settings.density);
   const locked = useEnclave((s) => s.locked);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -49,9 +46,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileNav, setMobileNav] = useState(false);
 
   useEffect(() => {
-    document.documentElement.classList.toggle("light", theme === "light");
     document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  }, [theme, locale]);
+  }, [locale]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -67,123 +63,153 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div
       className={cn(
-        "flex h-full min-h-full bg-canvas text-ink",
+        "flex h-full min-h-full bg-canvas text-muted",
         density === "comfortable" && "text-[15px]",
       )}
     >
-      <aside className="hidden w-[220px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
-        <div className="flex h-14 items-center gap-2 border-b border-line px-4">
+      <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
+        <div className="flex h-16 items-center gap-2.5 px-5">
           <Mark />
-          <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-tight">{t(locale, "app")}</div>
-            <div className="text-xs text-subtle">{t(locale, "appKind")}</div>
-          </div>
+          <span className="text-base font-bold tracking-tight text-ink">Enclave</span>
         </div>
         <nav className="app-nav min-h-0 flex-1 overflow-auto">
           {NAV.map((item) => (
-            <Link
-              key={item.to}
-              to={item.to}
-              data-active={pathname === item.to ? "true" : "false"}
-            >
+            <Link key={item.to} to={item.to} data-active={pathname === item.to ? "true" : "false"}>
               <item.icon className="size-4" />
               {t(locale, item.key)}
             </Link>
           ))}
         </nav>
-        <div className="border-t border-line p-2">
-          <nav className="app-nav app-nav-foot">
-            <Link to="/www">官网</Link>
-            <SignedOut>
-              <Link to="/login">
-                <UserRound className="size-4" />
-                登录
-              </Link>
-            </SignedOut>
-            <Link
-              to="/settings"
-              data-active={pathname === "/settings" ? "true" : "false"}
-            >
+        <div className="app-nav-foot">
+          <nav className="app-nav">
+            <Link to="/account" data-active={pathname === "/account" ? "true" : "false"}>
+              <UserRound className="size-4" />
+              {t(locale, "navAccount")}
+            </Link>
+            <Link to="/settings" data-active={pathname === "/settings" ? "true" : "false"}>
               <Settings className="size-4" />
               {t(locale, "navSettings")}
             </Link>
           </nav>
+          <AccountChip />
         </div>
       </aside>
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-line bg-canvas/90 px-3 backdrop-blur">
+        <header className="sticky top-0 z-10 flex h-16 items-center gap-2 border-b border-line bg-canvas px-4">
           <button
-            className="grid size-10 place-items-center rounded-md text-muted md:hidden"
+            className="grid size-9 place-items-center rounded-md text-subtle hover:bg-surface hover:text-ink md:hidden"
             onClick={() => setMobileNav((v) => !v)}
-            aria-label="Menu"
+            aria-label={t(locale, "menu")}
           >
-            <Box className="size-4" />
+            <MenuIcon className="size-4" />
           </button>
-          <button
-            onClick={() => setCmdOpen(true)}
-            className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-md border border-line bg-surface px-3 text-left text-sm text-subtle md:max-w-md"
-          >
-            <Search className="size-3.5" />
-            <span className="truncate">{t(locale, "search")}</span>
-            <kbd className="ml-auto hidden rounded border border-line px-1 font-mono text-[10px] md:inline">
-              ⌘K
-            </kbd>
-          </button>
-          <SignedIn>
-            <UserButton />
-          </SignedIn>
-          <Button variant="ghost" size="icon" onClick={() => useEnclave.getState().setLocked(true)}>
-            <Lock className="size-3.5" />
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setCmdOpen(true)}
+              title={t(locale, "command")}
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-surface px-3 text-[13px] text-subtle hover:bg-surface-2 hover:text-ink"
+            >
+              <Search className="size-3.5" />
+              <kbd className="hidden font-mono text-[10px] md:inline">⌘K</kbd>
+            </button>
+            <LockButton />
+          </div>
         </header>
+
         {mobileNav ? (
-          <div className="flex flex-wrap gap-1 border-b border-line px-2 py-2 md:hidden">
-            {NAV.map((item) => (
+          <div className="flex flex-wrap gap-1.5 border-b border-line px-3 py-2.5 md:hidden">
+            {[...NAV, { to: "/account", key: "navAccount" as const, icon: UserRound }].map((item) => (
               <Link
                 key={item.to}
                 to={item.to}
                 onClick={() => setMobileNav(false)}
                 className={cn(
-                  "inline-flex min-h-11 shrink-0 items-center rounded-full border border-line bg-surface-2 px-4 text-sm text-muted",
-                  pathname === item.to && "text-ink",
+                  "inline-flex min-h-10 shrink-0 items-center rounded-full bg-surface px-4 text-[13px]",
+                  pathname === item.to ? "text-ink" : "text-subtle",
                 )}
               >
                 {t(locale, item.key)}
               </Link>
             ))}
-            <Link
-              to="/www"
-              onClick={() => setMobileNav(false)}
-              className="inline-flex min-h-11 shrink-0 items-center rounded-full border border-line bg-surface-2 px-4 text-sm"
-            >
-              官网
-            </Link>
           </div>
         ) : null}
+
         <main className="min-h-0 flex-1 overflow-auto">{children}</main>
       </div>
+
       <CommandPalette open={cmdOpen} onOpenChange={setCmdOpen} />
       {locked ? <LockScreen /> : null}
       <Onboarding />
       <PlanNotice />
-      <LicenseSync />
+      <AccountSync />
       <HostSync />
     </div>
   );
 }
 
-function LicenseSync() {
-  const { user, isPending } = useCurrentUserState();
+function Mark() {
+  return (
+    <span className="grid size-6 place-items-center rounded-md bg-accent">
+      <span className="size-2 rounded-[2px] bg-accent-fg" />
+    </span>
+  );
+}
+
+/** 侧栏底部：当前是谁、什么档。没登录就直说没登录。 */
+function AccountChip() {
+  const account = useEnclave((s) => s.account);
+  return (
+    <Link
+      to="/account"
+      className="mx-2 mb-2 block rounded-md border border-line bg-surface px-3 py-2.5 hover:bg-surface-2"
+    >
+      <div className="truncate text-[13px] font-medium text-ink">
+        {account.signedIn ? account.email : "未登录"}
+      </div>
+      <div className="mt-0.5 text-xs text-subtle">
+        {account.limits.label} · {account.limits.envLimit} 个环境
+      </div>
+    </Link>
+  );
+}
+
+/** 保险箱没建起来之前不显示锁按钮：那把锁是假的。 */
+function LockButton() {
+  const locale = useLocale();
+  const [exists, setExists] = useState(false);
+  useEffect(() => setExists(vaultExists()), []);
+  if (!exists) return null;
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      title={t(locale, "lockNow")}
+      onClick={() => {
+        lockVault();
+        useEnclave.getState().setLocked(true);
+      }}
+    >
+      <Lock className="size-3.5" />
+    </Button>
+  );
+}
+
+/** 启动时读一次本地许可证，然后按许可证里的 refreshAfter 去续签。 */
+function AccountSync() {
   useEffect(() => {
-    if (isPending || !user) return;
-    void getMyLicenseFn()
-      .then((lic) => {
-        useEnclave.getState().patchSettings({ plan: lic.plan });
-      })
-      .catch(() => {
-        /* desktop build has no /api — keep local plan */
-      });
-  }, [user, isPending]);
+    let alive = true;
+    const apply = (next: Awaited<ReturnType<typeof currentAccount>>) => {
+      if (alive) useEnclave.getState().setAccount(next);
+    };
+    void currentAccount().then(apply);
+    void refresh().then(apply);
+    const id = window.setInterval(() => void refresh().then(apply), 6 * 3600_000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
   return null;
 }
 
@@ -195,14 +221,16 @@ function PlanNotice() {
   return (
     <Dialog open onOpenChange={(open) => !open && useEnclave.getState().setPlanNotice(null)}>
       <DialogContent title={notice.title} className="z-[70]">
-        <p className="text-sm leading-6 text-muted">{notice.body}</p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button onClick={() => useEnclave.getState().setPlanNotice(null)}>{t(locale, "gotIt")}</Button>
+        <p className="text-sm leading-relaxed text-muted">{notice.body}</p>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button onClick={() => useEnclave.getState().setPlanNotice(null)}>
+            {t(locale, "gotIt")}
+          </Button>
           <Button
             variant="primary"
             onClick={() => {
               useEnclave.getState().setPlanNotice(null);
-              void navigate({ to: "/www/pricing" });
+              void navigate({ to: "/account" });
             }}
           >
             {t(locale, "seePlans")}
@@ -213,55 +241,31 @@ function PlanNotice() {
   );
 }
 
+/** 把 Host 里真实的运行态同步进界面。界面永远不自己编造 Running。 */
 function HostSync() {
   useEffect(() => {
     let alive = true;
     const tick = async () => {
-      try {
-        const data = await getKernelStatusFn();
-        if (!alive) return;
-        const live: Record<
-          string,
-          {
-            envId: string;
-            pid: number | null;
-            debugPort: number | null;
-            debugAddress: "127.0.0.1";
-            status: "running";
-            startedAt: number | null;
-            hashOk: boolean;
-            sha256?: string;
-          }
-        > = {};
-        const known = new Set(
-          useEnclave.getState().environments.filter((e) => !e.deletedAt).map((e) => e.id),
-        );
-        for (const r of data.runtimes) {
-          if (!known.has(r.envId)) {
-            void stopEnv(r.envId);
-            continue;
-          }
-          live[r.envId] = {
-            envId: r.envId,
-            pid: r.pid,
-            debugPort: r.port,
-            debugAddress: "127.0.0.1",
-            status: "running",
-            startedAt: r.startedAt,
-            hashOk: true,
-            sha256: r.sha256,
-          };
+      const view = await getKernelView();
+      if (!alive || !view.online) return;
+      const known = new Set(
+        useEnclave.getState().environments.filter((e) => !e.deletedAt).map((e) => e.id),
+      );
+      const live: Record<string, ReturnType<typeof runtimeRow>> = {};
+      for (const r of view.runtimes) {
+        if (!known.has(r.envId)) {
+          void stopEnv(r.envId);
+          continue;
         }
-        useEnclave.setState((s) => {
-          const next = { ...s.runtimes };
-          for (const [id, rt] of Object.entries(next)) {
-            if (rt.status === "running" && !live[id]) delete next[id];
-          }
-          return { runtimes: { ...next, ...live } };
-        });
-      } catch {
-        /* host unreachable */
+        live[r.envId] = runtimeRow(r);
       }
+      useEnclave.setState((s) => {
+        const next = { ...s.runtimes };
+        for (const [id, rt] of Object.entries(next)) {
+          if (rt.status === "running" && !live[id]) delete next[id];
+        }
+        return { runtimes: { ...next, ...live } };
+      });
     };
     void tick();
     const id = window.setInterval(() => void tick(), 2500);
@@ -273,36 +277,71 @@ function HostSync() {
   return null;
 }
 
-function Mark() {
-  return (
-    <span className="www-mark">
-      <i />
-    </span>
-  );
+function runtimeRow(r: {
+  envId: string;
+  pid: number;
+  port: number;
+  startedAt: number;
+  sha256: string;
+}) {
+  return {
+    envId: r.envId,
+    pid: r.pid,
+    debugPort: r.port,
+    debugAddress: "127.0.0.1" as const,
+    status: "running" as const,
+    startedAt: r.startedAt,
+    hashOk: true,
+    sha256: r.sha256,
+  };
 }
 
+/** 真锁：解锁 = 用主密码解开保险箱。密码不对就是不对。 */
 function LockScreen() {
   const locale = useLocale();
   const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    setError("");
+    const ok = await unlockVault(value);
+    setBusy(false);
+    if (!ok) {
+      setError(t(locale, "wrongMasterPw"));
+      return;
+    }
+    setValue("");
+    useEnclave.getState().setLocked(false);
+  };
+
   return (
-    <div className="fixed inset-0 z-[80] grid place-items-center bg-canvas/95">
-      <div className="w-[min(360px,calc(100vw-24px))] rounded-2xl border border-line bg-surface p-4">
-        <div className="mb-3 text-lg font-semibold tracking-tight">{t(locale, "locked")}</div>
-        <p className="mb-4 text-sm text-subtle">{t(locale, "masterPwHint")}</p>
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-canvas">
+      <form
+        className="w-[min(380px,calc(100vw-24px))] rounded-lg border border-line bg-surface p-6"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <div className="mb-1 flex items-center gap-2 text-ink">
+          <KeyRound className="size-4 text-accent" />
+          <h1 className="text-lg font-bold tracking-tight">{t(locale, "locked")}</h1>
+        </div>
+        <p className="mb-5 text-[13px] text-subtle">{t(locale, "masterPwHint")}</p>
         <Input
           type="password"
+          autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={t(locale, "masterPw")}
         />
-        <Button
-          variant="primary"
-          className="mt-3 w-full"
-          onClick={() => useEnclave.getState().setLocked(false)}
-        >
+        {error ? <p className="mt-2 text-[13px] text-bad">{error}</p> : null}
+        <Button variant="primary" size="md" className="mt-4 w-full" type="submit" disabled={busy}>
           {t(locale, "unlock")}
         </Button>
-      </div>
+      </form>
     </div>
   );
 }
@@ -320,13 +359,8 @@ function CommandPalette({
   const envs = useMemo(() => environments.filter((e) => !e.deletedAt), [environments]);
   const pages = useMemo(
     () => [
-      { to: "/", label: t(locale, "navEnv") },
-      { to: "/network", label: t(locale, "navNet") },
-      { to: "/engines", label: t(locale, "navEngines") },
-      { to: "/extensions", label: t(locale, "navExt") },
-      { to: "/lab", label: t(locale, "navLab") },
-      { to: "/kernels", label: t(locale, "navKernels") },
-      { to: "/security", label: t(locale, "navSecurity") },
+      ...NAV.map((n) => ({ to: n.to, label: t(locale, n.key) })),
+      { to: "/account", label: t(locale, "navAccount") },
       { to: "/settings", label: t(locale, "navSettings") },
     ],
     [locale],
@@ -338,16 +372,21 @@ function CommandPalette({
         <Command className="text-sm" shouldFilter>
           <Command.Input
             placeholder={t(locale, "search")}
-            className="h-12 w-full border-b border-line bg-transparent px-4 outline-none"
+            className="h-12 w-full border-b border-line bg-transparent px-4 text-ink outline-none placeholder:text-faint"
           />
           <Command.List className="max-h-80 overflow-auto p-2">
-            <Command.Empty className="px-2 py-6 text-center text-subtle">没有匹配项</Command.Empty>
-            <Command.Group heading="页面" className="text-xs text-subtle">
+            <Command.Empty className="px-2 py-8 text-center text-[13px] text-subtle">
+              {t(locale, "noMatch")}
+            </Command.Empty>
+            <Command.Group
+              heading={t(locale, "pages")}
+              className="px-1 text-xs font-semibold tracking-[1.5px] text-subtle uppercase"
+            >
               {pages.map((p) => (
                 <Command.Item
                   key={p.to}
                   value={`page ${p.label}`}
-                  className="rounded-md px-2 py-2 text-ink aria-selected:bg-surface-2"
+                  className="mt-1 cursor-pointer rounded-md px-2.5 py-2 text-[13px] text-muted aria-selected:bg-surface-2 aria-selected:text-ink"
                   onSelect={() => {
                     void navigate({ to: p.to });
                     onOpenChange(false);
@@ -357,21 +396,26 @@ function CommandPalette({
                 </Command.Item>
               ))}
             </Command.Group>
-            <Command.Group heading="环境" className="mt-2 text-xs text-subtle">
-              {envs.map((env) => (
-                <Command.Item
-                  key={env.id}
-                  value={`env ${env.name}`}
-                  className="rounded-md px-2 py-2 text-ink aria-selected:bg-surface-2"
-                  onSelect={() => {
-                    void navigate({ to: "/environments/$id", params: { id: env.id } });
-                    onOpenChange(false);
-                  }}
-                >
-                  {env.name}
-                </Command.Item>
-              ))}
-            </Command.Group>
+            {envs.length ? (
+              <Command.Group
+                heading={t(locale, "navEnv")}
+                className="mt-3 px-1 text-xs font-semibold tracking-[1.5px] text-subtle uppercase"
+              >
+                {envs.map((env) => (
+                  <Command.Item
+                    key={env.id}
+                    value={`env ${env.name}`}
+                    className="mt-1 cursor-pointer rounded-md px-2.5 py-2 text-[13px] text-muted aria-selected:bg-surface-2 aria-selected:text-ink"
+                    onSelect={() => {
+                      void navigate({ to: "/environments/$id", params: { id: env.id } });
+                      onOpenChange(false);
+                    }}
+                  >
+                    {env.name}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            ) : null}
           </Command.List>
         </Command>
       </DialogContent>

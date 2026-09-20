@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button, Field, Input, Panel } from "@/components/ui";
-import { useLocale } from "@/components/shell";
+import { useLocale } from "@/lib/use-locale";
 import { type CatalogEngine } from "@/lib/engines";
 import { t } from "@/lib/i18n";
 import { makeId } from "@/lib/schema";

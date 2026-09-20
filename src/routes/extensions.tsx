@@ -1,53 +1,120 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { Puzzle } from "lucide-react";
 import { useState } from "react";
-import { Badge, Button, Dialog, DialogContent, Field, Input, Panel } from "@/components/ui";
-import { useLocale } from "@/components/shell";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  Empty,
+  Field,
+  Input,
+  Panel,
+  PageHeader,
+} from "@/components/ui";
+import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { makeId } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/extensions")({ component: ExtensionsPage });
 
+/** 这些权限意味着扩展能读到环境里的全部内容，勾给环境前得让用户看见。 */
+const RISKY = ["<all_urls>", "tabs", "webRequest", "cookies", "proxy", "debugger"];
+
 function ExtensionsPage() {
   const locale = useLocale();
   const extensions = useEnclave((s) => s.extensions);
+  const environments = useEnclave((s) => s.environments);
   const [open, setOpen] = useState(false);
+
   return (
-    <div className="mx-auto max-w-5xl p-4 md:p-6">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-[20px] font-semibold tracking-tight">{t(locale, "extTitle")}</h1>
-          <p className="mt-1 max-w-2xl text-[13px] text-subtle">{t(locale, "extensionsHint")}</p>
-        </div>
-        <Button variant="primary" onClick={() => setOpen(true)}>
-          {t(locale, "addExt")}
-        </Button>
-      </div>
-      <div className="grid gap-2">
+    <div className="mx-auto max-w-4xl px-8 py-6">
+      <PageHeader
+        title={t(locale, "extTitle")}
+        status="扩展是解压后的文件夹，启动环境时按环境各自的选择加载。加载扩展会让指纹更独特。"
+        actions={
+          <Button variant="primary" onClick={() => setOpen(true)}>
+            {t(locale, "addExt")}
+          </Button>
+        }
+      />
+
+      <Panel className="overflow-hidden">
         {extensions.length === 0 ? (
-          <Panel className="p-8 text-center text-[13px] text-subtle">{t(locale, "none")}</Panel>
+          <Empty
+            icon={<Puzzle className="size-8" />}
+            title="还没有扩展"
+            body="添加一个解压好的扩展文件夹，然后在环境详情里勾选要用它的环境。"
+            action={
+              <Button variant="primary" onClick={() => setOpen(true)}>
+                {t(locale, "addExt")}
+              </Button>
+            }
+          />
         ) : (
-          extensions.map((ext) => (
-            <Panel key={ext.id} className="flex items-center justify-between gap-3 p-4">
-              <div>
-                <div className="font-medium">{ext.name}</div>
-                <div className="font-mono text-[12px] text-subtle">{ext.path}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                {ext.highRisk ? <Badge tone="bad">{t(locale, "highRiskPerm")}</Badge> : null}
-                <Button variant="danger" onClick={() => useEnclave.getState().removeExt(ext.id)}>
-                  {t(locale, "delete")}
-                </Button>
-              </div>
-            </Panel>
-          ))
+          <div className="overflow-x-auto">
+            <table className="app-table min-w-[680px]">
+              <thead>
+                <tr>
+                  <th>{t(locale, "name")}</th>
+                  <th>路径</th>
+                  <th>权限</th>
+                  <th>被使用</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {extensions.map((ext) => {
+                  const used = environments.filter(
+                    (e) => !e.deletedAt && e.extensionIds.includes(ext.id),
+                  ).length;
+                  return (
+                    <tr key={ext.id}>
+                      <td>
+                        <div className="font-medium text-ink">{ext.name}</div>
+                      </td>
+                      <td className="app-mono max-w-[22ch] truncate text-xs" title={ext.path}>
+                        {ext.path}
+                      </td>
+                      <td>
+                        {ext.highRisk ? (
+                          <Badge tone="warn">{t(locale, "highRiskPerm")}</Badge>
+                        ) : (
+                          <span className="text-subtle">{ext.permissions.join(" ") || "—"}</span>
+                        )}
+                      </td>
+                      <td className="text-subtle">{used ? `${used} 个环境` : "未使用"}</td>
+                      <td>
+                        <div className="flex justify-end">
+                          <Button
+                            variant="danger"
+                            onClick={() => {
+                              const store = useEnclave.getState();
+                              for (const env of store.environments) {
+                                if (env.extensionIds.includes(ext.id)) {
+                                  store.patchEnv(env.id, {
+                                    extensionIds: env.extensionIds.filter((id) => id !== ext.id),
+                                  });
+                                }
+                              }
+                              store.removeExt(ext.id);
+                            }}
+                          >
+                            {t(locale, "delete")}
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
-      {open ? (
-        <Dialog open onOpenChange={(o) => !o && setOpen(false)}>
-          <ExtDialog onClose={() => setOpen(false)} />
-        </Dialog>
-      ) : null}
+      </Panel>
+
+      {open ? <ExtDialog onClose={() => setOpen(false)} /> : null}
     </div>
   );
 }
@@ -57,43 +124,60 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [perms, setPerms] = useState("storage");
+  const [error, setError] = useState("");
+
+  const save = () => {
+    const clean = path.trim();
+    if (!clean) {
+      setError("填一个解压好的扩展文件夹路径。");
+      return;
+    }
+    if (clean.toLowerCase().endsWith(".crx")) {
+      setError("内核只能加载解压后的文件夹。先把 .crx 解压出来，再填那个文件夹。");
+      return;
+    }
+    const permissions = perms.split(/[,\s]+/).filter(Boolean);
+    useEnclave.getState().upsertExt({
+      id: makeId("ext"),
+      name: name.trim() || clean.split(/[\\/]/).pop() || "extension",
+      source: "local-dir",
+      path: clean,
+      permissions,
+      highRisk: permissions.some((p) => RISKY.includes(p)),
+      enabledByDefault: false,
+    });
+    onClose();
+  };
+
   return (
-    <DialogContent title={t(locale, "addExt")}>
-      <div className="grid gap-3">
-        <Field label={t(locale, "name")}>
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </Field>
-        <Field label="crx / dir">
-          <Input value={path} onChange={(e) => setPath(e.target.value)} placeholder="/path/to.crx" />
-        </Field>
-        <Field label="permissions">
-          <Input value={perms} onChange={(e) => setPerms(e.target.value)} />
-        </Field>
-      </div>
-      <div className="mt-4 flex justify-end gap-2">
-        <Button onClick={onClose}>{t(locale, "cancel")}</Button>
-        <Button
-          variant="primary"
-          onClick={() => {
-            const permissions = perms.split(/[,\s]+/).filter(Boolean);
-            const highRisk = permissions.some((p) =>
-              ["<all_urls>", "tabs", "webRequest", "cookies"].includes(p),
-            );
-            useEnclave.getState().upsertExt({
-              id: makeId("ext"),
-              name: name || "extension",
-              source: path.endsWith(".crx") ? "local-crx" : "local-dir",
-              path,
-              permissions,
-              highRisk,
-              enabledByDefault: false,
-            });
-            onClose();
-          }}
-        >
-          {t(locale, "save")}
-        </Button>
-      </div>
-    </DialogContent>
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent title={t(locale, "addExt")}>
+        <div className="grid gap-4">
+          <Field label={t(locale, "name")} hint="留空就用文件夹名">
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </Field>
+          <Field
+            label="扩展文件夹"
+            hint="manifest.json 所在的那个文件夹"
+            error={error}
+          >
+            <Input
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              placeholder="C:\\ext\\my-extension"
+            />
+          </Field>
+          <Field label="权限" hint="从扩展的 manifest.json 里抄过来，用空格分隔">
+            <Input value={perms} onChange={(e) => setPerms(e.target.value)} />
+          </Field>
+        </div>
+        <div className="mt-6 flex justify-end gap-2">
+          <Button onClick={onClose}>{t(locale, "cancel")}</Button>
+          <Button variant="primary" onClick={save}>
+            {t(locale, "save")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

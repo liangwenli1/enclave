@@ -28,9 +28,13 @@ export type FingerprintProfile = {
   lockedFields: string[];
 };
 
+/**
+ * 代理认证。**密码不在这里**：它只以密文存在保险箱里（见 lib/vault.ts），
+ * 键是 `proxy:<代理 id>`。这里只记有没有存过密码，界面据此显示状态。
+ */
 export type ProxyAuth = {
   username: string;
-  password?: string;
+  hasPassword: boolean;
 };
 
 export type ProxyItem = {
@@ -123,14 +127,10 @@ export type LabSnapshot = {
 
 export type AppSettings = {
   locale: "zh" | "en";
-  theme: "dark" | "light";
   density: "compact" | "comfortable";
-  masterPasswordSet: boolean;
-  apiEnabled: boolean;
-  apiPort: number;
-  confirmDangerousApi: boolean;
   allowNoSandboxHost: boolean;
-  plan: "free" | "solo" | "pro";
+  /** 内核还在预览通道时，用户明确同意后才允许准入和启动。 */
+  allowPreviewKernel: boolean;
   onboarded: boolean;
 };
 
