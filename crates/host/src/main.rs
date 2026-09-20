@@ -16,10 +16,10 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use enclave_host::api::{allows, ApiLevel, EnvEntry, StartSpec};
 use enclave_host::kernel::{
-    admit, capabilities, ensure_dirs, kernel_for_this_os, list_search_engines, load_manifest,
-    prune_dead, purge_environment, read_status_fast, restore_runtimes, start_environment,
-    stop_environment, valid_env_id, HostPaths, KernelRecord, KernelStatus, ManifestFile,
-    RuntimeRow,
+    admit, capabilities, default_version, ensure_dirs, kernels_for_this_os, list_search_engines,
+    load_manifest, prune_dead, purge_environment, read_status_fast, remove_kernel,
+    restore_runtimes, start_environment, stop_environment, valid_env_id, HostPaths, KernelRecord,
+    KernelStatus, RuntimeRow,
 };
 use rand::RngCore;
 use serde::Deserialize;
@@ -43,16 +43,66 @@ const APP_ORIGINS: &[&str] = &[
 
 struct App {
     paths: HostPaths,
-    kernel: KernelRecord,
-    manifest: ManifestFile,
+    /// 这个系统能用的全部内核版本，新的在前。
+    kernels: Mutex<Vec<Arc<KernelSlot>>>,
     token: String,
-    status: Arc<Mutex<KernelStatus>>,
     runtimes: Arc<Mutex<HashMap<String, RuntimeRow>>>,
-    admitting: Arc<Mutex<bool>>,
-    /// 本进程是否已经完整校验过内核可执行文件。第一次启动环境时做全量 sha256，
-    /// 之后只比对大小与修改时间，免得每次启动都读一遍上百 MB。
-    verified_once: Arc<AtomicBool>,
     api: Arc<Mutex<ApiState>>,
+}
+
+/// 一个内核版本和它在本进程里的状态。版本之间互不影响：可以一个在下载、另一个在跑。
+struct KernelSlot {
+    record: KernelRecord,
+    status: Arc<Mutex<KernelStatus>>,
+    admitting: Arc<Mutex<bool>>,
+    /// 本进程是否已经完整校验过这个版本的可执行文件。第一次启动环境时做全量 sha256，
+    /// 之后只比对大小与修改时间，免得每次启动都读一遍上百 MB。
+    verified_once: AtomicBool,
+}
+
+impl KernelSlot {
+    async fn load(paths: &HostPaths, record: KernelRecord) -> Arc<Self> {
+        let status = read_status_fast(paths, &record).await;
+        Arc::new(Self {
+            record,
+            status: Arc::new(Mutex::new(status)),
+            admitting: Arc::new(Mutex::new(false)),
+            verified_once: AtomicBool::new(false),
+        })
+    }
+
+    /// 准入进行中、或者刚失败，真相在内存里：下载写的是 .part，磁盘上看不出进度，
+    /// 失败原因也不落盘。这时从磁盘重算会把它们盖成"未下载"，界面既没进度也没报错。
+    async fn current_status(&self, paths: &HostPaths) -> KernelStatus {
+        {
+            let s = self.status.lock().await;
+            if *self.admitting.lock().await || s.state == "error" {
+                return s.clone();
+            }
+        }
+        let fresh = read_status_fast(paths, &self.record).await;
+        *self.status.lock().await = fresh.clone();
+        fresh
+    }
+}
+
+impl App {
+    async fn slot(&self, version: &str) -> Option<Arc<KernelSlot>> {
+        self.kernels
+            .lock()
+            .await
+            .iter()
+            .find(|k| k.record.version == version)
+            .cloned()
+    }
+}
+
+fn unknown_kernel(version: &str) -> Json<Value> {
+    Json(json!({
+        "ok": false,
+        "code": "KERNEL_UNTRUSTED_SOURCE",
+        "message": format!("清单里没有内核 {version}。"),
+    }))
 }
 
 /// 给脚本用的 API 的运行时状态。开关、档位、环境清单都由工作台推过来，只在内存里；
@@ -73,10 +123,12 @@ async fn main() {
     ensure_dirs(&paths).await.expect("data dirs");
     let token = load_or_create_token(&paths.token);
     let manifest = load_manifest(&paths.manifest).expect("kernels.manifest.json");
-    let kernel = kernel_for_this_os(&manifest)
-        .expect("本平台没有可用内核清单")
-        .clone();
-    let status = read_status_fast(&paths, &kernel).await;
+    let records = kernels_for_this_os(&manifest);
+    assert!(!records.is_empty(), "本平台没有可用内核清单");
+    let mut kernels = Vec::new();
+    for record in records {
+        kernels.push(KernelSlot::load(&paths, record).await);
+    }
     let runtimes = Arc::new(Mutex::new(HashMap::new()));
     restore_runtimes(&paths, &runtimes).await;
     let api = ApiState {
@@ -87,13 +139,9 @@ async fn main() {
     };
     let state = Arc::new(App {
         paths,
-        kernel,
-        manifest,
+        kernels: Mutex::new(kernels),
         token,
-        status: Arc::new(Mutex::new(status)),
         runtimes,
-        admitting: Arc::new(Mutex::new(false)),
-        verified_once: Arc::new(AtomicBool::new(false)),
         api: Arc::new(Mutex::new(api)),
     });
 
@@ -106,6 +154,7 @@ async fn main() {
         .route("/v1/health", get(health))
         .route("/v1/kernel", get(kernel_view))
         .route("/v1/kernel/admit", post(kernel_admit))
+        .route("/v1/kernel/remove", post(kernel_remove))
         .route("/v1/environments/start", post(env_start))
         .route("/v1/environments/stop", post(env_stop))
         .route("/v1/environments/purge", post(env_purge))
@@ -288,78 +337,112 @@ async fn health() -> Json<Value> {
 }
 
 async fn kernel_view(State(state): State<Arc<App>>) -> Json<Value> {
-    // 准入进行中、或者刚失败，真相在内存里：下载写的是 .part，磁盘上看不出进度，
-    // 失败原因也不落盘。这时从磁盘重算会把它们盖成"未下载"，界面既没进度也没报错。
-    let live = {
-        let s = state.status.lock().await;
-        (*state.admitting.lock().await || s.state == "error").then(|| s.clone())
-    };
-    let status = match live {
-        Some(s) => s,
-        None => {
-            let s = read_status_fast(&state.paths, &state.kernel).await;
-            *state.status.lock().await = s.clone();
-            s
-        }
-    };
+    let slots = state.kernels.lock().await.clone();
+    let mut kernels = Vec::new();
+    for slot in &slots {
+        kernels.push(json!({
+            "record": slot.record,
+            "status": slot.current_status(&state.paths).await,
+        }));
+    }
+    let records: Vec<KernelRecord> = slots.iter().map(|s| s.record.clone()).collect();
     prune_dead(&state.paths, &state.runtimes).await;
     let runtimes: Vec<RuntimeRow> = state.runtimes.lock().await.values().cloned().collect();
     Json(json!({
-        "status": status,
-        "kernel": {
-            "manifest": state.kernel,
-            "kernels": state.manifest.kernels,
-            "channel": state.manifest.channel,
-        },
+        "kernels": kernels,
+        "defaultVersion": default_version(&records),
         "capabilities": capabilities(),
         "runtimes": runtimes,
         "version": env!("CARGO_PKG_VERSION"),
     }))
 }
 
-#[derive(Deserialize, Default)]
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AdmitBody {
+    version: String,
     /// 内核不是 stable 通道时，必须由用户在安全中心明确同意。
     #[serde(default)]
     allow_preview_channel: bool,
 }
 
-async fn kernel_admit(State(state): State<Arc<App>>, body: Option<Json<AdmitBody>>) -> Json<Value> {
-    let allow_preview = body.map(|b| b.allow_preview_channel).unwrap_or(false);
-    if state.kernel.channel != "stable" && !allow_preview {
+async fn kernel_admit(State(state): State<Arc<App>>, Json(body): Json<AdmitBody>) -> Json<Value> {
+    let Some(slot) = state.slot(&body.version).await else {
+        return unknown_kernel(&body.version);
+    };
+    if slot.record.channel != "stable" && !body.allow_preview_channel {
         return Json(json!({
             "ok": false,
             "code": "KERNEL_CHANNEL_BLOCKED",
-            "message": "这个平台的内核还是预览通道，需要在安全中心明确同意后才能准入。",
+            "message": "这个内核还是预览通道，需要在安全中心明确同意后才能准入。",
         }));
     }
     {
-        let mut flag = state.admitting.lock().await;
+        let mut flag = slot.admitting.lock().await;
         if *flag {
-            return Json(json!(state.status.lock().await.clone()));
+            return Json(json!(slot.status.lock().await.clone()));
         }
         *flag = true;
     }
     let paths = state.paths.clone();
-    let kernel = state.kernel.clone();
-    let status = state.status.clone();
-    let admitting = state.admitting.clone();
-    let verified = state.verified_once.clone();
+    let task = slot.clone();
     tokio::spawn(async move {
-        if let Err(e) = admit(&paths, &kernel, &status).await {
-            let mut s = status.lock().await;
+        if let Err(e) = admit(&paths, &task.record, &task.status).await {
+            let mut s = task.status.lock().await;
             if s.state != "hash_mismatch" {
                 s.state = "error".into();
                 s.error = Some(format!("内核没能下载或解压，检查网络后重试。（{e}）"));
             }
         } else {
             // 准入过程本身刚做过全量校验，本进程内不必立刻再做一次。
-            verified.store(true, Ordering::Relaxed);
+            task.verified_once.store(true, Ordering::Relaxed);
         }
-        *admitting.lock().await = false;
+        *task.admitting.lock().await = false;
     });
-    Json(json!(state.status.lock().await.clone()))
+    let status = slot.status.lock().await.clone();
+    Json(json!(status))
+}
+
+#[derive(Deserialize)]
+struct RemoveBody {
+    version: String,
+}
+
+/// 删掉一个已下载的版本，腾磁盘。正在下载的、还有环境在跑的不许删。
+async fn kernel_remove(State(state): State<Arc<App>>, Json(body): Json<RemoveBody>) -> Json<Value> {
+    let Some(slot) = state.slot(&body.version).await else {
+        return unknown_kernel(&body.version);
+    };
+    if *slot.admitting.lock().await {
+        return Json(json!({
+            "ok": false,
+            "code": "KERNEL_BUSY",
+            "message": "这个版本正在下载或校验，等它结束再删。",
+        }));
+    }
+    prune_dead(&state.paths, &state.runtimes).await;
+    let in_use = state
+        .runtimes
+        .lock()
+        .await
+        .values()
+        .filter(|r| r.kernel_version == body.version)
+        .count();
+    if in_use > 0 {
+        return Json(json!({
+            "ok": false,
+            "code": "KERNEL_IN_USE",
+            "message": format!("还有 {in_use} 个环境在用这个版本运行，先停掉它们。"),
+        }));
+    }
+    if let Err(e) = remove_kernel(&state.paths, &slot.record).await {
+        return Json(
+            json!({ "ok": false, "code": "KERNEL_REMOVE_FAILED", "message": e.to_string() }),
+        );
+    }
+    slot.verified_once.store(false, Ordering::Relaxed);
+    *slot.status.lock().await = read_status_fast(&state.paths, &slot.record).await;
+    Json(json!({ "ok": true }))
 }
 
 #[derive(Deserialize)]
@@ -379,17 +462,20 @@ async fn run_start(state: &Arc<App>, env_id: &str, spec: &StartSpec) -> Json<Val
     if !valid_env_id(env_id) {
         return Json(json!({ "ok": false, "code": "BAD_ENV_ID", "message": "环境 id 不合法。" }));
     }
-    if state.kernel.channel != "stable" && !spec.allow_preview_channel {
+    let Some(slot) = state.slot(&spec.kernel_version).await else {
+        return unknown_kernel(&spec.kernel_version);
+    };
+    if slot.record.channel != "stable" && !spec.allow_preview_channel {
         return Json(json!({
             "ok": false,
             "code": "KERNEL_CHANNEL_BLOCKED",
-            "message": "这个平台的内核还是预览通道，需要在安全中心明确同意后才能启动。",
+            "message": "这个内核还是预览通道，需要在安全中心明确同意后才能启动。",
         }));
     }
-    let full_verify = !state.verified_once.load(Ordering::Relaxed);
+    let full_verify = !slot.verified_once.load(Ordering::Relaxed);
     match start_environment(
         &state.paths,
-        &state.kernel,
+        &slot.record,
         env_id,
         spec,
         &state.runtimes,
@@ -398,7 +484,7 @@ async fn run_start(state: &Arc<App>, env_id: &str, spec: &StartSpec) -> Json<Val
     .await
     {
         Ok(s) => {
-            state.verified_once.store(true, Ordering::Relaxed);
+            slot.verified_once.store(true, Ordering::Relaxed);
             Json(json!({
                 "ok": true,
                 "pid": s.pid,

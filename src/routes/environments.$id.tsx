@@ -3,6 +3,7 @@ import { ArrowLeft, FlaskConical, Play, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "@/components/ui";
 import { classifyAll } from "@/lib/kernel/flags";
+import { kernelOptionLabel, useKernels } from "@/lib/kernel/use-kernels";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
 import { eventLabel, t, runtimeLabel } from "@/lib/i18n";
 import { engineToProvider } from "@/lib/engines";
@@ -128,6 +129,9 @@ function EnvDetail() {
             <Field label={t("searchEngine")}>
               <EngineSelect envId={env.id} value={env.searchEngine ?? "none"} />
             </Field>
+            <Field label={t("kernelVersion")} hint="换版本后，网站会看到这台设备的浏览器升级或降级了">
+              <KernelSelect envId={env.id} value={env.kernelVersion} disabled={status !== "stopped" && status !== "error"} />
+            </Field>
             <Field label={t("note")}>
               <Textarea
                 value={env.note}
@@ -226,6 +230,43 @@ function EnvDetail() {
         </Panel>
       </aside>
     </div>
+  );
+}
+
+/** 环境绑定的内核版本。只有用户自己改才会变；画像里的浏览器版本跟着一起改。 */
+function KernelSelect({ envId, value, disabled }: { envId: string; value: string; disabled: boolean }) {
+  const { kernels } = useKernels();
+  const listed = kernels.some((k) => k.record.version === value);
+  return (
+    <Select
+      value={value}
+      disabled={disabled}
+      title={disabled ? "先停掉这个环境再换内核" : undefined}
+      onChange={(e) => {
+        const version = e.target.value;
+        const store = useEnclave.getState();
+        const env = store.environments.find((x) => x.id === envId);
+        if (!env) return;
+        store.patchEnv(
+          envId,
+          { kernelVersion: version, profile: { ...env.profile, brandVersion: version } },
+          { at: Date.now(), kind: "kernel", message: `内核 ${value} → ${version}`, level: "warn" },
+        );
+        store.addAudit({
+          action: "kernel_change",
+          target: envId,
+          level: "warn",
+          detail: `${env.name} · ${value} → ${version}`,
+        });
+      }}
+    >
+      {listed ? null : <option value={value}>{value}（已不在清单里）</option>}
+      {kernels.map((k) => (
+        <option key={k.record.version} value={k.record.version}>
+          {kernelOptionLabel(k)}
+        </option>
+      ))}
+    </Select>
   );
 }
 

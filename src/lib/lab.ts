@@ -129,6 +129,14 @@ export function staticConsistency(
     label: "画像种子",
     detail: p.seedLocked ? `${p.seed} · 已锁定` : `${p.seed} · 未锁定`,
   });
+  if (p.brandVersion !== env.kernelVersion) {
+    checks.push({
+      id: "brand-version",
+      ok: false,
+      label: "浏览器版本",
+      detail: `画像报 ${p.brandVersion}，内核是 ${env.kernelVersion}`,
+    });
+  }
   if (proxy?.country) {
     const allowed = PROXY_GEO_TZ[proxy.country];
     const aligned = !allowed || allowed.includes(p.timezone);

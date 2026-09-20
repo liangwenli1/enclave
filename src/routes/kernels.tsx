@@ -1,37 +1,50 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
-import { Badge, Button, CodeBlock, Panel, PanelHeader, PageHeader } from "@/components/ui";
-import { admitKernel, getKernelView, type KernelView } from "@/lib/kernel/host-api";
+import {
+  Badge,
+  Button,
+  CodeBlock,
+  Dialog,
+  DialogContent,
+  Panel,
+  PanelHeader,
+  PageHeader,
+} from "@/components/ui";
+import {
+  admitKernel,
+  getKernelView,
+  removeKernel,
+  type KernelEntry,
+  type KernelView,
+} from "@/lib/kernel/host-api";
 import { t } from "@/lib/i18n";
-import { KERNEL_PIN } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/kernels")({ component: KernelsPage });
 
 /** 内部状态 → 用户能看懂的话。界面上不出现 admitted / hash_mismatch 这种词。 */
-const STATE_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "bad" }> = {
-  absent: { text: "未下载", tone: "warn" },
+const STATE_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "bad" | "neutral" }> = {
+  absent: { text: "未下载", tone: "neutral" },
   downloading: { text: "下载中", tone: "warn" },
   verifying: { text: "校验中", tone: "warn" },
   extracting: { text: "解压中", tone: "warn" },
-  admitted: { text: "已准入", tone: "ok" },
+  admitted: { text: "已下载", tone: "ok" },
   hash_mismatch: { text: "哈希不符，已拒用", tone: "bad" },
   error: { text: "出错了", tone: "bad" },
 };
 
 /** 只在出错时出现，所以写得具体一点：说清是什么、下一步做什么。 */
 const ERROR_HINT: Record<string, string> = {
-  KERNEL_HASH_MISMATCH: "文件和清单里的哈希对不上，已拒用。重新准入一次；反复出现请联系我们。",
-  KERNEL_CHANNEL_BLOCKED: "这个平台的内核还在预览通道，要先到安全中心同意。",
-  KERNEL_UNTRUSTED_SOURCE: "清单里没有这个平台的哈希，或者文件不在了。",
+  KERNEL_HASH_MISMATCH: "文件和清单里的哈希对不上，已拒用。重新下载一次；反复出现请联系我们。",
+  KERNEL_CHANNEL_BLOCKED: "这个版本还在预览通道，要先到安全中心同意。",
+  KERNEL_UNTRUSTED_SOURCE: "清单里没有这个版本，或者文件不在了。",
   HOST_UNAVAILABLE: "连不上本机服务。重启工作台再试。",
 };
 
 function KernelsPage() {
-  const allowPreview = useEnclave((s) => s.settings.allowPreviewKernel);
   const [view, setView] = useState<KernelView | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [blocked, setBlocked] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<{ version: string; error?: string } | null>(null);
+  const environments = useEnclave((s) => s.environments);
 
   const load = useCallback(async () => {
     setView(await getKernelView());
@@ -42,32 +55,6 @@ function KernelsPage() {
     const id = window.setInterval(() => void load(), 1500);
     return () => window.clearInterval(id);
   }, [load]);
-
-  const status = view?.status;
-  const kernel = view?.kernel?.manifest;
-  const caps = view?.capabilities;
-  const state = status?.state ?? "absent";
-  const label = STATE_LABEL[state] ?? STATE_LABEL.error;
-  const isPreviewChannel = Boolean(kernel && kernel.channel !== "stable");
-  const busyState = state === "downloading" || state === "verifying" || state === "extracting";
-  const pct =
-    status && status.bytesExpected
-      ? Math.min(100, Math.round((status.bytesReceived / status.bytesExpected) * 100))
-      : 0;
-
-  const admit = async () => {
-    setBusy(true);
-    setBlocked(null);
-    const res = (await admitKernel(allowPreview)) as { code?: string; message?: string };
-    if (res?.code) setBlocked(ERROR_HINT[res.code] ?? res.message ?? res.code);
-    useEnclave.getState().addAudit({
-      action: "kernel_admit",
-      level: res?.code ? "warn" : "info",
-      detail: res?.code ?? KERNEL_PIN.version,
-    });
-    await load();
-    setBusy(false);
-  };
 
   if (view && !view.online) {
     return (
@@ -81,80 +68,44 @@ function KernelsPage() {
     );
   }
 
+  const kernels = view?.kernels ?? [];
+  const downloaded = kernels.filter((k) => k.status.state === "admitted").length;
+  const boundTo = (version: string) =>
+    environments.filter((e) => !e.deletedAt && e.kernelVersion === version).length;
+  const caps = view?.capabilities;
+
+  const remove = async (version: string) => {
+    const res = await removeKernel(version);
+    if (!res.ok) {
+      setRemoving({ version, error: res.message ?? "没删掉。" });
+      return;
+    }
+    useEnclave.getState().addAudit({ action: "kernel_remove", level: "warn", detail: version });
+    setRemoving(null);
+    await load();
+  };
+
   return (
     <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
       <PageHeader
         title={t("kernelsTitle")}
-        status={`${kernel?.id ?? KERNEL_PIN.id} ${kernel?.version ?? KERNEL_PIN.version} · ${label.text}`}
+        status={`${kernels.length} 个版本 · ${downloaded} 个已下载`}
       />
 
-      <Panel>
-        <PanelHeader
-          title={`${kernel?.id ?? KERNEL_PIN.id} ${kernel?.version ?? KERNEL_PIN.version}`}
-          hint={isPreviewChannel ? "预览通道" : "稳定通道"}
-          actions={<Badge tone={label.tone}>{label.text}</Badge>}
-        />
-        <div className="grid gap-4 p-5">
-          {busyState ? (
-            <div>
-              <div className="h-1 overflow-hidden rounded-full bg-surface-2">
-                <div className="h-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
-              </div>
-              <div className="app-mono mt-2 text-xs text-subtle">
-                {label.text} {pct}%
-              </div>
-            </div>
-          ) : null}
-
-          <CodeBlock label="清单哈希 SHA256" value={kernel?.sha256 ?? KERNEL_PIN.sha256} />
-
-          {status?.exeSha256 ? (
-            <CodeBlock label="本机可执行文件 SHA256" value={status.exeSha256} />
-          ) : null}
-
-          {status?.executable ? (
-            <div className="text-[13px] text-subtle">
-              安装位置 <span className="app-mono text-muted">{status.executable}</span>
-            </div>
-          ) : null}
-
-          {state === "hash_mismatch" || status?.error ? (
-            <p className="text-[13px] leading-relaxed text-bad">
-              {ERROR_HINT[status?.error ?? ""] ?? status?.error ?? ERROR_HINT.KERNEL_HASH_MISMATCH}
-            </p>
-          ) : null}
-
-          {blocked ? <p className="text-[13px] leading-relaxed text-warn">{blocked}</p> : null}
-
-          {isPreviewChannel && !allowPreview ? (
-            <div className="rounded-md border border-warn/30 bg-warn/10 px-4 py-3 text-[13px] text-warn">
-              这个平台的内核还在预览通道。到
-              <Link to="/security" className="mx-1 font-semibold underline">
-                安全中心
-              </Link>
-              明确同意后才能准入。
-            </div>
-          ) : null}
-
-          <div>
-            <Button
-              variant="primary"
-              size="md"
-              disabled={busy || busyState || state === "admitted" || (isPreviewChannel && !allowPreview)}
-              title={
-                state === "admitted"
-                  ? "已经准入，不需要重复下载"
-                  : isPreviewChannel && !allowPreview
-                    ? "需要先在安全中心同意使用预览通道内核"
-                    : undefined
-              }
-              onClick={() => void admit()}
-            >
-              {state === "admitted" ? t("admitted") : t("download")}
-            </Button>
-          </div>
-        </div>
-      </Panel>
+      <div className="grid gap-4">
+        {kernels.map((kernel) => (
+          <KernelCard
+            key={kernel.record.version}
+            kernel={kernel}
+            isDefault={kernel.record.version === view?.defaultVersion}
+            // 一屏一个主操作：还没有任何版本可用时，是默认版本的下载按钮。
+            primary={downloaded === 0 && kernel.record.version === view?.defaultVersion}
+            bound={boundTo(kernel.record.version)}
+            onChanged={load}
+            onRemove={() => setRemoving({ version: kernel.record.version })}
+          />
+        ))}
+      </div>
 
       <Panel className="mt-4 p-5">
         <dl className="grid gap-2 text-[13px]">
@@ -163,7 +114,157 @@ function KernelsPage() {
           <Line k="许可证" v="Ungoogled Chromium · BSD-3-Clause" />
         </dl>
       </Panel>
+
+      {removing ? (
+        <Dialog open onOpenChange={(o) => !o && setRemoving(null)}>
+          <DialogContent title={`删除内核 ${removing.version}？`}>
+            <p className="text-[13px] leading-relaxed text-muted">
+              {boundTo(removing.version) > 0 ? (
+                <>
+                  有 {boundTo(removing.version)} 个环境绑定这个版本，删除后它们
+                  <span className="text-bad">启动不了</span>，除非重新下载，或在环境里换一个版本。
+                </>
+              ) : (
+                "会删掉这个版本的压缩包和解压后的文件。以后还能重新下载。"
+              )}
+            </p>
+            {removing.error ? <p className="mt-3 text-[13px] text-bad">{removing.error}</p> : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button onClick={() => setRemoving(null)}>{t("cancel")}</Button>
+              <Button variant="danger" onClick={() => void remove(removing.version)}>
+                {t("delete")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
+  );
+}
+
+function KernelCard({
+  kernel,
+  isDefault,
+  primary,
+  bound,
+  onChanged,
+  onRemove,
+}: {
+  kernel: KernelEntry;
+  isDefault: boolean;
+  primary: boolean;
+  bound: number;
+  onChanged: () => Promise<void>;
+  onRemove: () => void;
+}) {
+  const allowPreview = useEnclave((s) => s.settings.allowPreviewKernel);
+  const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState<string | null>(null);
+
+  const { record, status } = kernel;
+  const state = status.state;
+  const label = STATE_LABEL[state] ?? STATE_LABEL.error;
+  const preview = record.channel !== "stable";
+  const working = state === "downloading" || state === "verifying" || state === "extracting";
+  const needsConsent = preview && !allowPreview;
+  const pct = status.bytesExpected
+    ? Math.min(100, Math.round((status.bytesReceived / status.bytesExpected) * 100))
+    : 0;
+
+  const admit = async () => {
+    setBusy(true);
+    setBlocked(null);
+    const res = await admitKernel(record.version, allowPreview);
+    if (res.code) setBlocked(ERROR_HINT[res.code] ?? res.message ?? res.code);
+    useEnclave.getState().addAudit({
+      action: "kernel_admit",
+      level: res.code ? "warn" : "info",
+      detail: res.code ? `${record.version} · ${res.code}` : record.version,
+    });
+    await onChanged();
+    setBusy(false);
+  };
+
+  return (
+    <Panel>
+      <PanelHeader
+        title={record.version}
+        hint={[
+          preview ? "预览通道" : "稳定通道",
+          isDefault ? "新环境默认用它" : null,
+          bound ? `${bound} 个环境在用` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        actions={<Badge tone={label.tone}>{label.text}</Badge>}
+      />
+      <div className="grid gap-4 p-5">
+        {working ? (
+          <div>
+            <div className="h-1 overflow-hidden rounded-full bg-surface-2">
+              <div className="h-full bg-accent transition-[width]" style={{ width: `${pct}%` }} />
+            </div>
+            <div className="app-mono mt-2 text-xs text-subtle">
+              {label.text} {pct}%
+            </div>
+          </div>
+        ) : null}
+
+        <CodeBlock label="清单哈希 SHA256" value={record.sha256} />
+
+        {status.exeSha256 ? (
+          <CodeBlock label="本机可执行文件 SHA256" value={status.exeSha256} />
+        ) : null}
+
+        {status.executable && state === "admitted" ? (
+          <div className="text-[13px] text-subtle">
+            安装位置 <span className="app-mono break-all text-muted">{status.executable}</span>
+          </div>
+        ) : null}
+
+        {state === "hash_mismatch" || status.error ? (
+          <p className="text-[13px] leading-relaxed text-bad">
+            {ERROR_HINT[status.error ?? ""] ?? status.error ?? ERROR_HINT.KERNEL_HASH_MISMATCH}
+          </p>
+        ) : null}
+
+        {blocked ? <p className="text-[13px] leading-relaxed text-warn">{blocked}</p> : null}
+
+        {needsConsent && state !== "admitted" ? (
+          <div className="rounded-md border border-warn/30 bg-warn/10 px-4 py-3 text-[13px] text-warn">
+            这个版本还在预览通道。到
+            <Link to="/security" className="mx-1 font-semibold underline">
+              安全中心
+            </Link>
+            明确同意后才能下载。
+          </div>
+        ) : null}
+
+        <div className="flex gap-2">
+          {state === "admitted" ? (
+            <Button variant="danger" onClick={onRemove}>
+              {t("delete")}
+            </Button>
+          ) : (
+            <Button
+              variant={primary ? "primary" : "secondary"}
+              size={primary ? "md" : "sm"}
+              disabled={busy || working || needsConsent}
+              title={
+                needsConsent
+                  ? "需要先在安全中心同意使用预览通道内核"
+                  : working
+                    ? "正在进行，等它结束"
+                    : undefined
+              }
+              onClick={() => void admit()}
+            >
+              {state === "absent" ? t("download") : "重新下载"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </Panel>
   );
 }
 

@@ -68,6 +68,9 @@ pub struct KernelStatus {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeRow {
     pub env_id: String,
+    /// 这个环境跑的是哪个内核版本。正在用的版本不许删。
+    #[serde(default)]
+    pub kernel_version: String,
     pub pid: u32,
     pub port: u16,
     pub debug_address: String,
@@ -144,7 +147,6 @@ pub struct HostPaths {
     pub kernel_root: PathBuf,
     pub downloads: PathBuf,
     pub profiles: PathBuf,
-    pub status: PathBuf,
     pub runtimes: PathBuf,
     pub token: PathBuf,
     pub manifest: PathBuf,
@@ -157,7 +159,6 @@ impl HostPaths {
         Self {
             downloads: kernel_root.join("downloads"),
             profiles: root.join("profiles"),
-            status: kernel_root.join("status.json"),
             runtimes: root.join("runtimes.json"),
             token: root.join("host.token"),
             kernel_root,
@@ -172,19 +173,41 @@ pub fn load_manifest(path: &Path) -> Result<ManifestFile> {
     Ok(serde_json::from_str(&raw)?)
 }
 
-pub fn kernel_for_this_os(manifest: &ManifestFile) -> Result<&KernelRecord> {
-    let platform = if cfg!(windows) {
+pub fn this_platform() -> &'static str {
+    if cfg!(windows) {
         "win-x64"
     } else if cfg!(target_os = "macos") {
         "mac-arm64"
     } else {
         "linux-x64"
-    };
-    manifest
+    }
+}
+
+/// "148.0.7778.215" → [148, 0, 7778, 215]，用来比较新旧。
+pub fn version_key(version: &str) -> Vec<u64> {
+    version.split('.').map(|p| p.parse().unwrap_or(0)).collect()
+}
+
+/// 清单里这个系统能用的全部内核，新的在前。同一个版本只留一条。
+pub fn kernels_for_this_os(manifest: &ManifestFile) -> Vec<KernelRecord> {
+    let mut list: Vec<KernelRecord> = manifest
         .kernels
         .iter()
-        .find(|k| k.platform == platform && !k.sha256.is_empty())
-        .with_context(|| format!("no hashed kernel for {platform}"))
+        .filter(|k| k.platform == this_platform() && !k.sha256.is_empty())
+        .cloned()
+        .collect();
+    list.sort_by_key(|k| std::cmp::Reverse(version_key(&k.version)));
+    list.dedup_by(|a, b| a.version == b.version);
+    list
+}
+
+/// 新建环境默认用哪个：最新的稳定版；没有稳定版就用最新的。
+pub fn default_version(kernels: &[KernelRecord]) -> Option<String> {
+    kernels
+        .iter()
+        .find(|k| k.channel == "stable")
+        .or(kernels.first())
+        .map(|k| k.version.clone())
 }
 
 /// 环境 id 会被拼进文件路径（profiles/env_<id>），purge 还会对它 remove_dir_all。
@@ -229,6 +252,13 @@ pub async fn ensure_dirs(paths: &HostPaths) -> Result<()> {
 
 pub fn archive_path(paths: &HostPaths, k: &KernelRecord) -> PathBuf {
     paths.downloads.join(&k.filename)
+}
+
+/// 每个版本各有一份准入记录，和它的解压目录放在一起。
+pub fn status_path(paths: &HostPaths, k: &KernelRecord) -> PathBuf {
+    paths
+        .kernel_root
+        .join(format!("{}-{}.status.json", k.id, k.version))
 }
 
 pub fn extract_dir(paths: &HostPaths, k: &KernelRecord) -> PathBuf {
@@ -738,8 +768,12 @@ fn engine_id_from_keyword(keyword: &str, url: &str) -> String {
     }
 }
 
-pub async fn persist_status(paths: &HostPaths, status: &KernelStatus) -> Result<()> {
-    tokio::fs::write(&paths.status, serde_json::to_vec_pretty(status)?).await?;
+pub async fn persist_status(
+    paths: &HostPaths,
+    k: &KernelRecord,
+    status: &KernelStatus,
+) -> Result<()> {
+    tokio::fs::write(status_path(paths, k), serde_json::to_vec_pretty(status)?).await?;
     Ok(())
 }
 
@@ -827,7 +861,7 @@ pub async fn read_status_fast(paths: &HostPaths, k: &KernelRecord) -> KernelStat
         error: None,
         admitted_at: None,
     };
-    if let Ok(raw) = tokio::fs::read_to_string(&paths.status).await {
+    if let Ok(raw) = tokio::fs::read_to_string(status_path(paths, k)).await {
         if let Ok(parsed) = serde_json::from_str::<KernelStatus>(&raw) {
             status = parsed;
         }
@@ -921,7 +955,7 @@ pub async fn admit(
         s.state = "hash_mismatch".into();
         s.sha256_actual = Some(actual);
         s.error = Some("KERNEL_HASH_MISMATCH".into());
-        persist_status(paths, &s).await?;
+        persist_status(paths, k, &s).await?;
         // 留着这个文件的话大小是对的，下次重试会跳过下载，再失败一次，永远如此。
         let _ = tokio::fs::remove_file(&archive).await;
         bail!("KERNEL_HASH_MISMATCH");
@@ -960,7 +994,7 @@ pub async fn admit(
         error: None,
         admitted_at: Some(now_ms()),
     };
-    persist_status(paths, &s).await?;
+    persist_status(paths, k, &s).await?;
     Ok(())
 }
 
@@ -1222,6 +1256,7 @@ pub async fn start_environment(
     let sha = exe_sha;
     let row = RuntimeRow {
         env_id: env_id.into(),
+        kernel_version: k.version.clone(),
         pid,
         port,
         debug_address: "127.0.0.1".into(),
@@ -1416,6 +1451,25 @@ pub async fn restore_runtimes(
     }
 }
 
+/// 删掉一个已下载的版本：解压目录、压缩包、下到一半的文件、准入记录。
+pub async fn remove_kernel(paths: &HostPaths, k: &KernelRecord) -> Result<()> {
+    let archive = archive_path(paths, k);
+    let dir = extract_dir(paths, k);
+    if dir.exists() {
+        tokio::fs::remove_dir_all(&dir).await?;
+    }
+    for file in [
+        archive.with_extension("part"),
+        archive,
+        status_path(paths, k),
+    ] {
+        if file.exists() {
+            tokio::fs::remove_file(&file).await?;
+        }
+    }
+    Ok(())
+}
+
 /// Host 重启后接管回来的浏览器不是它的子进程，等不到退出信号，只能看 pid 还在不在。
 pub async fn prune_dead(
     paths: &HostPaths,
@@ -1427,5 +1481,66 @@ pub async fn prune_dead(
     if map.len() != before {
         let rows: Vec<_> = map.values().cloned().collect();
         let _ = persist_runtimes(paths, &rows).await;
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    fn record(version: &str, channel: &str, platform: &str) -> KernelRecord {
+        KernelRecord {
+            id: "fingerprint-chromium".into(),
+            version: version.into(),
+            platform: platform.into(),
+            channel: channel.into(),
+            url: String::new(),
+            filename: String::new(),
+            sha256: "00".into(),
+            bytes: 1,
+            publisher: String::new(),
+            released_at: String::new(),
+            upstream: String::new(),
+            license: String::new(),
+            notes: String::new(),
+        }
+    }
+
+    #[test]
+    fn versions_compare_numerically_not_as_text() {
+        assert!(version_key("148.0.7778.215") < version_key("150.0.1.2"));
+        assert!(version_key("99.0.0.1") < version_key("148.0.0.0"));
+        assert!(version_key("148.0.7778.99") < version_key("148.0.7778.215"));
+    }
+
+    #[test]
+    fn lists_only_this_platform_newest_first_without_duplicates() {
+        let here = this_platform();
+        let manifest = ManifestFile {
+            channel: "stable".into(),
+            kernels: vec![
+                record("148.0.7778.215", "stable", here),
+                record("150.0.1.2", "candidate", here),
+                record("150.0.1.2", "candidate", here),
+                record("151.0.0.0", "stable", "some-other-os"),
+            ],
+        };
+        let versions: Vec<String> = kernels_for_this_os(&manifest)
+            .into_iter()
+            .map(|k| k.version)
+            .collect();
+        assert_eq!(versions, ["150.0.1.2", "148.0.7778.215"]);
+    }
+
+    #[test]
+    fn default_prefers_newest_stable_over_newer_preview() {
+        let here = this_platform();
+        let list = vec![
+            record("150.0.1.2", "candidate", here),
+            record("148.0.7778.215", "stable", here),
+        ];
+        assert_eq!(default_version(&list).as_deref(), Some("148.0.7778.215"));
+        assert_eq!(default_version(&list[..1]).as_deref(), Some("150.0.1.2"));
+        assert_eq!(default_version(&[]), None);
     }
 }

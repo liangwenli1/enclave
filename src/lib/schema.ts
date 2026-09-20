@@ -71,7 +71,8 @@ export type Environment = {
   searchEngine: string;
   searchProvider?: { name: string; keyword: string; url: string; suggestUrl?: string };
   extensionIds: string[];
-  kernelPin: { id: string; version: string; sha256: string };
+  /** 这个环境绑定的内核版本。不会自动跟着新版本走：换内核等于换浏览器版本，由用户决定。 */
+  kernelVersion: string;
   allowNoSandbox: boolean;
   extraFlags: string[];
   deletedAt: number | null;
@@ -167,7 +168,7 @@ export function profileFromSeed(
     platform,
     platformVersion: extras?.platformVersion ?? defaultPlatformVersion(platform),
     brand: extras?.brand ?? "Chrome",
-    brandVersion: extras?.brandVersion ?? "148.0.7778.215",
+    brandVersion: extras?.brandVersion ?? BUNDLED_KERNEL_VERSION,
     hardwareConcurrency: extras?.hardwareConcurrency ?? pick(CORES),
     locale,
     languages: extras?.languages ?? [locale, locale.split("-")[0] ?? "en"],
@@ -178,11 +179,22 @@ export function profileFromSeed(
   };
 }
 
-export const KERNEL_PIN = {
-  id: "fingerprint-chromium",
-  version: "148.0.7778.215",
-  sha256: "70d239830332e5820aa34dfcb284161cac0429eee25da642830afe04bda717f4",
-};
+/**
+ * 安装包自带清单里的内核版本。只在问不到本机服务时兜底用（比如首次引导时服务还没起来）；
+ * 正常情况下版本列表和默认版本都来自本机服务。
+ */
+export const BUNDLED_KERNEL_VERSION = "148.0.7778.215";
+
+/**
+ * 0.9.2 及以前的环境存的是 kernelPin（一个永远相同的常量）。读进来时换成 kernelVersion。
+ * 持久化数据和导入的环境包都走这里。
+ */
+export function normalizeEnvironment(
+  env: Environment & { kernelPin?: { version?: string } },
+): Environment {
+  const { kernelPin, ...rest } = env;
+  return { ...rest, kernelVersion: env.kernelVersion ?? kernelPin?.version ?? BUNDLED_KERNEL_VERSION };
+}
 
 export const TIMEZONES = [
   "America/Los_Angeles",
@@ -229,7 +241,7 @@ export function newEnvironment(partial?: Partial<Environment>): Environment {
     searchEngine: partial?.searchEngine ?? "none",
     searchProvider: partial?.searchProvider,
     extensionIds: partial?.extensionIds ?? [],
-    kernelPin: KERNEL_PIN,
+    kernelVersion: partial?.kernelVersion ?? BUNDLED_KERNEL_VERSION,
     allowNoSandbox: false,
     extraFlags: [],
     deletedAt: null,

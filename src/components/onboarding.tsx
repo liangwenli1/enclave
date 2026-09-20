@@ -1,9 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
-import { admitKernel, getKernelView } from "@/lib/kernel/host-api";
+import { admitKernel, getKernelView, kernelEntry } from "@/lib/kernel/host-api";
 import { t } from "@/lib/i18n";
-import { KERNEL_PIN, newEnvironment, profileFromSeed, randomSeed } from "@/lib/schema";
+import { newEnvironment, profileFromSeed, randomSeed } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
 /**
@@ -22,12 +22,16 @@ export function Onboarding() {
   // 这个平台的内核是不是还在预览通道。是的话要先拿到同意，否则准入必然被 Host 拒绝，
   // 而引导是全屏遮罩，用户到不了安全中心 —— 同意项必须就放在这一步里。
   const [previewChannel, setPreviewChannel] = useState(false);
+  // 引导里下载的是默认版本；别的版本之后在内核页管理。
+  const [version, setVersion] = useState<string | null>(null);
 
   useEffect(() => {
     if (onboarded) return;
     void getKernelView().then((view) => {
-      setPreviewChannel(Boolean(view.kernel && view.kernel.manifest.channel !== "stable"));
-      if (view.status.state === "admitted") setAdmitted(true);
+      const kernel = kernelEntry(view, view.defaultVersion);
+      setVersion(view.defaultVersion);
+      setPreviewChannel(Boolean(kernel && kernel.record.channel !== "stable"));
+      if (kernel?.status.state === "admitted") setAdmitted(true);
     });
   }, [onboarded]);
 
@@ -41,8 +45,13 @@ export function Onboarding() {
   const admit = async () => {
     setBusy(true);
     setError(null);
-    const res = (await admitKernel(allowPreview)) as { code?: string; message?: string };
-    if (res?.code) {
+    if (!version) {
+      setError("连不上本机服务，重启工作台再试。");
+      setBusy(false);
+      return;
+    }
+    const res = await admitKernel(version, allowPreview);
+    if (res.code) {
       // 被拒或连不上：直接说原因，不进下面的轮询（否则按钮会转十分钟）。
       setError(res.message ?? res.code);
       setBusy(false);
@@ -50,13 +59,13 @@ export function Onboarding() {
     }
     // 下载是后台进行的，这里轮询到准入或出错为止。
     for (let i = 0; i < 600; i += 1) {
-      const view = await getKernelView();
-      if (view.status.state === "admitted") {
+      const status = kernelEntry(await getKernelView(), version)?.status;
+      if (status?.state === "admitted") {
         setAdmitted(true);
         break;
       }
-      if (view.status.state === "hash_mismatch" || view.status.state === "error") {
-        setError(view.status.error ?? "内核准入失败，去内核页看看详情。");
+      if (!status || status.state === "hash_mismatch" || status.state === "error") {
+        setError(status?.error ?? "内核准入失败，去内核页看看详情。");
         break;
       }
       await new Promise((r) => setTimeout(r, 1000));
@@ -137,8 +146,10 @@ export function Onboarding() {
                     const env = newEnvironment({
                       name: "第一个环境",
                       group: "default",
-                      profile: profileFromSeed(randomSeed(), "windows"),
-                      kernelPin: KERNEL_PIN,
+                      profile: profileFromSeed(randomSeed(), "windows", {
+                        brandVersion: version ?? undefined,
+                      }),
+                      kernelVersion: version ?? undefined,
                     });
                     store.upsertEnv(env);
                     store.addAudit({

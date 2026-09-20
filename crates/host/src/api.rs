@@ -25,6 +25,8 @@ pub enum ApiLevel {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct StartSpec {
+    /// 这个环境绑定的内核版本。没准入就拒启，不会悄悄换成别的版本。
+    pub kernel_version: String,
     pub profile: FingerprintProfile,
     #[serde(default)]
     pub extra_flags: Vec<String>,

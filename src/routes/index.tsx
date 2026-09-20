@@ -16,10 +16,11 @@ import {
 import { purgeEnv, startEnv, stopEnv, trashEnv } from "@/lib/host";
 import { runtimeLabel, t } from "@/lib/i18n";
 import { engineToProvider, findEngine } from "@/lib/engines";
+import { kernelOptionLabel, useKernels } from "@/lib/kernel/use-kernels";
 import { envCount } from "@/lib/license/plans";
 import { defaultPlatformVersion, platformLabel } from "@/lib/os";
 import {
-  KERNEL_PIN,
+  BUNDLED_KERNEL_VERSION,
   TIMEZONES,
   newEnvironment,
   profileFromSeed,
@@ -309,6 +310,10 @@ function CreateWizard({
   const [proxyId, setProxyId] = useState("");
   const [copyId, setCopyId] = useState("");
   const [error, setError] = useState("");
+  // 没选过就用默认版本；问不到本机服务时退回安装包自带的那个。
+  const { kernels, defaultVersion } = useKernels();
+  const [pickedKernel, setPickedKernel] = useState<string | null>(null);
+  const kernelVersion = pickedKernel ?? defaultVersion ?? BUNDLED_KERNEL_VERSION;
 
   const create = () => {
     try {
@@ -339,7 +344,14 @@ function CreateWizard({
             tags: [...src.tags],
             note: src.note,
             proxyId: proxyId || null,
-            profile: { ...src.profile, seed: randomSeed(), seedLocked: true, timezone },
+            profile: {
+              ...src.profile,
+              seed: randomSeed(),
+              seedLocked: true,
+              timezone,
+              brandVersion: kernelVersion,
+            },
+            kernelVersion,
             searchEngine: src.searchEngine,
             searchProvider: src.searchProvider,
             extensionIds: [...src.extensionIds],
@@ -360,8 +372,10 @@ function CreateWizard({
         profile: profileFromSeed(randomSeed(), platform, {
           timezone,
           platformVersion: defaultPlatformVersion(platform, winEdition),
+          // 画像报的浏览器版本必须和真正跑的内核一致，否则 UA 和内核特征对不上。
+          brandVersion: kernelVersion,
         }),
-        kernelPin: KERNEL_PIN,
+        kernelVersion,
         searchEngine: engine?.id ?? "none",
         searchProvider: engine ? engineToProvider(engine) : undefined,
       });
@@ -445,6 +459,7 @@ function CreateWizard({
                     // 下一步的时区和代理先带上原环境的，用户可以再改。
                     const src = existing.find((x) => x.id === e.target.value);
                     if (!src) return;
+                    setPickedKernel(src.kernelVersion);
                     setGroup(src.group);
                     setTimezone(src.profile.timezone);
                     setProxyId(src.proxyId ?? "");
@@ -503,6 +518,23 @@ function CreateWizard({
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>
                     {tz}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field
+              label={t("kernelVersion")}
+              hint={
+                kernels.find((k) => k.record.version === kernelVersion)?.status.state === "admitted"
+                  ? undefined
+                  : "这个版本还没下载，启动前要先到内核页下载"
+              }
+            >
+              <Select value={kernelVersion} onChange={(e) => setPickedKernel(e.target.value)}>
+                {kernels.length === 0 ? <option>{kernelVersion}</option> : null}
+                {kernels.map((k) => (
+                  <option key={k.record.version} value={k.record.version}>
+                    {kernelOptionLabel(k)}
                   </option>
                 ))}
               </Select>

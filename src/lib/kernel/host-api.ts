@@ -56,6 +56,7 @@ export type Capabilities = {
 
 export type RuntimeRow = {
   envId: string;
+  kernelVersion: string;
   pid: number;
   port: number;
   debugAddress: "127.0.0.1";
@@ -85,13 +86,14 @@ export type StartResult =
     }
   | { ok: false; code: string; message: string };
 
+/** 一个内核版本：清单里的记录，加上它在这台机器上的状态。 */
+export type KernelEntry = { record: KernelRecord; status: KernelStatus };
+
 export type KernelView = {
-  status: KernelStatus;
-  kernel: {
-    manifest: KernelRecord;
-    kernels: KernelRecord[];
-    channel: string;
-  } | null;
+  /** 这个系统能用的全部版本，新的在前。 */
+  kernels: KernelEntry[];
+  /** 新建环境默认用的版本：最新的稳定版，没有稳定版就是最新的。 */
+  defaultVersion: string | null;
   capabilities: Capabilities | null;
   runtimes: RuntimeRow[];
   /** Host 起没起来。false 时界面要说"连不上本机服务"，而不是显示空数据。 */
@@ -165,14 +167,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 const OFFLINE_VIEW: KernelView = {
-  status: {
-    state: "error",
-    bytesReceived: 0,
-    bytesExpected: 0,
-    sha256Expected: "",
-    error: "HOST_UNAVAILABLE",
-  },
-  kernel: null,
+  kernels: [],
+  defaultVersion: null,
   capabilities: null,
   runtimes: [],
   online: false,
@@ -187,19 +183,37 @@ export async function getKernelView(): Promise<KernelView> {
   }
 }
 
-export async function admitKernel(allowPreviewChannel: boolean): Promise<KernelStatus & { code?: string; message?: string }> {
+export function kernelEntry(view: KernelView, version: string | null): KernelEntry | undefined {
+  return view.kernels.find((k) => k.record.version === version);
+}
+
+/** 开始下载并准入一个版本。被拒或连不上时带 code；成功时只是"已经开始"，进度看 getKernelView。 */
+export async function admitKernel(
+  version: string,
+  allowPreviewChannel: boolean,
+): Promise<{ code?: string; message?: string }> {
   try {
     return await call("/v1/kernel/admit", {
       method: "POST",
-      body: JSON.stringify({ allowPreviewChannel }),
+      body: JSON.stringify({ version, allowPreviewChannel }),
     });
   } catch {
-    return { ...OFFLINE_VIEW.status, code: "HOST_UNAVAILABLE", message: "连不上本机服务。" };
+    return { code: "HOST_UNAVAILABLE", message: "连不上本机服务。" };
+  }
+}
+
+/** 删掉一个已下载的版本。还有环境在用它运行时 Host 会拒绝。 */
+export async function removeKernel(version: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    return await call("/v1/kernel/remove", { method: "POST", body: JSON.stringify({ version }) });
+  } catch {
+    return { ok: false, message: "连不上本机服务。" };
   }
 }
 
 export async function startEnvironment(input: {
   envId: string;
+  kernelVersion: string;
   profile: FingerprintProfile;
   extraFlags: string[];
   allowNoSandbox: boolean;

@@ -1,6 +1,7 @@
 import {
   collectCdp,
   getKernelView,
+  kernelEntry,
   purgeEnvironment,
   startEnvironment,
   stopEnvironment,
@@ -31,6 +32,7 @@ export function launchSpec(env: Environment) {
     .map((id) => store.extensions.find((x) => x.id === id)?.path)
     .filter((p): p is string => Boolean(p));
   return {
+    kernelVersion: env.kernelVersion,
     profile: env.profile,
     extraFlags: extensionPaths.length
       ? [...env.extraFlags, `--load-extension=${extensionPaths.join(",")}`]
@@ -114,11 +116,21 @@ export async function startEnv(env: Environment) {
     store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: `${env.name} · 连不上本机服务` });
     return { ok: false as const, code, message: "连不上本机服务" };
   }
-  if (view.status.state !== "admitted") {
+  // 环境绑定哪个版本就用哪个，不会悄悄换成别的：换内核等于换了浏览器版本。
+  const kernel = kernelEntry(view, env.kernelVersion);
+  if (kernel?.status.state !== "admitted") {
     const code = "KERNEL_UNTRUSTED_SOURCE";
-    failRuntime(env.id, code, "内核还没准入，先到内核页准入。", false);
-    store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: `${env.name} · 内核未准入` });
-    return { ok: false as const, code, message: "内核还没准入" };
+    const detail = kernel
+      ? `内核 ${env.kernelVersion} 还没下载，先到内核页下载。`
+      : `内核 ${env.kernelVersion} 已经不在清单里了，到环境详情页换一个版本。`;
+    failRuntime(env.id, code, detail, false);
+    store.addAudit({
+      action: "start_blocked",
+      target: env.id,
+      level: "bad",
+      detail: `${env.name} · 内核 ${env.kernelVersion} ${kernel ? "未下载" : "不在清单里"}`,
+    });
+    return { ok: false as const, code, message: detail };
   }
 
   store.setRuntime(env.id, {

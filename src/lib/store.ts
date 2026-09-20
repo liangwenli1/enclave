@@ -11,6 +11,7 @@ import {
   type ProxyItem,
   type TimelineEvent,
   makeId,
+  normalizeEnvironment,
 } from "@/lib/schema";
 
 type RuntimeView = {
@@ -217,6 +218,7 @@ export const useEnclave = create<Store>()(
           ...current,
           ...p,
           settings: { ...initialSettings, ...p.settings },
+          environments: (p.environments ?? []).map(normalizeEnvironment),
           // 0.9.1 把代理密码明文存在 auth.password 里。读进来就丢掉，只留"没有密码"的状态，
           // 让用户到代理页补填进保险箱；否则明文会被原样写回磁盘，一直留着。
           proxies: (p.proxies ?? []).map((proxy) =>

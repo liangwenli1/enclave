@@ -8,7 +8,7 @@
  * 代理密码默认不导出。填了导出口令才会带上，并且用这个口令单独加密，
  * 跟文件里其他内容不共用密钥。
  */
-import type { Environment, ProxyItem } from "@/lib/schema";
+import { normalizeEnvironment, type Environment, type ProxyItem } from "@/lib/schema";
 import type { CatalogEngine } from "@/lib/engines";
 import { allSecrets, mergeSecrets } from "@/lib/vault";
 
@@ -116,7 +116,7 @@ export function parseExport(text: string): ExportFile {
   if (!Array.isArray(file.environments) || !Array.isArray(file.proxies)) {
     throw new Error("环境包内容不完整。");
   }
-  return file;
+  return { ...file, environments: file.environments.map(normalizeEnvironment) };
 }
 
 /** 解出密码并写进保险箱。保险箱必须先解锁。 */

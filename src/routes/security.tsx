@@ -19,8 +19,13 @@ function SecurityPage() {
 
   // 连不上本机服务时，内核的状态是"不知道"，不是"没准入"，更不是"正常"。
   const online = view?.online ?? false;
-  const admitted = view?.status.state === "admitted";
-  const previewChannel = Boolean(view?.kernel && view.kernel.manifest.channel !== "stable");
+  const kernels = view?.kernels ?? [];
+  const admitted = kernels.some((k) => k.status.state === "admitted");
+  // 已经下载的版本里有预览通道的，或者一个都没下、而默认版本是预览通道。
+  const inUse = admitted
+    ? kernels.filter((k) => k.status.state === "admitted")
+    : kernels.filter((k) => k.record.version === view?.defaultVersion);
+  const previewChannel = inUse.some((k) => k.record.channel !== "stable");
 
   return (
     <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
@@ -44,7 +49,7 @@ function SecurityPage() {
                   ? "未知"
                   : admitted
                     ? "每次启动前核对可执行文件哈希"
-                    : "内核还没准入，环境无法启动"
+                    : "还没有下载任何内核，环境无法启动"
               }
             />
             <Check
@@ -126,7 +131,11 @@ hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会
                           contains: ["本机运行条件", "内核状态", "最近 50 条审计"],
                           excludes: ["Cookie", "密码", "访问过的网址", "环境内容"],
                           capabilities: view?.capabilities ?? null,
-                          kernel: view?.status ?? null,
+                          kernels: kernels.map((k) => ({
+                            version: k.record.version,
+                            channel: k.record.channel,
+                            ...k.status,
+                          })),
                           audit: audit.slice(0, 50),
                         },
                         null,
