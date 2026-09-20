@@ -1,5 +1,6 @@
 {
   "identifier": "default",
+  "description": "工作台页面能用的能力。sidecar 由 Rust 侧启动，页面不需要任何执行权限。",
   "windows": ["main"],
-  "permissions": ["core:default", "shell:allow-open", "shell:allow-spawn", "shell:allow-execute"]
+  "permissions": ["core:default"]
 }

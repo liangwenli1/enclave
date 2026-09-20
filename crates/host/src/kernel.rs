@@ -43,9 +43,20 @@ pub struct KernelStatus {
     pub state: String,
     pub bytes_received: u64,
     pub bytes_expected: u64,
+    /// 清单里写的压缩包哈希
     pub sha256_expected: String,
+    /// 下载下来的压缩包实际算出的哈希
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sha256_actual: Option<String>,
+    /// 解压后**真正会被执行**的那个文件的哈希。压缩包对不代表这个对，
+    /// 所以准入时单独记一份，启动时核对的是它。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe_sha256: Option<String>,
+    /// 配合 exe_sha256 做便宜的完整性检查：大小或修改时间变了就重新算哈希。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe_size: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe_mtime: Option<u64>,
     pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executable: Option<String>,
@@ -189,9 +200,6 @@ pub fn kernel_for_this_os(manifest: &ManifestFile) -> Result<&KernelRecord> {
         .with_context(|| format!("no hashed kernel for {platform}"))
 }
 
-pub fn stable_linux(manifest: &ManifestFile) -> Result<&KernelRecord> {
-    kernel_for_this_os(manifest)
-}
 
 pub fn force_headless() -> bool {
     if std::env::var_os("ENCLAVE_HEADLESS").is_some() {
@@ -612,32 +620,69 @@ pub async fn persist_runtimes(paths: &HostPaths, rows: &[RuntimeRow]) -> Result<
     Ok(())
 }
 
-pub async fn verify_on_disk(paths: &HostPaths, k: &KernelRecord) -> (bool, Option<String>, Option<String>) {
+/// 文件大小与修改时间，用来做便宜的"没被动过"检查。
+fn file_stamp(path: &Path) -> Option<(u64, u64)> {
+    let meta = std::fs::metadata(path).ok()?;
+    let mtime = meta
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    Some((meta.len(), mtime))
+}
+
+/// 启动前的完整性检查。**检查对象是真正要执行的那个文件**，不是下载下来的压缩包 ——
+/// 压缩包校验通过之后，磁盘上的解压结果仍然可能被改。
+///
+/// `full` 为真时重算 sha256（每个进程第一次启动环境时做一次）；
+/// 否则只比对大小与修改时间，任何一项对不上就升级成全量校验。
+pub async fn verify_executable(
+    paths: &HostPaths,
+    k: &KernelRecord,
+    recorded: &KernelStatus,
+    full: bool,
+) -> Result<(PathBuf, String), (String, String)> {
     if k.sha256.is_empty() {
-        return (false, None, Some("KERNEL_UNTRUSTED_SOURCE: empty hash".into()));
+        return Err((
+            "KERNEL_UNTRUSTED_SOURCE".into(),
+            "清单里没有这个平台的哈希。".into(),
+        ));
     }
-    let archive = archive_path(paths, k);
-    if !archive.exists() {
-        return (false, None, Some("KERNEL_UNTRUSTED_SOURCE: archive missing".into()));
-    }
-    let meta = match std::fs::metadata(&archive) {
-        Ok(m) => m,
-        Err(e) => return (false, None, Some(e.to_string())),
+    let Some(exe) = resolve_executable(paths, k) else {
+        return Err((
+            "KERNEL_UNTRUSTED_SOURCE".into(),
+            "内核文件不在了，需要重新准入。".into(),
+        ));
     };
-    if meta.len() != k.bytes {
-        return (false, None, Some(format!("size {} != {}", meta.len(), k.bytes)));
+    let Some(expected) = recorded.exe_sha256.clone() else {
+        return Err((
+            "KERNEL_UNTRUSTED_SOURCE".into(),
+            "这个内核还没走过准入流程，先在内核页准入。".into(),
+        ));
+    };
+
+    let stamp = file_stamp(&exe);
+    let stamp_ok = match (stamp, recorded.exe_size, recorded.exe_mtime) {
+        (Some((size, mtime)), Some(rs), Some(rm)) => size == rs && mtime == rm,
+        _ => false,
+    };
+
+    if !full && stamp_ok {
+        return Ok((exe, expected));
     }
-    let actual = match sha256_file(&archive).await {
+
+    let actual = match sha256_file(&exe).await {
         Ok(h) => h,
-        Err(e) => return (false, None, Some(e.to_string())),
+        Err(e) => return Err(("KERNEL_UNTRUSTED_SOURCE".into(), e.to_string())),
     };
-    if actual != k.sha256 {
-        return (false, Some(actual), Some("KERNEL_HASH_MISMATCH".into()));
+    if actual != expected {
+        return Err((
+            "KERNEL_HASH_MISMATCH".into(),
+            "磁盘上的内核文件和准入时记录的哈希对不上，已拒绝启动。".into(),
+        ));
     }
-    if resolve_executable(paths, k).is_none() {
-        return (false, Some(actual), Some("executable missing after extract".into()));
-    }
-    (true, Some(actual), None)
+    Ok((exe, actual))
 }
 
 pub async fn read_status_fast(paths: &HostPaths, k: &KernelRecord) -> KernelStatus {
@@ -647,6 +692,9 @@ pub async fn read_status_fast(paths: &HostPaths, k: &KernelRecord) -> KernelStat
         bytes_expected: k.bytes,
         sha256_expected: k.sha256.clone(),
         sha256_actual: None,
+        exe_sha256: None,
+        exe_size: None,
+        exe_mtime: None,
         signature: "missing".into(),
         executable: None,
         error: None,
@@ -659,19 +707,30 @@ pub async fn read_status_fast(paths: &HostPaths, k: &KernelRecord) -> KernelStat
     }
     let archive = archive_path(paths, k);
     let size = std::fs::metadata(&archive).map(|m| m.len()).unwrap_or(0);
-    let exe = resolve_executable(paths, k).map(|p| p.to_string_lossy().into_owned());
-    let hash_cached = status.sha256_actual.as_deref() == Some(k.sha256.as_str());
-    if exe.is_some() && size == k.bytes && hash_cached {
+    let exe = resolve_executable(paths, k);
+
+    // 这里只做便宜的判断给界面用：可执行文件在、大小和修改时间与准入时一致。
+    // 真正的信任判断在 verify_executable —— 启动时才算数。
+    let stamp_ok = match (exe.as_deref().and_then(file_stamp), status.exe_size, status.exe_mtime) {
+        (Some((s, m)), Some(rs), Some(rm)) => s == rs && m == rm,
+        _ => false,
+    };
+    if exe.is_some() && status.exe_sha256.is_some() && stamp_ok {
         status.state = "admitted".into();
-        status.executable = exe;
-        status.bytes_received = size;
+        status.executable = exe.map(|p| p.to_string_lossy().into_owned());
+        status.bytes_received = k.bytes;
         status.bytes_expected = k.bytes;
         status.sha256_expected = k.sha256.clone();
         return status;
     }
+
     status.bytes_received = size;
-    status.executable = exe;
-    if size == 0 {
+    status.executable = exe.map(|p| p.to_string_lossy().into_owned());
+    if status.state == "admitted" {
+        // 之前记的是"已准入"，但文件对不上了。不许继续显示绿灯。
+        status.state = "error".into();
+        status.error = Some("内核文件发生了变化，需要重新准入。".into());
+    } else if size == 0 {
         status.state = "absent".into();
     }
     status
@@ -738,15 +797,21 @@ pub async fn admit(
         s.sha256_actual = Some(actual.clone());
         let _ = persist_status(paths, &s).await;
     }
-    if resolve_executable(paths, k).is_none() {
-        let dest = extract_dir(paths, k);
-        if dest.exists() {
-            tokio::fs::remove_dir_all(&dest).await.ok();
-        }
-        tokio::fs::create_dir_all(&dest).await?;
-        extract_archive(&archive, &dest).await?;
+
+    // 每次准入都重新解压。之前是"目录里已经有 chrome 就跳过"，那样一个被替换过的
+    // 解压目录会被直接沿用 —— 压缩包哈希对，跑起来的却不是那个文件。
+    let dest = extract_dir(paths, k);
+    if dest.exists() {
+        tokio::fs::remove_dir_all(&dest).await.ok();
     }
-    let exe = resolve_executable(paths, k).context("chrome executable not found")?;
+    tokio::fs::create_dir_all(&dest).await?;
+    extract_archive(&archive, &dest).await?;
+
+    let exe = resolve_executable(paths, k).context("解压后找不到内核可执行文件")?;
+    // 记下真正要执行的那个文件的哈希。以后每次启动核对的是它。
+    let exe_sha = sha256_file(&exe).await?;
+    let (exe_size, exe_mtime) = file_stamp(&exe).unwrap_or((0, 0));
+
     let mut s = status.lock().await;
     *s = KernelStatus {
         state: "admitted".into(),
@@ -754,6 +819,9 @@ pub async fn admit(
         bytes_expected: k.bytes,
         sha256_expected: k.sha256.clone(),
         sha256_actual: Some(actual),
+        exe_sha256: Some(exe_sha),
+        exe_size: Some(exe_size),
+        exe_mtime: Some(exe_mtime),
         signature: "missing".into(),
         executable: Some(exe.to_string_lossy().into_owned()),
         error: None,
@@ -796,6 +864,7 @@ pub async fn start_environment(
     search_engine: Option<&str>,
     search_provider: Option<&SearchProvider>,
     runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
+    full_verify: bool,
 ) -> Result<Spawned, (String, String)> {
     {
         let map = runtimes.lock().await;
@@ -811,18 +880,9 @@ pub async fn start_environment(
             }
         }
     }
-    let (ok, actual, reason) = verify_on_disk(paths, k).await;
-    if !ok {
-        let code = if reason.as_deref().unwrap_or("").contains("HASH") {
-            "KERNEL_HASH_MISMATCH"
-        } else {
-            "KERNEL_UNTRUSTED_SOURCE"
-        };
-        return Err((code.into(), reason.unwrap_or_else(|| "verify failed".into())));
-    }
-    let exe = resolve_executable(paths, k).ok_or_else(|| {
-        ("KERNEL_UNTRUSTED_SOURCE".into(), "executable missing".into())
-    })?;
+    // 启动前核对真正要执行的文件。第一次启动做全量 sha256，之后比对大小与修改时间。
+    let recorded = read_status_fast(paths, k).await;
+    let (exe, exe_sha) = verify_executable(paths, k, &recorded, full_verify).await?;
     let port = pick_port().await.map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
     let user_data_dir = paths.profiles.join(format!("env_{env_id}")).join("user-data");
     tokio::fs::create_dir_all(&user_data_dir)
@@ -943,7 +1003,8 @@ pub async fn start_environment(
         let tail: String = stderr.chars().rev().take(1200).collect::<String>().chars().rev().collect();
         return Err(("CDP_HANDSHAKE_FAILED".into(), if tail.is_empty() { "CDP did not come up".into() } else { tail }));
     }
-    let sha = actual.unwrap_or_else(|| k.sha256.clone());
+    // 记进运行态的是可执行文件的哈希 —— 也就是刚才真正核对过的那个值。
+    let sha = exe_sha;
     let row = RuntimeRow {
         env_id: env_id.into(),
         pid,

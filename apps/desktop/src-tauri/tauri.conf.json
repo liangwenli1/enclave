@@ -7,20 +7,12 @@
     "beforeDevCommand": "",
     "devUrl": "http://127.0.0.1:8080",
     "beforeBuildCommand": "",
-    "frontendDist": "frontend"
+    "frontendDist": "../../../dist"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Enclave",
-        "width": 1280,
-        "height": 800,
-        "backgroundColor": "#010102"
-      }
-    ],
+    "withGlobalTauri": false,
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://127.0.0.1:17891 https:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     }
   },
   "bundle": {
