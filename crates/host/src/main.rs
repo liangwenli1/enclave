@@ -17,7 +17,7 @@ use axum::{Json, Router};
 use enclave_host::api::{allows, ApiLevel, EnvEntry, StartSpec};
 use enclave_host::kernel::{
     admit, capabilities, ensure_dirs, kernel_for_this_os, list_search_engines, load_manifest,
-    read_status_fast, restore_runtimes, start_environment, stop_environment, HostPaths,
+    purge_environment, read_status_fast, restore_runtimes, valid_env_id, start_environment, stop_environment, HostPaths,
     KernelRecord, KernelStatus, ManifestFile, RuntimeRow,
 };
 use rand::RngCore;
@@ -108,6 +108,7 @@ async fn main() {
         .route("/v1/runtimes", get(list_runtimes))
         .route("/v1/environments/start", post(env_start))
         .route("/v1/environments/stop", post(env_stop))
+        .route("/v1/environments/purge", post(env_purge))
         .route("/v1/search-engines", get(search_engines))
         .route("/v1/lab/collect", post(lab_collect))
         .route("/v1/api/config", post(api_config))
@@ -358,6 +359,9 @@ async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -
 
 /// 启动一个环境。工作台点启动和脚本调 API 走的是同一段代码。
 async fn run_start(state: &Arc<App>, env_id: &str, spec: &StartSpec) -> Json<Value> {
+    if !valid_env_id(env_id) {
+        return Json(json!({ "ok": false, "code": "BAD_ENV_ID", "message": "环境 id 不合法。" }));
+    }
     if state.kernel.channel != "stable" && !spec.allow_preview_channel {
         return Json(json!({
             "ok": false,
@@ -417,6 +421,15 @@ async fn search_engines(
 async fn env_stop(State(state): State<Arc<App>>, Json(body): Json<StopBody>) -> Json<Value> {
     let _ = stop_environment(&state.paths, &body.env_id, &state.runtimes).await;
     Json(json!({ "ok": true }))
+}
+
+/// 彻底删除：先停，再删掉磁盘上的用户数据。界面上的「彻底删除」必须真的删。
+async fn env_purge(State(state): State<Arc<App>>, Json(body): Json<StopBody>) -> Json<Value> {
+    let _ = stop_environment(&state.paths, &body.env_id, &state.runtimes).await;
+    match purge_environment(&state.paths, &body.env_id).await {
+        Ok(()) => Json(json!({ "ok": true })),
+        Err(e) => Json(json!({ "ok": false, "code": "PURGE_FAILED", "message": e.to_string() })),
+    }
 }
 
 async fn list_runtimes(State(state): State<Arc<App>>) -> Json<Value> {

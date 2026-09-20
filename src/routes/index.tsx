@@ -41,6 +41,7 @@ function EnvironmentsPage() {
   const [query, setQuery] = useState("");
   const [trash, setTrash] = useState(false);
   const [wizard, setWizard] = useState(false);
+  const [purging, setPurging] = useState<{ id: string; name: string; error?: string } | null>(null);
 
   const live = useMemo(() => environments.filter((e) => !e.deletedAt), [environments]);
   const runningNow = Object.values(runtimes).filter((r) => r.status === "running").length;
@@ -177,7 +178,10 @@ function EnvironmentsPage() {
                               <Button onClick={() => useEnclave.getState().restoreEnv(env.id)}>
                                 {t(locale, "restore")}
                               </Button>
-                              <Button variant="danger" onClick={() => void purgeEnv(env.id)}>
+                              <Button
+                                variant="danger"
+                                onClick={() => setPurging({ id: env.id, name: env.name })}
+                              >
                                 {t(locale, "destroy")}
                               </Button>
                             </>
@@ -222,6 +226,30 @@ function EnvironmentsPage() {
             {t(locale, "goKernels")}
           </Link>
         </div>
+      ) : null}
+
+      {purging ? (
+        <Dialog open onOpenChange={(o) => !o && setPurging(null)}>
+          <DialogContent title={`彻底删除「${purging.name}」`}>
+            <p className="text-sm text-muted">
+              这个环境的 Cookie、登录态和缓存会从磁盘上删掉，无法恢复。
+            </p>
+            {purging.error ? <p className="mt-3 text-[13px] text-bad">{purging.error}</p> : null}
+            <div className="mt-6 flex justify-end gap-2">
+              <Button onClick={() => setPurging(null)}>{t(locale, "cancel")}</Button>
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  const res = await purgeEnv(purging.id);
+                  if (res.ok) setPurging(null);
+                  else setPurging({ ...purging, error: res.message ?? "删除失败。" });
+                }}
+              >
+                {t(locale, "destroy")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {wizard ? (

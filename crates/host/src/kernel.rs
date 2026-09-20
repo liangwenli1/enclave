@@ -187,6 +187,26 @@ pub fn kernel_for_this_os(manifest: &ManifestFile) -> Result<&KernelRecord> {
 }
 
 
+/// 环境 id 会被拼进文件路径（profiles/env_<id>），purge 还会对它 remove_dir_all。
+/// 只认字母数字、下划线和连字符，`..`、斜杠、空串一律不行。
+pub fn valid_env_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// 彻底删除一个环境在磁盘上的全部数据：Cookie、登录态、缓存。调用前要先停掉它。
+pub async fn purge_environment(paths: &HostPaths, env_id: &str) -> Result<()> {
+    if !valid_env_id(env_id) {
+        bail!("invalid environment id");
+    }
+    let dir = paths.profiles.join(format!("env_{env_id}"));
+    if dir.exists() {
+        tokio::fs::remove_dir_all(&dir).await?;
+    }
+    Ok(())
+}
+
 pub fn force_headless() -> bool {
     if std::env::var_os("ENCLAVE_HEADLESS").is_some() {
         return true;
@@ -1063,6 +1083,25 @@ pub fn pid_alive(pid: u32) -> bool {
         match i32::try_from(pid) {
             Ok(p) if p > 1 => unsafe { kill(p, 0) == 0 },
             _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod env_id_tests {
+    use super::valid_env_id;
+
+    #[test]
+    fn rejects_anything_that_could_leave_the_profiles_dir() {
+        for bad in ["", "..", "../x", "a/b", "a\\b", "env 1", "é", "x/../../etc", &"a".repeat(65)] {
+            assert!(!valid_env_id(bad), "{bad:?} 不该通过");
+        }
+    }
+
+    #[test]
+    fn accepts_the_ids_the_workbench_generates() {
+        for ok in ["env_mfx3k2a9b1c2d3e4", "e1", "A-b_9"] {
+            assert!(valid_env_id(ok), "{ok:?} 应该通过");
         }
     }
 }

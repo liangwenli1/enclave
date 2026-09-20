@@ -1,6 +1,7 @@
 import {
   collectCdp,
   getKernelView,
+  purgeEnvironment,
   startEnvironment,
   stopEnvironment,
 } from "@/lib/kernel/host-api";
@@ -179,9 +180,15 @@ export async function trashEnv(envId: string) {
   useEnclave.getState().removeEnv(envId);
 }
 
-export async function purgeEnv(envId: string) {
-  await stopEnv(envId);
-  useEnclave.getState().destroyEnv(envId);
+/** 彻底删除：磁盘上的数据删掉了，才把它从列表里拿走。删不掉就留着并说明原因。 */
+export async function purgeEnv(envId: string): Promise<{ ok: boolean; message?: string }> {
+  const result = await purgeEnvironment(envId);
+  if (!result.ok) return result;
+  const store = useEnclave.getState();
+  store.setRuntime(envId, null);
+  store.destroyEnv(envId);
+  store.addAudit({ action: "purge_env", target: envId, level: "warn", detail: "磁盘数据已删除" });
+  return { ok: true };
 }
 
 export async function collectEnvCdp(envId: string) {

@@ -226,6 +226,15 @@ export async function stopEnvironment(envId: string): Promise<void> {
   }
 }
 
+/** 删掉一个环境在磁盘上的全部数据（Cookie、登录态、缓存）。 */
+export async function purgeEnvironment(envId: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    return await call("/v1/environments/purge", { method: "POST", body: JSON.stringify({ envId }) });
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "连不上本机服务。" };
+  }
+}
+
 export async function listSearchEngines(envId: string): Promise<SearchEngineRow[]> {
   try {
     const body = await call<{ ok: boolean; engines: SearchEngineRow[] }>(
