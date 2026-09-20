@@ -8,16 +8,17 @@
 //! 令牌是 32 字节 OsRng 随机数，存在数据目录下，权限只给当前用户。
 //! **没有任何"跳过鉴权"的开关**：桌面壳通过环境变量把令牌交给 Host，
 //! 再注入给 WebView，两边拿的是同一个值。
-use axum::extract::{Query, Request, State};
+use axum::extract::{Path, Query, Request, State};
 use axum::http::{header, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use enclave_host::api::{allows, ApiLevel, EnvEntry, StartSpec};
 use enclave_host::kernel::{
     admit, capabilities, ensure_dirs, kernel_for_this_os, list_search_engines, load_manifest,
-    read_status_fast, restore_runtimes, start_environment, stop_environment, FingerprintProfile,
-    HostPaths, KernelRecord, KernelStatus, ManifestFile, RuntimeRow, SearchProvider,
+    read_status_fast, restore_runtimes, start_environment, stop_environment, HostPaths,
+    KernelRecord, KernelStatus, ManifestFile, RuntimeRow,
 };
 use rand::RngCore;
 use serde::Deserialize;
@@ -50,6 +51,18 @@ struct App {
     /// 本进程是否已经完整校验过内核可执行文件。第一次启动环境时做全量 sha256，
     /// 之后只比对大小与修改时间，免得每次启动都读一遍上百 MB。
     verified_once: Arc<AtomicBool>,
+    api: Arc<Mutex<ApiState>>,
+}
+
+/// 给脚本用的 API 的运行时状态。开关、档位、环境清单都由工作台推过来，只在内存里；
+/// 只有令牌落盘（0600），这样重启后脚本那边配置的令牌还能用。
+#[derive(Default)]
+struct ApiState {
+    enabled: bool,
+    level: ApiLevel,
+    concurrent: usize,
+    token: String,
+    envs: HashMap<String, EnvEntry>,
 }
 
 #[tokio::main]
@@ -65,6 +78,12 @@ async fn main() {
     let status = read_status_fast(&paths, &kernel).await;
     let runtimes = Arc::new(Mutex::new(HashMap::new()));
     restore_runtimes(&paths, &runtimes).await;
+    let api = ApiState {
+        token: std::fs::read_to_string(api_token_path(&paths))
+            .map(|t| t.trim().to_string())
+            .unwrap_or_default(),
+        ..ApiState::default()
+    };
     let state = Arc::new(App {
         paths,
         kernel,
@@ -74,6 +93,7 @@ async fn main() {
         runtimes,
         admitting: Arc::new(Mutex::new(false)),
         verified_once: Arc::new(AtomicBool::new(false)),
+        api: Arc::new(Mutex::new(api)),
     });
 
     let origins: Vec<HeaderValue> = APP_ORIGINS
@@ -90,6 +110,12 @@ async fn main() {
         .route("/v1/environments/stop", post(env_stop))
         .route("/v1/search-engines", get(search_engines))
         .route("/v1/lab/collect", post(lab_collect))
+        .route("/v1/api/config", post(api_config))
+        .route("/v1/api/rotate", post(api_rotate))
+        .route("/api/v1/environments", get(api_list))
+        .route("/api/v1/environments/:id", get(api_get))
+        .route("/api/v1/environments/:id/start", post(api_start))
+        .route("/api/v1/environments/:id/stop", post(api_stop))
         .layer(middleware::from_fn_with_state(state.clone(), guard))
         .layer(
             CorsLayer::new()
@@ -189,6 +215,26 @@ async fn guard(State(state): State<Arc<App>>, req: Request, next: Next) -> Respo
         return deny("BAD_HOST", "本机接口只接受回环地址访问。");
     }
 
+    // 给脚本用的 API：独立令牌 + 档位权限。脚本从不带 Origin，网页必然带，
+    // 所以这里只要看到 Origin 就拒绝 —— 连工作台自己的来源也不例外，它不需要走这条路。
+    if req.uri().path().starts_with("/api/") {
+        if req.headers().contains_key(header::ORIGIN) {
+            return deny("FORBIDDEN_ORIGIN", "本机 API 不接受来自网页的调用。");
+        }
+        let api = state.api.lock().await;
+        if !api.enabled || api.token.is_empty() {
+            return deny("API_DISABLED", "本机 API 没有开启。在工作台的设置里打开。");
+        }
+        if !token_matches(bearer(&req), &api.token) {
+            return unauthorized("缺少或错误的 API 令牌。");
+        }
+        if !allows(api.level, req.method().as_str(), req.uri().path()) {
+            return deny("API_SCOPE", "当前档位的本机 API 是只读的，不能启动或停止环境。");
+        }
+        drop(api);
+        return next.run(req).await;
+    }
+
     // 2. 有 Origin 就必须在名单里。网页发来的请求一定带 Origin。
     if let Some(origin) = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
         if !APP_ORIGINS.contains(&origin) {
@@ -202,21 +248,31 @@ async fn guard(State(state): State<Arc<App>>, req: Request, next: Next) -> Respo
     }
 
     // 3. 令牌
-    let given = req
-        .headers()
+    if !token_matches(bearer(&req), &state.token) {
+        return unauthorized("缺少或错误的本机令牌。");
+    }
+    next.run(req).await
+}
+
+fn bearer(req: &Request) -> &str {
+    req.headers()
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .unwrap_or("")
         .strip_prefix("Bearer ")
-        .unwrap_or("");
-    if !token_matches(given, &state.token) {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "ok": false, "code": "UNAUTHORIZED", "message": "缺少或错误的本机令牌。" })),
-        )
-            .into_response();
-    }
-    next.run(req).await
+        .unwrap_or("")
+}
+
+fn unauthorized(message: &str) -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(json!({ "ok": false, "code": "UNAUTHORIZED", "message": message })),
+    )
+        .into_response()
+}
+
+fn api_token_path(paths: &HostPaths) -> PathBuf {
+    paths.root.join("api.token")
 }
 
 async fn health() -> Json<Value> {
@@ -292,20 +348,17 @@ async fn kernel_admit(
 #[serde(rename_all = "camelCase")]
 struct StartBody {
     env_id: String,
-    profile: FingerprintProfile,
-    #[serde(default)]
-    extra_flags: Vec<String>,
-    #[serde(default)]
-    allow_no_sandbox: bool,
-    #[serde(default)]
-    allow_preview_channel: bool,
-    proxy_server: Option<String>,
-    search_engine: Option<String>,
-    search_provider: Option<SearchProvider>,
+    #[serde(flatten)]
+    spec: StartSpec,
 }
 
 async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -> Json<Value> {
-    if state.kernel.channel != "stable" && !body.allow_preview_channel {
+    run_start(&state, &body.env_id, &body.spec).await
+}
+
+/// 启动一个环境。工作台点启动和脚本调 API 走的是同一段代码。
+async fn run_start(state: &Arc<App>, env_id: &str, spec: &StartSpec) -> Json<Value> {
+    if state.kernel.channel != "stable" && !spec.allow_preview_channel {
         return Json(json!({
             "ok": false,
             "code": "KERNEL_CHANNEL_BLOCKED",
@@ -316,13 +369,13 @@ async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -
     match start_environment(
         &state.paths,
         &state.kernel,
-        &body.env_id,
-        &body.profile,
-        &body.extra_flags,
-        body.allow_no_sandbox,
-        body.proxy_server.as_deref(),
-        body.search_engine.as_deref(),
-        body.search_provider.as_ref(),
+        env_id,
+        &spec.profile,
+        &spec.extra_flags,
+        spec.allow_no_sandbox,
+        spec.proxy_server.as_deref(),
+        spec.search_engine.as_deref(),
+        spec.search_provider.as_ref(),
         &state.runtimes,
         full_verify,
     )
@@ -396,6 +449,120 @@ async fn lab_collect(State(state): State<Arc<App>>, Json(body): Json<CollectBody
             json!({ "ok": false, "code": "CDP_HANDSHAKE_FAILED", "message": e.to_string() }),
         ),
     }
+}
+
+/* ── 给脚本用的本机 API ───────────────────────────────────────────── */
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApiConfigBody {
+    enabled: bool,
+    #[serde(default)]
+    level: ApiLevel,
+    #[serde(default)]
+    concurrent: usize,
+    #[serde(default)]
+    environments: Vec<EnvEntry>,
+}
+
+/// 工作台推配置：开关、档位、同时运行上限、环境清单。第一次开启时生成令牌。
+async fn api_config(State(state): State<Arc<App>>, Json(body): Json<ApiConfigBody>) -> Json<Value> {
+    let mut api = state.api.lock().await;
+    api.enabled = body.enabled && body.level != ApiLevel::Off;
+    api.level = body.level;
+    api.concurrent = body.concurrent;
+    api.envs = body.environments.into_iter().map(|e| (e.id.clone(), e)).collect();
+    if api.enabled && api.token.is_empty() {
+        api.token = new_token();
+        write_private(&api_token_path(&state.paths), &api.token);
+    }
+    Json(json!({
+        "ok": true,
+        "enabled": api.enabled,
+        "token": if api.enabled { api.token.clone() } else { String::new() },
+    }))
+}
+
+/// 重置令牌：旧令牌立刻失效。
+async fn api_rotate(State(state): State<Arc<App>>) -> Json<Value> {
+    let mut api = state.api.lock().await;
+    api.token = new_token();
+    write_private(&api_token_path(&state.paths), &api.token);
+    Json(json!({ "ok": true, "token": api.token }))
+}
+
+fn api_env_view(entry: &EnvEntry, rt: Option<&RuntimeRow>) -> Value {
+    json!({
+        "id": entry.id,
+        "name": entry.name,
+        "group": entry.group,
+        "status": if rt.is_some() { "running" } else { "stopped" },
+        "pid": rt.map(|r| r.pid),
+        "debugPort": rt.map(|r| r.port),
+        "debugAddress": rt.map(|_| "127.0.0.1"),
+    })
+}
+
+async fn api_list(State(state): State<Arc<App>>) -> Json<Value> {
+    restore_runtimes(&state.paths, &state.runtimes).await;
+    let api = state.api.lock().await;
+    let runtimes = state.runtimes.lock().await;
+    let mut envs: Vec<Value> = api
+        .envs
+        .values()
+        .map(|e| api_env_view(e, runtimes.get(&e.id)))
+        .collect();
+    envs.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    Json(json!({ "ok": true, "environments": envs }))
+}
+
+async fn api_get(State(state): State<Arc<App>>, Path(id): Path<String>) -> Response {
+    let api = state.api.lock().await;
+    let runtimes = state.runtimes.lock().await;
+    match api.envs.get(&id) {
+        Some(e) => Json(json!({ "ok": true, "environment": api_env_view(e, runtimes.get(&id)) }))
+            .into_response(),
+        None => not_found(),
+    }
+}
+
+fn not_found() -> Response {
+    (
+        StatusCode::NOT_FOUND,
+        Json(json!({ "ok": false, "code": "NOT_FOUND", "message": "没有这个环境。" })),
+    )
+        .into_response()
+}
+
+async fn api_start(State(state): State<Arc<App>>, Path(id): Path<String>) -> Response {
+    let (spec, concurrent) = {
+        let api = state.api.lock().await;
+        match api.envs.get(&id) {
+            Some(e) => (e.spec.clone(), api.concurrent),
+            None => return not_found(),
+        }
+    };
+    // 档位的同时运行上限对 API 同样生效，脚本不能绕过它。
+    {
+        let runtimes = state.runtimes.lock().await;
+        if !runtimes.contains_key(&id) && concurrent > 0 && runtimes.len() >= concurrent {
+            return Json(json!({
+                "ok": false,
+                "code": "PLAN_CONCURRENT_LIMIT",
+                "message": format!("当前档位最多同时运行 {concurrent} 个环境。"),
+            }))
+            .into_response();
+        }
+    }
+    run_start(&state, &id, &spec).await.into_response()
+}
+
+async fn api_stop(State(state): State<Arc<App>>, Path(id): Path<String>) -> Response {
+    if !state.api.lock().await.envs.contains_key(&id) {
+        return not_found();
+    }
+    let _ = stop_environment(&state.paths, &id, &state.runtimes).await;
+    Json(json!({ "ok": true })).into_response()
 }
 
 #[cfg(test)]
