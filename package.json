@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Enclave 工作台。纯前端 SPA，装进 Tauri 壳发行。",
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.6"
   },
   "scripts": {
     "dev": "node scripts/ensure-host.mjs && vite dev",

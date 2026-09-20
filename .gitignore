@@ -16,9 +16,6 @@ apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/binaries/*.exe
 
-# 路由插件生成
-src/routeTree.gen.ts
-
 # 给编码代理看的本地规范，不进仓库
 AGENTS.md
 AGENTS.project.md

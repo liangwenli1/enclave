@@ -16,7 +16,7 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
-      # 先构建：路由表由插件生成，typecheck 依赖它
+      # 先构建：路由表由插件重新生成，确认提交进来的那份没有过期
       - run: npm run build
       - run: npm run typecheck
       - run: npm test

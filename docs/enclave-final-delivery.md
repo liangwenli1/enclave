@@ -45,7 +45,8 @@
 
 失败必须拒启并显示原因码：`KERNEL_HASH_MISMATCH` / `KERNEL_UNTRUSTED_SOURCE` /
 `KERNEL_CHANNEL_BLOCKED` / `SANDBOX_UNAVAILABLE` / `CDP_HANDSHAKE_FAILED` /
-`HOST_UNAVAILABLE` / `VAULT_LOCKED` / `PLAN_CONCURRENT_LIMIT`。
+`HOST_UNAVAILABLE` / `VAULT_LOCKED` / `PROXY_PASSWORD_MISSING` / `PLAN_CONCURRENT_LIMIT` /
+`SPAWN_FAILED` / `SANDBOX_DISABLED_BLOCKED`。
 **禁止绿灯假 Running。**
 
 ### 1.3 明确不是交付物
@@ -244,8 +245,8 @@ MSI 是纯静态包，没有 `/api`，所以**装完之后登录必然失败**�
 
 现在：
 
-- `cargo test -p enclave-host`（13 个）：flag 白名单（默认拒绝、调试端口不能离开回环、
-  隔离破坏类 flag 拒绝）、令牌长度与定长比较、来源名单、API 档位权限。
+- `cargo test -p enclave-host`：flag 白名单（默认拒绝、调试端口不能离开回环、
+  隔离破坏类 flag 拒绝）、令牌长度与定长比较、来源名单、API 档位权限、进程组信号只打到目标（不会再出现 `kill -1`）、环境 id 不能逃出数据目录。
 - `npm test`：许可证验签 6 个用例，包含"改档位但不重新签名"的伪造尝试。
 - `apps/vendor` `npm test`：签发/验签、换公钥失败、改一字节失败、过期降级、宽限期。
 - `.github/workflows/ci.yml`：三块分别构建测试，外加"二进制和运行时数据不得进仓库"的检查。
@@ -265,7 +266,7 @@ MSI 是纯静态包，没有 `/api`，所以**装完之后登录必然失败**�
 | 5 | 内核页准入 | 下载→校验→解压，显示可执行文件哈希 |
 | 6 | 用十六进制编辑器改一个字节的 chrome.exe，点启动 | 拒启，`KERNEL_HASH_MISMATCH` |
 | 7 | 恢复文件，启动环境 | 弹出独立内核窗口，实验室能采到它 |
-| 8 | 浏览器打开任意网页，在控制台 `fetch('http://127.0.0.1:17891/v1/runtimes')` | 被拒（403/401），拿不到数据 |
+| 8 | 浏览器打开任意网页，在控制台 `fetch('http://127.0.0.1:17891/v1/kernel')` | 被拒（403/401），拿不到数据 |
 | 9 | 不设主密码，给代理填密码 | 不让保存，提示先设主密码 |
 | 10 | 设主密码，存密码，锁定后启动带密码代理的环境 | `VAULT_LOCKED` 拒启 |
 | 11 | 导出环境包（不填口令） | 文件里搜不到任何密码 |
@@ -290,11 +291,11 @@ MSI 是纯静态包，没有 `/api`，所以**装完之后登录必然失败**�
 | 窗口同步 | 原套餐表里的 Pro 卖点，未实现 | 规格已定，见 [TODO.md](../TODO.md) §1 |
 | 团队席位与云端同步 | 一个账号就是一个人；环境只存在各人本机 | 规格已定，见 [TODO.md](../TODO.md) §2 |
 | win/mac 内核行为基线 | 两个平台仍在预览通道，需用户明确同意 | 在对应系统上跑 spawn/沙箱基线后转稳定 |
-| 自动更新 | `app.manifest.json` 还是空槽位 | 签名之后再做，客户端只信厂商公钥 |
+| 自动更新 | 未实现 | 签名之后再做，客户端只信厂商公钥 |
 | 正式域名与披露邮箱 | 官网披露走表单，没有 security@ 邮箱 | 域名落地后补 |
-| 已发布的 0.9.1 预览包 | 那是本轮安全更新**之前**的构建 | 重新构建并更新下载页的三个值 |
+| 已发布的 0.9.1 预览包 | 那是本轮安全更新**之前**的构建 | 推 `v0.9.2` tag 由 Actions 构建，再更新下载页的三个值（见 docs/windows.md） |
 
-**P0–P4 全绿才允许打 `1.0.0`。** 上面第一行不解决就不许打。
+**这张表清空之前不许打 `1.0.0`。** 第一行不解决就不许打。
 
 ---
 
