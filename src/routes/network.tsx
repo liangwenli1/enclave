@@ -26,6 +26,14 @@ function NetworkPage() {
   const proxies = useEnclave((s) => s.proxies);
   const environments = useEnclave((s) => s.environments);
   const [open, setOpen] = useState(false);
+  const [removing, setRemoving] = useState<{ id: string; name: string; used: number } | null>(null);
+
+  const remove = (id: string) => {
+    void removeSecret(`proxy:${id}`);
+    useEnclave.getState().removeProxy(id);
+    useEnclave.getState().addAudit({ action: "proxy_remove", target: id, level: "warn", detail: "" });
+    setRemoving(null);
+  };
 
   return (
     <div className="mx-auto max-w-4xl px-8 py-6">
@@ -33,9 +41,11 @@ function NetworkPage() {
         title={t(locale, "netTitle")}
         status={`${proxies.length} 个代理`}
         actions={
-          <Button variant="primary" onClick={() => setOpen(true)}>
-            {t(locale, "addProxy")}
-          </Button>
+          proxies.length > 0 ? (
+            <Button variant="primary" onClick={() => setOpen(true)}>
+              {t(locale, "addProxy")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -89,11 +99,9 @@ function NetworkPage() {
                         <div className="flex justify-end">
                           <Button
                             variant="danger"
-                            onClick={() => {
-                              void removeSecret(`proxy:${p.id}`);
-                              useEnclave.getState().removeProxy(p.id);
-                            }}
-                            title={used ? "删除后这些环境会退回用本机网络出网" : undefined}
+                            onClick={() =>
+                              used ? setRemoving({ id: p.id, name: p.name, used }) : remove(p.id)
+                            }
                           >
                             {t(locale, "delete")}
                           </Button>
@@ -109,6 +117,23 @@ function NetworkPage() {
       </Panel>
 
       {open ? <ProxyDialog onClose={() => setOpen(false)} /> : null}
+
+      {removing ? (
+        <Dialog open onOpenChange={(o) => !o && setRemoving(null)}>
+          <DialogContent title={`删除「${removing.name}」？`}>
+            <p className="text-[13px] leading-relaxed text-muted">
+              有 {removing.used} 个环境在用它。删除后，这些环境会改用
+              <span className="text-bad">本机网络</span>出网。
+            </p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button onClick={() => setRemoving(null)}>{t(locale, "cancel")}</Button>
+              <Button variant="danger" onClick={() => remove(removing.id)}>
+                {t(locale, "delete")}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
     </div>
   );
 }
@@ -119,48 +144,46 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
     name: "",
     protocol: "http" as ProxyItem["protocol"],
     host: "",
-    port: 8080,
+    port: "8080",
     username: "",
     password: "",
     country: "",
   });
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<{ host?: string; port?: string; username?: string; password?: string }>({});
   const vault = useEnclave((s) => s.vault);
 
   const canStorePassword = vault.exists && vault.unlocked;
 
   const save = async () => {
-    setError("");
-    if (!draft.host.trim()) {
-      setError("请填写代理地址。");
-      return;
-    }
-    if (draft.password && !canStorePassword) {
-      setError(
-        vault.exists
-          ? "保险箱是锁着的，先解锁再保存带密码的代理。"
-          : "要保存代理密码，得先在设置页设一个主密码。密码只会以密文存在本机。",
-      );
-      return;
-    }
+    const host = draft.host.trim();
+    const port = Number(draft.port);
+    const username = draft.username.trim();
+    const found: typeof errors = {};
+    if (!host) found.host = "填代理的域名或 IP。";
+    else if (/[\s/:@]/.test(host) && !/^\[[0-9a-fA-F:]+\]$/.test(host))
+      found.host = "只填域名或 IP，不带协议、端口和路径。";
+    if (!/^\d+$/.test(draft.port.trim()) || port < 1 || port > 65535) found.port = "1–65535 的整数。";
+    if (draft.password && !username) found.username = "填了密码就要填用户名。";
+    if (draft.password && !canStorePassword)
+      found.password = vault.exists ? "保险箱锁着，先解锁。" : "先在设置页设主密码。";
+    setErrors(found);
+    if (Object.keys(found).length) return;
     const id = makeId("prx");
     if (draft.password) await putSecret(`proxy:${id}`, draft.password);
     useEnclave.getState().upsertProxy({
       id,
-      name: draft.name.trim() || `${draft.host}:${draft.port}`,
+      name: draft.name.trim() || `${host}:${port}`,
       protocol: draft.protocol,
-      host: draft.host.trim(),
-      port: draft.port,
-      country: draft.country || undefined,
-      auth: draft.username
-        ? { username: draft.username.trim(), hasPassword: Boolean(draft.password) }
-        : undefined,
+      host,
+      port,
+      country: draft.country.trim() || undefined,
+      auth: username ? { username, hasPassword: Boolean(draft.password) } : undefined,
     });
     useEnclave.getState().addAudit({
       action: "proxy_add",
       target: id,
       level: "info",
-      detail: `${draft.protocol}://${draft.host}:${draft.port}${draft.password ? " · 密码存入保险箱" : ""}`,
+      detail: `${draft.protocol}://${host}:${port}${draft.password ? " · 密码存入保险箱" : ""}`,
     });
     onClose();
   };
@@ -189,22 +212,22 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
                 <option value="socks5">SOCKS5</option>
               </Select>
             </Field>
-            <Field label={t(locale, "host")}>
+            <Field label={t(locale, "host")} error={errors.host}>
               <Input
                 value={draft.host}
                 onChange={(e) => setDraft({ ...draft, host: e.target.value })}
                 placeholder="proxy.example.com"
               />
             </Field>
-            <Field label={t(locale, "port")}>
+            <Field label={t(locale, "port")} error={errors.port}>
               <Input
-                type="number"
+                inputMode="numeric"
                 value={draft.port}
-                onChange={(e) => setDraft({ ...draft, port: Number(e.target.value) })}
+                onChange={(e) => setDraft({ ...draft, port: e.target.value })}
               />
             </Field>
           </div>
-          <Field label={t(locale, "username")} hint="不需要认证就留空">
+          <Field label={t(locale, "username")} hint="不需要认证就留空" error={errors.username}>
             <Input
               value={draft.username}
               onChange={(e) => setDraft({ ...draft, username: e.target.value })}
@@ -212,6 +235,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
           </Field>
           <Field
             label={t(locale, "password")}
+            error={errors.password}
             hint={
               canStorePassword
                 ? "存进保险箱，只以密文落盘"
@@ -232,7 +256,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               去设置主密码
             </Link>
           ) : null}
-          <Field label={t(locale, "country")} error={error}>
+          <Field label={t(locale, "country")}>
             <Input
               value={draft.country}
               onChange={(e) => setDraft({ ...draft, country: e.target.value.toUpperCase() })}
