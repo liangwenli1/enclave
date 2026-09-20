@@ -172,11 +172,20 @@ function EnvDetail() {
       <aside className="grid h-fit gap-3">
         <Panel className="p-4">
           <div className="mb-2 text-sm font-medium">{t(locale, "runtime")}</div>
-          <p className="text-sm text-subtle">
-            {runtime?.status === "running"
-              ? t(locale, "running")
-              : runtimeLabel(locale, runtime?.status ?? "stopped", runtime?.error)}
+          <p className={runtime?.status === "error" ? "text-sm text-bad" : "text-sm text-subtle"}>
+            {runtimeLabel(locale, runtime?.status ?? "stopped", runtime?.error)}
           </p>
+          {runtime?.status === "error" && runtime.detail ? (
+            <p className="mt-2 text-[13px] text-muted">{runtime.detail}</p>
+          ) : null}
+          {runtime?.status === "error" && runtime.error ? (
+            <p className="app-mono mt-2 text-xs text-subtle">{runtime.error}</p>
+          ) : null}
+          {runtime?.status === "running" ? (
+            <p className="app-mono mt-2 text-xs text-subtle">
+              pid {runtime.pid} · 127.0.0.1:{runtime.debugPort}
+            </p>
+          ) : null}
           {runtime?.status === "running" ? (
             <Button className="mt-3 w-full" onClick={() => void collectEnvCdp(env.id)}>
               {t(locale, "collectPage")}

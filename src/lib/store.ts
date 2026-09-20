@@ -23,7 +23,10 @@ type RuntimeView = {
   startedAt: number | null;
   hashOk: boolean;
   sha256?: string;
+  /** 原因码，例如 KERNEL_HASH_MISMATCH。界面按它显示短标签。 */
   error?: string;
+  /** 给人看的那句话：出了什么事、下一步做什么。 */
+  detail?: string;
 };
 
 type LabState = {

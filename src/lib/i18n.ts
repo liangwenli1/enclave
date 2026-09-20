@@ -26,7 +26,6 @@ const dict = {
     stopped: "已停止",
     error: "错误",
     sendLab: "送进实验室",
-    kernelMissing: "内核未准入",
     kernelNeed: "要先准入内核才能启动环境。",
     goKernels: "打开内核管理器",
     emptyEnv: "还没有环境",
@@ -64,7 +63,6 @@ const dict = {
     pass: "通过",
     gotIt: "知道了",
     seePlans: "查看套餐",
-    planConcurrentShort: "同时运行已达上限",
     fail: "未通过",
     warn: "警告",
     runtime: "运行时",
@@ -178,7 +176,6 @@ const dict = {
     stopped: "Stopped",
     error: "Error",
     sendLab: "Send to lab",
-    kernelMissing: "Kernel not admitted",
     kernelNeed: "Download and verify fingerprint-chromium 148 before start.",
     goKernels: "Open kernel manager",
     emptyEnv: "No environments yet",
@@ -216,7 +213,6 @@ const dict = {
     pass: "Pass",
     gotIt: "OK",
     seePlans: "View plans",
-    planConcurrentShort: "Concurrent limit reached",
     fail: "Fail",
     warn: "Warn",
     runtime: "Runtime",
@@ -315,13 +311,37 @@ export function t(locale: Locale, key: MessageKey): string {
   return typeof value === "string" ? value : String(value);
 }
 
+/** Host 和工作台会给出的全部原因码。交付合同要求失败必须让用户看到原因。 */
+const REASON: Record<Locale, Record<string, string>> = {
+  zh: {
+    KERNEL_HASH_MISMATCH: "内核哈希不符",
+    KERNEL_UNTRUSTED_SOURCE: "内核未准入",
+    KERNEL_CHANNEL_BLOCKED: "需同意预览通道",
+    SANDBOX_UNAVAILABLE: "沙箱起不来",
+    SANDBOX_DISABLED_BLOCKED: "启动参数被拒",
+    CDP_HANDSHAKE_FAILED: "内核没有响应",
+    SPAWN_FAILED: "进程启动失败",
+    HOST_UNAVAILABLE: "连不上本机服务",
+    VAULT_LOCKED: "保险箱锁着",
+    PLAN_CONCURRENT_LIMIT: "同时运行已达上限",
+  },
+  en: {
+    KERNEL_HASH_MISMATCH: "Kernel hash mismatch",
+    KERNEL_UNTRUSTED_SOURCE: "Kernel not admitted",
+    KERNEL_CHANNEL_BLOCKED: "Preview channel needs consent",
+    SANDBOX_UNAVAILABLE: "Sandbox unavailable",
+    SANDBOX_DISABLED_BLOCKED: "Launch flags rejected",
+    CDP_HANDSHAKE_FAILED: "Kernel did not respond",
+    SPAWN_FAILED: "Process failed to start",
+    HOST_UNAVAILABLE: "Local service unreachable",
+    VAULT_LOCKED: "Vault is locked",
+    PLAN_CONCURRENT_LIMIT: "Concurrent limit reached",
+  },
+};
+
 export function runtimeLabel(locale: Locale, status: string, error?: string): string {
   if (status === "running") return t(locale, "running");
   if (status === "starting") return t(locale, "starting");
-  if (status === "error") {
-    if (error?.includes("PLAN_CONCURRENT")) return t(locale, "planConcurrentShort");
-    if (error?.includes("KERNEL")) return t(locale, "kernelMissing");
-    return t(locale, "error");
-  }
+  if (status === "error") return REASON[locale][error ?? ""] ?? t(locale, "error");
   return t(locale, "stopped");
 }

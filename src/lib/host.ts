@@ -49,7 +49,7 @@ export function needsLockedSecret(env: Environment): boolean {
   return Boolean(proxy?.auth?.hasPassword) && !store.vault.unlocked;
 }
 
-function failRuntime(envId: string, error: string, hashOk = true) {
+function failRuntime(envId: string, error: string, detail: string, hashOk = true) {
   useEnclave.getState().setRuntime(envId, {
     envId,
     pid: null,
@@ -59,6 +59,7 @@ function failRuntime(envId: string, error: string, hashOk = true) {
     startedAt: null,
     hashOk,
     error,
+    detail,
   });
 }
 
@@ -70,7 +71,7 @@ export async function startEnv(env: Environment) {
   const alreadyRunning = store.runtimes[env.id]?.status === "running";
   if (!alreadyRunning && runningCount(store.runtimes) >= limits.concurrent) {
     const code = "PLAN_CONCURRENT_LIMIT";
-    failRuntime(env.id, code);
+    failRuntime(env.id, code, `${limits.label} 最多同时运行 ${limits.concurrent} 个环境。`);
     store.setPlanNotice({
       title: "同时运行已达上限",
       body: `${limits.label} 最多同时运行 ${limits.concurrent} 个环境。先停掉一个正在运行的环境，或者升级档位。`,
@@ -87,7 +88,7 @@ export async function startEnv(env: Environment) {
   // 2. 代理密码：保险箱锁着就先解锁，别让用户以为在走代理
   if (needsLockedSecret(env)) {
     const code = "VAULT_LOCKED";
-    failRuntime(env.id, code);
+    failRuntime(env.id, code, "代理密码在锁着的保险箱里，先解锁。");
     store.setPlanNotice({
       title: "保险箱是锁着的",
       body: `环境「${env.name}」绑定的代理需要密码，密码在保险箱里。先解锁保险箱再启动，否则这个环境会用你本机的网络出网。`,
@@ -99,13 +100,13 @@ export async function startEnv(env: Environment) {
   const view = await getKernelView();
   if (!view.online) {
     const code = "HOST_UNAVAILABLE";
-    failRuntime(env.id, code, true);
+    failRuntime(env.id, code, "连不上本机服务，重启工作台再试。");
     store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: code });
     return { ok: false as const, code, message: "连不上本机服务" };
   }
   if (view.status.state !== "admitted") {
     const code = "KERNEL_UNTRUSTED_SOURCE";
-    failRuntime(env.id, code, false);
+    failRuntime(env.id, code, "内核还没准入，先到内核页准入。", false);
     store.addAudit({ action: "start_blocked", target: env.id, level: "bad", detail: "内核未准入" });
     return { ok: false as const, code, message: "内核还没准入" };
   }
@@ -124,7 +125,7 @@ export async function startEnv(env: Environment) {
   const result = await startEnvironment({ envId: env.id, ...launchSpec(env) });
 
   if (!result.ok) {
-    failRuntime(env.id, result.message, result.code !== "KERNEL_HASH_MISMATCH");
+    failRuntime(env.id, result.code, result.message, result.code !== "KERNEL_HASH_MISMATCH");
     store.addAudit({
       action: "start_failed",
       target: env.id,

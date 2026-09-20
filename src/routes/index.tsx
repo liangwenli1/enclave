@@ -162,7 +162,10 @@ function EnvironmentsPage() {
                       <td>
                         <span className="inline-flex items-center gap-2">
                           <StatusDot tone={tone} />
-                          <span className={status === "error" ? "text-bad" : undefined}>
+                          <span
+                            className={status === "error" ? "text-bad" : undefined}
+                            title={rt?.detail}
+                          >
                             {runtimeLabel(locale, status, rt?.error)}
                           </span>
                         </span>
@@ -212,7 +215,7 @@ function EnvironmentsPage() {
         )}
       </Panel>
 
-      {rows.some((r) => runtimes[r.id]?.error === "KERNEL_UNTRUSTED_SOURCE") ? (
+      {rows.some((r) => runtimes[r.id]?.error?.startsWith("KERNEL_")) ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-[13px] text-warn">
           <span>{t(locale, "kernelNeed")}</span>
           <Link to="/kernels" className="font-semibold underline">
