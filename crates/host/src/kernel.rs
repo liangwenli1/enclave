@@ -213,7 +213,9 @@ pub fn force_headless() -> bool {
     if std::env::var_os("ENCLAVE_HEADLESS").is_some() {
         return true;
     }
-    cfg!(unix)
+    // 没有 DISPLAY 就是没有桌面 —— 这只对 Linux 成立。macOS 从来没有这个变量，
+    // 照这个判断 Mac 上的每个环境都会被悄悄开成无头。
+    cfg!(all(unix, not(target_os = "macos")))
         && std::env::var_os("DISPLAY").is_none()
         && std::env::var_os("WAYLAND_DISPLAY").is_none()
 }
@@ -253,6 +255,25 @@ pub fn sha256_str(input: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// macOS 的内核是一个 .app 包，真正执行的文件在 Contents/MacOS/ 里。
+/// 包里别处还有 Helper 之类的可执行文件，不能按名字满树去撞。
+#[cfg(target_os = "macos")]
+fn find_chrome(dir: &Path) -> Option<PathBuf> {
+    let rd = std::fs::read_dir(dir).ok()?;
+    for ent in rd.flatten() {
+        let app = ent.path();
+        if app.extension().and_then(|e| e.to_str()) != Some("app") {
+            continue;
+        }
+        let exe = app.join("Contents").join("MacOS").join("Chromium");
+        if exe.is_file() {
+            return Some(exe);
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "macos"))]
 fn find_chrome(dir: &Path) -> Option<PathBuf> {
     // 不含 chrome-wrapper：那是个壳脚本，准入时记下的哈希必须是真正执行的那个文件。
     let names = ["chrome", "chromium", "ungoogled-chromium"];
@@ -338,6 +359,12 @@ async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
         .file_name()
         .map(|s| s.to_string_lossy().to_ascii_lowercase())
         .unwrap_or_default();
+    if name.ends_with(".dmg") {
+        #[cfg(target_os = "macos")]
+        return extract_dmg(archive, dest).await;
+        #[cfg(not(target_os = "macos"))]
+        bail!("dmg 内核只能在 macOS 上解开");
+    }
     if name.ends_with(".zip") {
         #[cfg(windows)]
         {
@@ -391,6 +418,62 @@ async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
         bail!("tar: {}", String::from_utf8_lossy(&out.stderr));
     }
     Ok(())
+}
+
+/// 挂载 dmg，把里面的 .app 原样拷出来（ditto 会保留签名和扩展属性），再卸载。
+/// 拷贝成不成功都要卸载，否则下次准入会挂载失败。
+#[cfg(target_os = "macos")]
+async fn extract_dmg(archive: &Path, dest: &Path) -> Result<()> {
+    let mount = dest.with_extension("mount");
+    let _ = tokio::fs::remove_dir_all(&mount).await;
+    tokio::fs::create_dir_all(&mount).await?;
+    let out = Command::new("hdiutil")
+        .args([
+            "attach",
+            "-nobrowse",
+            "-readonly",
+            "-noautoopen",
+            "-mountpoint",
+        ])
+        .arg(&mount)
+        .arg(archive)
+        .output()
+        .await?;
+    if !out.status.success() {
+        bail!("hdiutil attach: {}", String::from_utf8_lossy(&out.stderr));
+    }
+
+    let copied = copy_app_bundle(&mount, dest).await;
+
+    let _ = Command::new("hdiutil")
+        .arg("detach")
+        .arg(&mount)
+        .arg("-force")
+        .output()
+        .await;
+    let _ = tokio::fs::remove_dir_all(&mount).await;
+    copied
+}
+
+#[cfg(target_os = "macos")]
+async fn copy_app_bundle(mount: &Path, dest: &Path) -> Result<()> {
+    let mut rd = tokio::fs::read_dir(mount).await?;
+    while let Some(ent) = rd.next_entry().await? {
+        let app = ent.path();
+        if app.extension().and_then(|e| e.to_str()) != Some("app") {
+            continue;
+        }
+        let out = Command::new("ditto")
+            .arg(&app)
+            .arg(dest.join(ent.file_name()))
+            .output()
+            .await?;
+        if !out.status.success() {
+            bail!("ditto: {}", String::from_utf8_lossy(&out.stderr));
+        }
+        return Ok(());
+    }
+    bail!("dmg 里没有 .app")
 }
 
 pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf> {
