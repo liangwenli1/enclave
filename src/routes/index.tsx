@@ -331,11 +331,28 @@ function CreateWizard({
           setStep(1);
           return;
         }
-        const copy = store.duplicateEnv(copyId);
-        if (copy) {
-          store.patchEnv(copy.id, { name: name.trim() || copy.name });
-          onCreated(copy.id);
-        }
+        const src = existing.find((e) => e.id === copyId);
+        if (!src) return;
+        // 复制的是设置，不是身份：种子必须是新的，否则两个环境指纹完全相同、可被关联。
+        // --no-sandbox 的同意是逐环境给的，不跟着复制。
+        const copy = {
+          ...newEnvironment({
+            name: name.trim(),
+            group,
+            tags: [...src.tags],
+            note: src.note,
+            proxyId: proxyId || null,
+            profile: { ...src.profile, seed: randomSeed(), seedLocked: true, timezone },
+            searchEngine: src.searchEngine,
+            searchProvider: src.searchProvider,
+            extensionIds: [...src.extensionIds],
+          }),
+          extraFlags: [...src.extraFlags],
+        };
+        copy.timeline[0] = { at: Date.now(), kind: "created", message: `复制自 ${src.name}`, level: "info" };
+        store.upsertEnv(copy);
+        store.addAudit({ action: "create_env", target: copy.id, level: "info", detail: `${copy.name} ← ${src.name}` });
+        onCreated(copy.id);
         return;
       }
       const engine = findEngine(Array.isArray(catalog) ? catalog : [], engineId);
@@ -354,7 +371,7 @@ function CreateWizard({
       env.timeline[0] = {
         at: Date.now(),
         kind: "created",
-        message: `source=${source}`,
+        message: "已创建",
         level: "info",
       };
       store.upsertEnv(env);
@@ -424,7 +441,18 @@ function CreateWizard({
             </Field>
             {source === "copy" ? (
               <Field label={t(locale, "fromCopy")}>
-                <Select value={copyId} onChange={(e) => setCopyId(e.target.value)}>
+                <Select
+                  value={copyId}
+                  onChange={(e) => {
+                    setCopyId(e.target.value);
+                    // 下一步的时区和代理先带上原环境的，用户可以再改。
+                    const src = existing.find((x) => x.id === e.target.value);
+                    if (!src) return;
+                    setGroup(src.group);
+                    setTimezone(src.profile.timezone);
+                    setProxyId(src.proxyId ?? "");
+                  }}
+                >
                   <option value="">—</option>
                   {existing.map((e) => (
                     <option key={e.id} value={e.id}>
@@ -511,6 +539,10 @@ function CreateWizard({
               onClick={() => {
                 if (step === 1 && !name.trim()) {
                   setError(locale === "zh" ? "请先填写环境名称。" : "Name is required.");
+                  return;
+                }
+                if (step === 1 && source === "copy" && !copyId) {
+                  setError(locale === "zh" ? "请选择要复制的环境。" : "Pick an environment to copy.");
                   return;
                 }
                 setError("");

@@ -11,7 +11,6 @@ import {
   type ProxyItem,
   type TimelineEvent,
   makeId,
-  newEnvironment,
 } from "@/lib/schema";
 
 type RuntimeView = {
@@ -60,7 +59,6 @@ type Store = {
   removeEnv: (id: string) => void;
   restoreEnv: (id: string) => void;
   destroyEnv: (id: string) => void;
-  duplicateEnv: (id: string) => Environment | null;
   upsertProxy: (proxy: ProxyItem) => void;
   removeProxy: (id: string) => void;
   upsertExt: (ext: ExtensionItem) => void;
@@ -83,7 +81,7 @@ const initialSettings: AppSettings = {
 
 export const useEnclave = create<Store>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       settings: initialSettings,
       environments: [],
       proxies: [],
@@ -149,20 +147,6 @@ export const useEnclave = create<Store>()(
         set((s) => ({
           environments: s.environments.filter((e) => e.id !== id),
         })),
-      duplicateEnv: (id) => {
-        const src = get().environments.find((e) => e.id === id);
-        if (!src) return null;
-        const copy = newEnvironment({
-          name: `${src.name} copy`,
-          group: src.group,
-          tags: [...src.tags],
-          profile: { ...src.profile, seed: src.profile.seed },
-          proxyId: src.proxyId,
-          extensionIds: [...src.extensionIds],
-        });
-        set((s) => ({ environments: [copy, ...s.environments] }));
-        return copy;
-      },
       upsertProxy: (proxy) =>
         set((s) => ({
           proxies: [proxy, ...s.proxies.filter((p) => p.id !== proxy.id)],
