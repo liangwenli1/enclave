@@ -21,7 +21,6 @@ pub struct KernelRecord {
     pub filename: String,
     pub sha256: String,
     pub bytes: u64,
-    pub signature: String,
     pub publisher: String,
     pub released_at: String,
     pub upstream: String,
@@ -34,7 +33,6 @@ pub struct KernelRecord {
 pub struct ManifestFile {
     pub channel: String,
     pub kernels: Vec<KernelRecord>,
-    pub previous_stable: Option<KernelRecord>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -57,7 +55,6 @@ pub struct KernelStatus {
     pub exe_size: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub exe_mtime: Option<u64>,
-    pub signature: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub executable: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -111,29 +108,18 @@ pub struct Webrtc {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Capabilities {
-    pub host: String,
     pub os: String,
     pub arch: String,
-    pub uid: Option<u32>,
-    pub display: bool,
-    pub loopback_only: bool,
     pub headless_forced: bool,
     pub sandbox_likely: bool,
-    pub runtime: String,
 }
 
 pub fn capabilities() -> Capabilities {
-    let uid = current_uid();
     Capabilities {
-        host: "rust".into(),
         os: std::env::consts::OS.into(),
         arch: std::env::consts::ARCH.into(),
-        uid,
-        display: !force_headless(),
-        loopback_only: true,
         headless_forced: force_headless(),
-        sandbox_likely: std::env::consts::OS == "linux" && uid != Some(0),
-        runtime: "native".into(),
+        sandbox_likely: std::env::consts::OS == "linux" && current_uid() != Some(0),
     }
 }
 
@@ -695,7 +681,6 @@ pub async fn read_status_fast(paths: &HostPaths, k: &KernelRecord) -> KernelStat
         exe_sha256: None,
         exe_size: None,
         exe_mtime: None,
-        signature: "missing".into(),
         executable: None,
         error: None,
         admitted_at: None,
@@ -822,7 +807,6 @@ pub async fn admit(
         exe_sha256: Some(exe_sha),
         exe_size: Some(exe_size),
         exe_mtime: Some(exe_mtime),
-        signature: "missing".into(),
         executable: Some(exe.to_string_lossy().into_owned()),
         error: None,
         admitted_at: Some(now_ms()),

@@ -232,12 +232,10 @@ async fn kernel_view(State(state): State<Arc<App>>) -> Json<Value> {
         "kernel": {
             "manifest": state.kernel,
             "kernels": state.manifest.kernels,
-            "previousStable": state.manifest.previous_stable,
             "channel": state.manifest.channel,
         },
         "capabilities": capabilities(),
         "runtimes": runtimes,
-        "host": "rust",
         "version": env!("CARGO_PKG_VERSION"),
     }))
 }
@@ -340,12 +338,10 @@ async fn env_start(State(state): State<Arc<App>>, Json(body): Json<StartBody>) -
                 "sha256": s.sha256,
                 "warned": s.warned,
                 "userDataDir": s.user_data_dir,
-                "host": "rust",
-                "runtime": "native",
             }))
         }
         Err((code, message)) => {
-            Json(json!({ "ok": false, "code": code, "message": message, "host": "rust" }))
+            Json(json!({ "ok": false, "code": code, "message": message }))
         }
     }
 }

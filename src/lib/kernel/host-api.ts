@@ -26,7 +26,6 @@ export type KernelStatus = {
   sha256Actual?: string;
   /** 实际被执行的那个文件的哈希。准入时记录，启动时核对。 */
   exeSha256?: string;
-  signature: "missing" | "verified";
   executable?: string;
   error?: string;
   admittedAt?: number;
@@ -49,15 +48,10 @@ export type KernelRecord = {
 };
 
 export type Capabilities = {
-  host: string;
   os: string;
   arch: string;
-  uid: number | null;
-  display: boolean;
-  loopbackOnly: boolean;
   headlessForced: boolean;
   sandboxLikely: boolean;
-  runtime: string;
 };
 
 export type RuntimeRow = {
@@ -96,7 +90,6 @@ export type KernelView = {
   kernel: {
     manifest: KernelRecord;
     kernels: KernelRecord[];
-    previousStable: KernelRecord | null;
     channel: string;
   } | null;
   capabilities: Capabilities | null;
@@ -177,7 +170,6 @@ const OFFLINE_VIEW: KernelView = {
     bytesReceived: 0,
     bytesExpected: 0,
     sha256Expected: "",
-    signature: "missing",
     error: "HOST_UNAVAILABLE",
   },
   kernel: null,

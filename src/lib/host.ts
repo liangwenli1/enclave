@@ -144,7 +144,7 @@ export async function startEnv(env: Environment) {
     action: "start",
     target: env.id,
     level: env.allowNoSandbox ? "warn" : "info",
-    detail: `pid ${result.pid} port ${result.port} runtime=native`,
+    detail: `pid ${result.pid} port ${result.port}`,
   });
   store.patchEnv(
     env.id,
@@ -152,7 +152,7 @@ export async function startEnv(env: Environment) {
     {
       at: Date.now(),
       kind: "running",
-      message: `pid ${result.pid} · runtime=native`,
+      message: `pid ${result.pid}`,
       level: env.allowNoSandbox ? "warn" : "info",
     },
   );
