@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FlaskConical, Play, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { classifyAll } from "@/lib/kernel/flags";
 import { collectEnvCdp, startEnv, stopEnv } from "@/lib/host";
 import { eventLabel, t, runtimeLabel } from "@/lib/i18n";
@@ -23,7 +22,6 @@ export const Route = createFileRoute("/environments/$id")({ component: EnvDetail
 
 function EnvDetail() {
   const { id } = Route.useParams();
-  const locale = useLocale();
   const navigate = useNavigate();
   const env = useEnclave((s) => s.environments.find((e) => e.id === id));
   const proxies = useEnclave((s) => s.proxies);
@@ -50,27 +48,27 @@ function EnvDetail() {
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Button variant="ghost" onClick={() => void navigate({ to: "/" })}>
             <ArrowLeft className="size-3.5" />
-            {t(locale, "back")}
+            {t("back")}
           </Button>
           <h1 className="text-2xl font-bold tracking-tight text-ink">{env.name}</h1>
           <Badge tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}>
-            {runtimeLabel(locale, status, runtime?.error)}
+            {runtimeLabel(status, runtime?.error)}
           </Badge>
           <div className="ml-auto flex gap-2">
             {status === "running" ? (
               <Button onClick={() => void stopEnv(env.id)}>
                 <Square className="size-3" />
-                {t(locale, "stop")}
+                {t("stop")}
               </Button>
             ) : (
               <Button
                 variant="primary"
                 disabled={status === "starting"}
-                title={status === "starting" ? t(locale, "starting") : undefined}
+                title={status === "starting" ? t("starting") : undefined}
                 onClick={() => void startEnv(env)}
               >
                 <Play className="size-3" />
-                {status === "starting" ? t(locale, "starting") : t(locale, "start")}
+                {status === "starting" ? t("starting") : t("start")}
               </Button>
             )}
             <Button
@@ -79,7 +77,7 @@ function EnvDetail() {
               }}
             >
               <FlaskConical className="size-3.5" />
-              {t(locale, "sendLab")}
+              {t("sendLab")}
             </Button>
           </div>
         </div>
@@ -91,33 +89,33 @@ function EnvDetail() {
               onClick={() => setTab(key)}
               className={`px-3 py-2 text-[13px] ${tab === key ? "border-b-2 border-accent text-ink" : "text-subtle"}`}
             >
-              {t(locale, key === "flags" ? "flags" : key)}
+              {t(key === "flags" ? "flags" : key)}
             </button>
           ))}
         </div>
 
         {tab === "overview" ? (
           <div className="grid gap-3 md:grid-cols-2">
-            <Field label={t(locale, "name")}>
+            <Field label={t("name")}>
               <Input
                 value={env.name}
                 onChange={(e) => useEnclave.getState().patchEnv(env.id, { name: e.target.value })}
               />
             </Field>
-            <Field label={t(locale, "group")}>
+            <Field label={t("group")}>
               <Input
                 value={env.group}
                 onChange={(e) => useEnclave.getState().patchEnv(env.id, { group: e.target.value })}
               />
             </Field>
-            <Field label={t(locale, "proxy")}>
+            <Field label={t("proxy")}>
               <Select
                 value={env.proxyId ?? ""}
                 onChange={(e) =>
                   useEnclave.getState().patchEnv(env.id, { proxyId: e.target.value || null })
                 }
               >
-                <option value="">{t(locale, "noProxy")}</option>
+                <option value="">{t("noProxy")}</option>
                 {proxies.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -125,10 +123,10 @@ function EnvDetail() {
                 ))}
               </Select>
             </Field>
-            <Field label={t(locale, "searchEngine")}>
+            <Field label={t("searchEngine")}>
               <EngineSelect envId={env.id} value={env.searchEngine ?? "none"} />
             </Field>
-            <Field label={t(locale, "note")}>
+            <Field label={t("note")}>
               <Textarea
                 value={env.note}
                 onChange={(e) => useEnclave.getState().patchEnv(env.id, { note: e.target.value })}
@@ -136,7 +134,7 @@ function EnvDetail() {
             </Field>
             <ExtensionPicker envId={env.id} selected={env.extensionIds} />
             <Panel className="md:col-span-2 p-4">
-              <div className="mb-2 text-[13px] font-medium">{t(locale, "consistency")}</div>
+              <div className="mb-2 text-[13px] font-medium">{t("consistency")}</div>
               <div className="grid gap-2">
                 {checks.map((c) => (
                   <div key={c.id} className="flex items-start justify-between gap-3 text-[13px]">
@@ -149,11 +147,11 @@ function EnvDetail() {
               </div>
               {failed.length === 0 ? (
                 <Badge tone="ok" className="mt-3">
-                  {t(locale, "pass")}
+                  {t("pass")}
                 </Badge>
               ) : (
                 <Badge tone="bad" className="mt-3">
-                  {t(locale, "fail")}
+                  {t("fail")}
                 </Badge>
               )}
             </Panel>
@@ -184,9 +182,9 @@ function EnvDetail() {
 
       <aside className="grid h-fit gap-3">
         <Panel className="p-4">
-          <div className="mb-2 text-sm font-medium">{t(locale, "runtime")}</div>
+          <div className="mb-2 text-sm font-medium">{t("runtime")}</div>
           <p className={runtime?.status === "error" ? "text-sm text-bad" : "text-sm text-subtle"}>
-            {runtimeLabel(locale, runtime?.status ?? "stopped", runtime?.error)}
+            {runtimeLabel(runtime?.status ?? "stopped", runtime?.error)}
           </p>
           {runtime?.status === "error" && runtime.detail ? (
             <p className="mt-2 text-[13px] text-muted">{runtime.detail}</p>
@@ -217,7 +215,7 @@ function EnvDetail() {
                 }
               }}
             >
-              {collect.busy ? "采集中…" : t(locale, "collectPage")}
+              {collect.busy ? "采集中…" : t("collectPage")}
             </Button>
           ) : null}
           {runtime?.status === "running" && collect.note ? (
@@ -230,7 +228,6 @@ function EnvDetail() {
 }
 
 function EngineSelect({ envId, value }: { envId: string; value: string }) {
-  const locale = useLocale();
   const catalog = useEnclave((s) => s.searchCatalog);
   return (
     <Select
@@ -244,7 +241,7 @@ function EngineSelect({ envId, value }: { envId: string; value: string }) {
         });
       }}
     >
-      <option value="none">{t(locale, "searchEngineNone")}</option>
+      <option value="none">{t("searchEngineNone")}</option>
       {catalog.map((engine) => (
         <option key={engine.id} value={engine.id}>
           {engine.name}
@@ -294,7 +291,6 @@ function ExtensionPicker({ envId, selected }: { envId: string; selected: string[
 }
 
 function FingerprintForm({ envId, profile }: { envId: string; profile: FingerprintProfile }) {
-  const locale = useLocale();
   const patch = (next: Partial<FingerprintProfile>) => {
     useEnclave.getState().patchEnv(envId, { profile: { ...profile, ...next } });
   };
@@ -313,9 +309,9 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <Field
-        label={t(locale, "seed")}
-        hint={profile.seedLocked ? undefined : t(locale, "seedHint")}
-        error={seedBad ? t(locale, "seedBad") : undefined}
+        label={t("seed")}
+        hint={profile.seedLocked ? undefined : t("seedHint")}
+        error={seedBad ? t("seedBad") : undefined}
       >
         <div className="flex gap-2">
           <Input
@@ -333,11 +329,11 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
             disabled={seedBad}
             onClick={() => patch({ seedLocked: !profile.seedLocked })}
           >
-            {profile.seedLocked ? t(locale, "unlockSeed") : t(locale, "lockSeed")}
+            {profile.seedLocked ? t("unlockSeed") : t("lockSeed")}
           </Button>
         </div>
       </Field>
-      <Field label={t(locale, "platform")}>
+      <Field label={t("platform")}>
         <Select
           value={profile.platform}
           onChange={(e) => {
@@ -351,18 +347,18 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
         </Select>
       </Field>
       {profile.platform === "windows" ? (
-        <Field label={t(locale, "osVersion")}>
+        <Field label={t("osVersion")}>
           <Select
             value={windowsEdition(profile.platformVersion)}
             onChange={(e) => patch({ platformVersion: defaultWinVersion(e.target.value as "10" | "11") })}
           >
-            <option value="10">{t(locale, "win10")}</option>
-            <option value="11">{t(locale, "win11")}</option>
+            <option value="10">{t("win10")}</option>
+            <option value="11">{t("win11")}</option>
           </Select>
-          <p className="text-xs text-subtle">{t(locale, "osHint")}</p>
+          <p className="text-xs text-subtle">{t("osHint")}</p>
         </Field>
       ) : null}
-      <Field label={t(locale, "brand")}>
+      <Field label={t("brand")}>
         <Select
           value={profile.brand}
           onChange={(e) => patch({ brand: e.target.value as FingerprintProfile["brand"] })}
@@ -372,7 +368,7 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
           ))}
         </Select>
       </Field>
-      <Field label={t(locale, "cores")}>
+      <Field label={t("cores")}>
         <Select
           value={profile.hardwareConcurrency}
           onChange={(e) => patch({ hardwareConcurrency: Number(e.target.value) })}
@@ -382,27 +378,27 @@ function FingerprintForm({ envId, profile }: { envId: string; profile: Fingerpri
           ))}
         </Select>
       </Field>
-      <Field label={t(locale, "timezone")}>
+      <Field label={t("timezone")}>
         <Select value={profile.timezone} onChange={(e) => patch({ timezone: e.target.value })}>
           {TIMEZONES.map((tz) => (
             <option key={tz}>{tz}</option>
           ))}
         </Select>
       </Field>
-      <Field label={t(locale, "locale")}>
+      <Field label={t("locale")}>
         <Input value={profile.locale} onChange={(e) => patch({ locale: e.target.value })} />
       </Field>
-      <Field label={t(locale, "webrtc")}>
+      <Field label={t("webrtc")}>
         <Select
           value={profile.webrtc.mode}
           onChange={(e) => patch({ webrtc: { mode: e.target.value as WebrtcMode } })}
         >
-          <option value="replace">{t(locale, "webrtcReplace")}</option>
-          <option value="disable">{t(locale, "webrtcDisable")}</option>
+          <option value="replace">{t("webrtcReplace")}</option>
+          <option value="disable">{t("webrtcDisable")}</option>
         </Select>
-        <p className="text-xs text-subtle">{t(locale, "webrtcHint")}</p>
+        <p className="text-xs text-subtle">{t("webrtcHint")}</p>
       </Field>
-      <Field label={t(locale, "screen")}>
+      <Field label={t("screen")}>
         <Select
           value={`${profile.screen.width}x${profile.screen.height}`}
           onChange={(e) => {
@@ -430,7 +426,6 @@ function FlagsForm({
   extraFlags: string[];
   allowNoSandbox: boolean;
 }) {
-  const locale = useLocale();
   const [draft, setDraft] = useState(extraFlags.join("\n"));
   const classified = useMemo(() => classifyAll(draft.split(/\s+/).filter(Boolean)), [draft]);
   const rejected = classified.filter((f) => f.cls === "reject").length;
@@ -460,18 +455,18 @@ function FlagsForm({
             });
           }}
         />
-        {t(locale, "noSandboxFlag")}
+        {t("noSandboxFlag")}
       </label>
-      <Field label={t(locale, "extraFlags")}>
+      <Field label={t("extraFlags")}>
         <Textarea value={draft} onChange={(e) => setDraft(e.target.value)} />
       </Field>
-      <p className="text-[13px] text-subtle">{t(locale, "extraFlagsHint")}</p>
+      <p className="text-[13px] text-subtle">{t("extraFlagsHint")}</p>
       <ul className="grid gap-1 text-[13px]">
         {classified.map((f) => (
           <li key={f.raw} className="flex justify-between gap-2 border-b border-line py-1">
             <span className="font-mono">{f.raw}</span>
             <span className={f.cls === "reject" ? "text-bad" : f.cls === "warn" ? "text-warn" : "text-ok"}>
-              {t(locale, f.cls === "reject" ? "rejected" : f.cls === "warn" ? "warn" : "allowed")} · {f.reason}
+              {t(f.cls === "reject" ? "rejected" : f.cls === "warn" ? "warn" : "allowed")} · {f.reason}
             </span>
           </li>
         ))}
@@ -490,7 +485,7 @@ function FlagsForm({
             );
           }}
         >
-          {t(locale, "save")}
+          {t("save")}
         </Button>
         {!dirty && extraFlags.length ? (
           <span className="text-[13px] text-subtle">已保存，重新启动后生效。</span>

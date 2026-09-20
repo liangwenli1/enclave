@@ -12,7 +12,6 @@ import {
   Panel,
   PageHeader,
 } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { makeId } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
@@ -23,7 +22,6 @@ export const Route = createFileRoute("/extensions")({ component: ExtensionsPage 
 const RISKY = ["<all_urls>", "tabs", "webRequest", "cookies", "proxy", "debugger"];
 
 function ExtensionsPage() {
-  const locale = useLocale();
   const extensions = useEnclave((s) => s.extensions);
   const environments = useEnclave((s) => s.environments);
   const [open, setOpen] = useState(false);
@@ -31,11 +29,11 @@ function ExtensionsPage() {
   return (
     <div className="mx-auto max-w-4xl px-8 py-6">
       <PageHeader
-        title={t(locale, "extTitle")}
+        title={t("extTitle")}
         status={`${extensions.length} 个扩展`}
         actions={
           <Button variant="primary" onClick={() => setOpen(true)}>
-            {t(locale, "addExt")}
+            {t("addExt")}
           </Button>
         }
       />
@@ -48,7 +46,7 @@ function ExtensionsPage() {
             body="添加后在环境详情里勾选。"
             action={
               <Button variant="primary" onClick={() => setOpen(true)}>
-                {t(locale, "addExt")}
+                {t("addExt")}
               </Button>
             }
           />
@@ -57,7 +55,7 @@ function ExtensionsPage() {
             <table className="app-table min-w-[680px]">
               <thead>
                 <tr>
-                  <th>{t(locale, "name")}</th>
+                  <th>{t("name")}</th>
                   <th>路径</th>
                   <th>权限</th>
                   <th>被使用</th>
@@ -79,7 +77,7 @@ function ExtensionsPage() {
                       </td>
                       <td>
                         {ext.highRisk ? (
-                          <Badge tone="warn">{t(locale, "highRiskPerm")}</Badge>
+                          <Badge tone="warn">{t("highRiskPerm")}</Badge>
                         ) : (
                           <span className="text-subtle">{ext.permissions.join(" ") || "—"}</span>
                         )}
@@ -101,7 +99,7 @@ function ExtensionsPage() {
                               store.removeExt(ext.id);
                             }}
                           >
-                            {t(locale, "delete")}
+                            {t("delete")}
                           </Button>
                         </div>
                       </td>
@@ -120,7 +118,6 @@ function ExtensionsPage() {
 }
 
 function ExtDialog({ onClose }: { onClose: () => void }) {
-  const locale = useLocale();
   const [name, setName] = useState("");
   const [path, setPath] = useState("");
   const [perms, setPerms] = useState("storage");
@@ -150,9 +147,9 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={t(locale, "addExt")}>
+      <DialogContent title={t("addExt")}>
         <div className="grid gap-4">
-          <Field label={t(locale, "name")} hint="留空就用文件夹名">
+          <Field label={t("name")} hint="留空就用文件夹名">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <Field
@@ -171,9 +168,9 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
           </Field>
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={onClose}>{t(locale, "cancel")}</Button>
+          <Button onClick={onClose}>{t("cancel")}</Button>
           <Button variant="primary" onClick={save}>
-            {t(locale, "save")}
+            {t("save")}
           </Button>
         </div>
       </DialogContent>

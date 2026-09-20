@@ -112,7 +112,6 @@ export type LabSnapshot = {
 };
 
 export type AppSettings = {
-  locale: "zh" | "en";
   allowNoSandboxHost: boolean;
   /** 内核还在预览通道时，用户明确同意后才允许准入和启动。 */
   allowPreviewKernel: boolean;

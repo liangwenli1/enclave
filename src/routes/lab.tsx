@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { collectEnvCdp } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { collectPageFingerprint, diffSnaps, snapshotChecks, staticConsistency } from "@/lib/lab";
@@ -17,7 +16,6 @@ export const Route = createFileRoute("/lab")({
 });
 
 function LabPage() {
-  const locale = useLocale();
   const { env: envFromSearch } = Route.useSearch();
   const allEnvironments = useEnclave((s) => s.environments);
   const environments = useMemo(
@@ -40,7 +38,7 @@ function LabPage() {
   return (
     <div className="mx-auto max-w-[1280px] px-8 py-6">
       <h1 className="text-[32px] leading-tight font-bold tracking-tight text-ink">
-        {t(locale, "labTitle")}
+        {t("labTitle")}
       </h1>
       <p className="mt-2 text-[13px] text-subtle">对照是工作台这一页，另一边是真正的内核窗口。</p>
       <div className="mt-5 flex flex-wrap items-center gap-2">
@@ -49,7 +47,7 @@ function LabPage() {
           value={envId}
           onChange={(e) => setEnvId(e.target.value)}
         >
-          <option value="">{t(locale, "env")}</option>
+          <option value="">{t("env")}</option>
           {environments.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name}
@@ -70,7 +68,7 @@ function LabPage() {
             }
           }}
         >
-          {t(locale, "collectPage")}
+          {t("collectPage")}
         </Button>
         <Button
           variant="primary"
@@ -95,7 +93,7 @@ function LabPage() {
             }
           }}
         >
-          {t(locale, "collectCdp")}
+          {t("collectCdp")}
         </Button>
       </div>
 
@@ -103,27 +101,27 @@ function LabPage() {
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <Panel className="p-4">
-          <div className="mb-2 text-[13px] font-medium">{t(locale, "control")}</div>
+          <div className="mb-2 text-[13px] font-medium">{t("control")}</div>
           {lab.control ? (
             <Meta snap={lab.control} />
           ) : (
-            <p className="text-[13px] text-subtle">{t(locale, "notRun")}</p>
+            <p className="text-[13px] text-subtle">{t("notRun")}</p>
           )}
         </Panel>
         <Panel className="p-4">
-          <div className="mb-2 text-[13px] font-medium">{t(locale, "kernelWindow")}</div>
+          <div className="mb-2 text-[13px] font-medium">{t("kernelWindow")}</div>
           {envSnap ? (
             <Meta snap={envSnap} />
           ) : (
             <p className="text-[13px] text-subtle">
-              {runtimes[envId]?.status === "running" ? t(locale, "notRun") : t(locale, "runtimeEmpty")}
+              {runtimes[envId]?.status === "running" ? t("notRun") : t("runtimeEmpty")}
             </p>
           )}
         </Panel>
       </div>
 
       <Panel className="mt-3 p-4">
-        <div className="mb-2 text-[13px] font-medium">{t(locale, "consistency")}</div>
+        <div className="mb-2 text-[13px] font-medium">{t("consistency")}</div>
         <ul className="grid gap-1 text-[13px]">
           {staticChecks.map((c) => (
             <li key={c.id} className="flex justify-between gap-3">
@@ -141,16 +139,16 @@ function LabPage() {
       </Panel>
 
       <Panel className="mt-3 overflow-x-auto p-4">
-        <div className="mb-2 text-[13px] font-medium">{t(locale, "diff")}</div>
+        <div className="mb-2 text-[13px] font-medium">{t("diff")}</div>
         {rows.length === 0 ? (
-          <p className="text-[13px] text-subtle">{t(locale, "notRun")}</p>
+          <p className="text-[13px] text-subtle">{t("notRun")}</p>
         ) : (
           <table className="w-full min-w-[640px] text-left text-[13px]">
             <thead className="text-subtle">
               <tr>
                 <th className="py-1">项目</th>
-                <th>{t(locale, "control")}</th>
-                <th>{t(locale, "env")}</th>
+                <th>{t("control")}</th>
+                <th>{t("env")}</th>
               </tr>
             </thead>
             <tbody>

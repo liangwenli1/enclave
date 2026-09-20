@@ -2,7 +2,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
 import { admitKernel, getKernelView } from "@/lib/kernel/host-api";
-import { t, type Locale } from "@/lib/i18n";
+import { t } from "@/lib/i18n";
 import { KERNEL_PIN, newEnvironment, profileFromSeed, randomSeed } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
@@ -12,7 +12,6 @@ import { useEnclave } from "@/lib/store";
  * 这里不选档位 —— 档位只能来自厂商签发的许可证。
  */
 export function Onboarding() {
-  const locale = useEnclave((s) => s.settings.locale) as Locale;
   const allowPreview = useEnclave((s) => s.settings.allowPreviewKernel);
   const onboarded = useEnclave((s) => s.settings.onboarded);
   const navigate = useNavigate();
@@ -69,10 +68,10 @@ export function Onboarding() {
     <div className="fixed inset-0 z-40 grid place-items-center bg-canvas p-4">
       <Panel className="w-full max-w-lg p-6">
         <div className="text-xs font-semibold tracking-[1.5px] text-subtle uppercase">
-          {t(locale, "onboard")} · {step + 1}/3
+          {t("onboard")} · {step + 1}/3
         </div>
         <h2 className="mt-2 text-2xl font-bold tracking-tight text-ink">
-          {t(locale, "onboardTitle")}
+          {t("onboardTitle")}
         </h2>
 
         {step === 0 ? (
@@ -90,7 +89,7 @@ export function Onboarding() {
 
         {step === 1 ? (
           <div className="mt-5 grid gap-4">
-            <p className="text-[13px] leading-relaxed text-muted">{t(locale, "kernelNeed")}</p>
+            <p className="text-[13px] leading-relaxed text-muted">{t("kernelNeed")}</p>
             {admitted ? <Badge tone="ok">已准入</Badge> : null}
             {previewChannel && !admitted ? (
               <label className="flex cursor-pointer items-start gap-2.5 text-[13px]">
@@ -120,7 +119,7 @@ export function Onboarding() {
                 title={needsConsent ? "先勾选上面的同意项" : undefined}
                 onClick={() => void admit()}
               >
-                {busy ? "下载并校验中…" : admitted ? "已完成" : t(locale, "download")}
+                {busy ? "下载并校验中…" : admitted ? "已完成" : t("download")}
               </Button>
             </div>
           </div>
@@ -128,7 +127,7 @@ export function Onboarding() {
 
         {step === 2 ? (
           <div className="mt-5 grid gap-4">
-            <p className="text-[13px] leading-relaxed text-muted">{t(locale, "onboardSample")}</p>
+            <p className="text-[13px] leading-relaxed text-muted">{t("onboardSample")}</p>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="primary"
@@ -136,7 +135,7 @@ export function Onboarding() {
                   const store = useEnclave.getState();
                   if (store.environments.filter((e) => !e.deletedAt).length === 0) {
                     const env = newEnvironment({
-                      name: locale === "zh" ? "第一个环境" : "First environment",
+                      name: "第一个环境",
                       group: "default",
                       profile: profileFromSeed(randomSeed(), "windows"),
                       kernelPin: KERNEL_PIN,
@@ -160,13 +159,13 @@ export function Onboarding() {
         ) : null}
 
         <div className="mt-6 flex justify-between">
-          <Button onClick={finish}>{t(locale, "onboardSkip")}</Button>
+          <Button onClick={finish}>{t("onboardSkip")}</Button>
           {step < 2 ? (
             <Button
               variant={step === 1 && !admitted ? "secondary" : "primary"}
               onClick={() => setStep((s) => s + 1)}
             >
-              {t(locale, "next")}
+              {t("next")}
             </Button>
           ) : null}
         </div>

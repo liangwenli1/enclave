@@ -13,7 +13,6 @@ import {
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { makeId, type ProxyItem } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
@@ -22,7 +21,6 @@ import { putSecret, removeSecret } from "@/lib/vault";
 export const Route = createFileRoute("/network")({ component: NetworkPage });
 
 function NetworkPage() {
-  const locale = useLocale();
   const proxies = useEnclave((s) => s.proxies);
   const environments = useEnclave((s) => s.environments);
   const [open, setOpen] = useState(false);
@@ -39,12 +37,12 @@ function NetworkPage() {
   return (
     <div className="mx-auto max-w-4xl px-8 py-6">
       <PageHeader
-        title={t(locale, "netTitle")}
+        title={t("netTitle")}
         status={`${proxies.length} 个代理`}
         actions={
           proxies.length > 0 ? (
             <Button variant="primary" onClick={() => setOpen(true)}>
-              {t(locale, "addProxy")}
+              {t("addProxy")}
             </Button>
           ) : undefined
         }
@@ -58,7 +56,7 @@ function NetworkPage() {
             body="不绑代理的环境走本机网络出网。"
             action={
               <Button variant="primary" onClick={() => setOpen(true)}>
-                {t(locale, "addProxy")}
+                {t("addProxy")}
               </Button>
             }
           />
@@ -67,7 +65,7 @@ function NetworkPage() {
             <table className="app-table min-w-[720px]">
               <thead>
                 <tr>
-                  <th>{t(locale, "name")}</th>
+                  <th>{t("name")}</th>
                   <th>地址</th>
                   <th>认证</th>
                   <th>被使用</th>
@@ -104,7 +102,7 @@ function NetworkPage() {
                               used ? setRemoving({ id: p.id, name: p.name, used }) : remove(p.id)
                             }
                           >
-                            {t(locale, "delete")}
+                            {t("delete")}
                           </Button>
                         </div>
                       </td>
@@ -127,9 +125,9 @@ function NetworkPage() {
               <span className="text-bad">本机网络</span>出网。
             </p>
             <div className="mt-6 flex justify-end gap-2">
-              <Button onClick={() => setRemoving(null)}>{t(locale, "cancel")}</Button>
+              <Button onClick={() => setRemoving(null)}>{t("cancel")}</Button>
               <Button variant="danger" onClick={() => remove(removing.id)}>
-                {t(locale, "delete")}
+                {t("delete")}
               </Button>
             </div>
           </DialogContent>
@@ -140,7 +138,6 @@ function NetworkPage() {
 }
 
 function ProxyDialog({ onClose }: { onClose: () => void }) {
-  const locale = useLocale();
   const [draft, setDraft] = useState({
     name: "",
     protocol: "http" as ProxyItem["protocol"],
@@ -191,9 +188,9 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={t(locale, "addProxy")}>
+      <DialogContent title={t("addProxy")}>
         <div className="grid gap-4">
-          <Field label={t(locale, "name")}>
+          <Field label={t("name")}>
             <Input
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -201,7 +198,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
             />
           </Field>
           <div className="grid grid-cols-[1fr_2fr_1fr] gap-3">
-            <Field label={t(locale, "protocol")}>
+            <Field label={t("protocol")}>
               <Select
                 value={draft.protocol}
                 onChange={(e) =>
@@ -213,14 +210,14 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
                 <option value="socks5">SOCKS5</option>
               </Select>
             </Field>
-            <Field label={t(locale, "host")} error={errors.host}>
+            <Field label={t("host")} error={errors.host}>
               <Input
                 value={draft.host}
                 onChange={(e) => setDraft({ ...draft, host: e.target.value })}
                 placeholder="proxy.example.com"
               />
             </Field>
-            <Field label={t(locale, "port")} error={errors.port}>
+            <Field label={t("port")} error={errors.port}>
               <Input
                 inputMode="numeric"
                 value={draft.port}
@@ -228,14 +225,14 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               />
             </Field>
           </div>
-          <Field label={t(locale, "username")} hint="不需要认证就留空" error={errors.username}>
+          <Field label={t("username")} hint="不需要认证就留空" error={errors.username}>
             <Input
               value={draft.username}
               onChange={(e) => setDraft({ ...draft, username: e.target.value })}
             />
           </Field>
           <Field
-            label={t(locale, "password")}
+            label={t("password")}
             error={errors.password}
             hint={
               canStorePassword
@@ -257,7 +254,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               去设置主密码
             </Link>
           ) : null}
-          <Field label={t(locale, "country")}>
+          <Field label={t("country")}>
             <Input
               value={draft.country}
               onChange={(e) => setDraft({ ...draft, country: e.target.value.toUpperCase() })}
@@ -266,9 +263,9 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
           </Field>
         </div>
         <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={onClose}>{t(locale, "cancel")}</Button>
+          <Button onClick={onClose}>{t("cancel")}</Button>
           <Button variant="primary" onClick={() => void save()}>
-            {t(locale, "save")}
+            {t("save")}
           </Button>
         </div>
       </DialogContent>

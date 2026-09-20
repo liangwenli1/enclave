@@ -24,7 +24,6 @@ import { currentAccount, refresh } from "@/lib/license/client";
 import { launchSpec, needsLockedSecret, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
-import { useLocale } from "@/lib/use-locale";
 import { lockVault, unlockVault } from "@/lib/vault";
 
 const NAV = [
@@ -38,16 +37,11 @@ const NAV = [
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const locale = useLocale();
   // 锁没锁只有一个事实来源：保险箱建了、但密钥不在内存里。重启后天然就是这个状态。
   const locked = useEnclave((s) => s.vault.exists && !s.vault.unlocked);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
-
-  useEffect(() => {
-    document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
-  }, [locale]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -73,7 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           {NAV.map((item) => (
             <Link key={item.to} to={item.to} data-active={pathname === item.to ? "true" : "false"}>
               <item.icon className="size-4" />
-              {t(locale, item.key)}
+              {t(item.key)}
             </Link>
           ))}
         </nav>
@@ -81,11 +75,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <nav className="app-nav">
             <Link to="/account" data-active={pathname === "/account" ? "true" : "false"}>
               <UserRound className="size-4" />
-              {t(locale, "navAccount")}
+              {t("navAccount")}
             </Link>
             <Link to="/settings" data-active={pathname === "/settings" ? "true" : "false"}>
               <Settings className="size-4" />
-              {t(locale, "navSettings")}
+              {t("navSettings")}
             </Link>
           </nav>
           <AccountChip />
@@ -97,14 +91,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           <button
             className="grid size-9 place-items-center rounded-md text-subtle hover:bg-surface hover:text-ink md:hidden"
             onClick={() => setMobileNav((v) => !v)}
-            aria-label={t(locale, "menu")}
+            aria-label={t("menu")}
           >
             <MenuIcon className="size-4" />
           </button>
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={() => setCmdOpen(true)}
-              title={t(locale, "command")}
+              title={t("command")}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-surface px-3 text-[13px] text-subtle hover:bg-surface-2 hover:text-ink"
             >
               <Search className="size-3.5" />
@@ -126,7 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   pathname === item.to ? "text-ink" : "text-subtle",
                 )}
               >
-                {t(locale, item.key)}
+                {t(item.key)}
               </Link>
             ))}
           </div>
@@ -174,14 +168,13 @@ function AccountChip() {
 
 /** 保险箱没建起来之前不显示锁按钮：那把锁是假的。 */
 function LockButton() {
-  const locale = useLocale();
   const exists = useEnclave((s) => s.vault.exists);
   if (!exists) return null;
   return (
     <Button
       variant="ghost"
       size="icon"
-      title={t(locale, "lockNow")}
+      title={t("lockNow")}
       onClick={() => {
         lockVault();
       }}
@@ -210,7 +203,6 @@ function AccountSync() {
 }
 
 function PlanNotice() {
-  const locale = useLocale();
   const navigate = useNavigate();
   const notice = useEnclave((s) => s.planNotice);
   if (!notice) return null;
@@ -220,7 +212,7 @@ function PlanNotice() {
         <p className="text-sm leading-relaxed text-muted">{notice.body}</p>
         <div className="mt-6 flex justify-end gap-2">
           <Button onClick={() => useEnclave.getState().setPlanNotice(null)}>
-            {t(locale, "gotIt")}
+            {t("gotIt")}
           </Button>
           <Button
             variant="primary"
@@ -229,7 +221,7 @@ function PlanNotice() {
               void navigate({ to: "/account" });
             }}
           >
-            {t(locale, "seePlans")}
+            {t("seePlans")}
           </Button>
         </div>
       </DialogContent>
@@ -336,7 +328,6 @@ function runtimeRow(r: {
 
 /** 真锁：解锁 = 用主密码解开保险箱。密码不对就是不对。 */
 function LockScreen() {
-  const locale = useLocale();
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -347,7 +338,7 @@ function LockScreen() {
     const ok = await unlockVault(value);
     setBusy(false);
     if (!ok) {
-      setError(t(locale, "wrongMasterPw"));
+      setError(t("wrongMasterPw"));
       return;
     }
     setValue("");
@@ -364,19 +355,19 @@ function LockScreen() {
       >
         <div className="mb-1 flex items-center gap-2 text-ink">
           <KeyRound className="size-4 text-accent" />
-          <h1 className="text-lg font-bold tracking-tight">{t(locale, "locked")}</h1>
+          <h1 className="text-lg font-bold tracking-tight">{t("locked")}</h1>
         </div>
-        <p className="mb-5 text-[13px] text-subtle">{t(locale, "masterPwHint")}</p>
+        <p className="mb-5 text-[13px] text-subtle">{t("masterPwHint")}</p>
         <Input
           type="password"
           autoFocus
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder={t(locale, "masterPw")}
+          placeholder={t("masterPw")}
         />
         {error ? <p className="mt-2 text-[13px] text-bad">{error}</p> : null}
         <Button variant="primary" size="md" className="mt-4 w-full" type="submit" disabled={busy}>
-          {t(locale, "unlock")}
+          {t("unlock")}
         </Button>
       </form>
     </div>
@@ -390,17 +381,16 @@ function CommandPalette({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const locale = useLocale();
   const navigate = useNavigate();
   const environments = useEnclave((s) => s.environments);
   const envs = useMemo(() => environments.filter((e) => !e.deletedAt), [environments]);
   const pages = useMemo(
     () => [
-      ...NAV.map((n) => ({ to: n.to, label: t(locale, n.key) })),
-      { to: "/account", label: t(locale, "navAccount") },
-      { to: "/settings", label: t(locale, "navSettings") },
+      ...NAV.map((n) => ({ to: n.to, label: t(n.key) })),
+      { to: "/account", label: t("navAccount") },
+      { to: "/settings", label: t("navSettings") },
     ],
-    [locale],
+    [],
   );
 
   return (
@@ -408,15 +398,15 @@ function CommandPalette({
       <DialogContent className="overflow-hidden p-0">
         <Command className="text-sm" shouldFilter>
           <Command.Input
-            placeholder={t(locale, "search")}
+            placeholder={t("search")}
             className="h-12 w-full border-b border-line bg-transparent px-4 text-ink outline-none placeholder:text-faint"
           />
           <Command.List className="max-h-80 overflow-auto p-2">
             <Command.Empty className="px-2 py-8 text-center text-[13px] text-subtle">
-              {t(locale, "noMatch")}
+              {t("noMatch")}
             </Command.Empty>
             <Command.Group
-              heading={t(locale, "pages")}
+              heading={t("pages")}
               className="px-1 text-xs font-semibold tracking-[1.5px] text-subtle uppercase"
             >
               {pages.map((p) => (
@@ -435,7 +425,7 @@ function CommandPalette({
             </Command.Group>
             {envs.length ? (
               <Command.Group
-                heading={t(locale, "navEnv")}
+                heading={t("navEnv")}
                 className="mt-3 px-1 text-xs font-semibold tracking-[1.5px] text-subtle uppercase"
               >
                 {envs.map((env) => (

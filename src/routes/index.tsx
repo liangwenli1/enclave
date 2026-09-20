@@ -13,7 +13,6 @@ import {
   Select,
   StatusDot,
 } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { purgeEnv, startEnv, stopEnv, trashEnv } from "@/lib/host";
 import { runtimeLabel, t } from "@/lib/i18n";
 import { engineToProvider, findEngine } from "@/lib/engines";
@@ -52,7 +51,6 @@ function atEnvLimit(): boolean {
 }
 
 function EnvironmentsPage() {
-  const locale = useLocale();
   const navigate = useNavigate();
   const environments = useEnclave((s) => s.environments);
   const limits = useEnclave((s) => s.account.limits);
@@ -84,17 +82,17 @@ function EnvironmentsPage() {
   return (
     <div className="mx-auto max-w-[1280px] px-8 py-6">
       <PageHeader
-        title={t(locale, "navEnv")}
+        title={t("navEnv")}
         status={`${live.length} / ${limits.envLimit} 个环境 · ${runningNow} / ${limits.concurrent} 个运行中 · ${limits.label}`}
         actions={
           <>
             <Button onClick={() => setTrash((v) => !v)}>
-              {trash ? t(locale, "navEnv") : t(locale, "trash")}
+              {trash ? t("navEnv") : t("trash")}
             </Button>
             {live.length > 0 ? (
               <Button variant="primary" onClick={tryCreate}>
                 <Plus className="size-3.5" />
-                {t(locale, "newEnv")}
+                {t("newEnv")}
               </Button>
             ) : null}
           </>
@@ -105,7 +103,7 @@ function EnvironmentsPage() {
         <Input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder={t(locale, "search")}
+          placeholder={t("search")}
           className="mb-4 max-w-sm"
         />
       ) : null}
@@ -113,19 +111,19 @@ function EnvironmentsPage() {
       <Panel className="overflow-hidden">
         {rows.length === 0 && query.trim() ? (
           <Empty
-            title={t(locale, "noMatch")}
+            title={t("noMatch")}
             body={`没有名字、分组或标签里带「${query.trim()}」的环境。`}
             action={<Button onClick={() => setQuery("")}>清除搜索</Button>}
           />
         ) : rows.length === 0 ? (
           <Empty
             icon={<Boxes className="size-8" />}
-            title={trash ? "回收站是空的" : t(locale, "emptyEnv")}
-            body={trash ? "删掉的环境会先进这里，可以恢复或彻底销毁。" : t(locale, "emptyEnvHint")}
+            title={trash ? "回收站是空的" : t("emptyEnv")}
+            body={trash ? "删掉的环境会先进这里，可以恢复或彻底销毁。" : t("emptyEnvHint")}
             action={
               trash ? undefined : (
                 <Button variant="primary" onClick={tryCreate}>
-                  {t(locale, "newEnv")}
+                  {t("newEnv")}
                 </Button>
               )
             }
@@ -135,10 +133,10 @@ function EnvironmentsPage() {
             <table className="app-table min-w-[820px]">
               <thead>
                 <tr>
-                  <th>{t(locale, "name")}</th>
-                  <th>{t(locale, "platform")}</th>
-                  <th>{t(locale, "proxy")}</th>
-                  <th>{t(locale, "statusCol")}</th>
+                  <th>{t("name")}</th>
+                  <th>{t("platform")}</th>
+                  <th>{t("proxy")}</th>
+                  <th>{t("statusCol")}</th>
                   <th />
                 </tr>
               </thead>
@@ -173,7 +171,7 @@ function EnvironmentsPage() {
                         </span>
                       </td>
                       <td className="text-subtle">
-                        {proxies.find((p) => p.id === env.proxyId)?.name ?? t(locale, "noProxy")}
+                        {proxies.find((p) => p.id === env.proxyId)?.name ?? t("noProxy")}
                       </td>
                       <td>
                         <span className="inline-flex items-center gap-2">
@@ -182,7 +180,7 @@ function EnvironmentsPage() {
                             className={status === "error" ? "text-bad" : undefined}
                             title={rt?.detail}
                           >
-                            {runtimeLabel(locale, status, rt?.error)}
+                            {runtimeLabel(status, rt?.error)}
                           </span>
                         </span>
                       </td>
@@ -195,13 +193,13 @@ function EnvironmentsPage() {
                                   if (!atEnvLimit()) useEnclave.getState().restoreEnv(env.id);
                                 }}
                               >
-                                {t(locale, "restore")}
+                                {t("restore")}
                               </Button>
                               <Button
                                 variant="danger"
                                 onClick={() => setPurging({ id: env.id, name: env.name })}
                               >
-                                {t(locale, "destroy")}
+                                {t("destroy")}
                               </Button>
                             </>
                           ) : (
@@ -209,22 +207,22 @@ function EnvironmentsPage() {
                               {status === "running" ? (
                                 <Button onClick={() => void stopEnv(env.id)}>
                                   <Square className="size-3" />
-                                  {t(locale, "stop")}
+                                  {t("stop")}
                                 </Button>
                               ) : (
                                 <Button
                                   disabled={status === "starting"}
-                                  title={status === "starting" ? t(locale, "starting") : undefined}
+                                  title={status === "starting" ? t("starting") : undefined}
                                   onClick={() => void startEnv(env)}
                                 >
                                   <Play className="size-3 text-accent" />
-                                  {status === "starting" ? t(locale, "starting") : t(locale, "start")}
+                                  {status === "starting" ? t("starting") : t("start")}
                                 </Button>
                               )}
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title={t(locale, "trash")}
+                                title={t("trash")}
                                 onClick={() => void trashEnv(env.id)}
                               >
                                 <Trash2 className="size-3.5" />
@@ -244,9 +242,9 @@ function EnvironmentsPage() {
 
       {rows.some((r) => runtimes[r.id]?.error?.startsWith("KERNEL_")) ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-warn/30 bg-warn/10 px-4 py-3 text-[13px] text-warn">
-          <span>{t(locale, "kernelNeed")}</span>
+          <span>{t("kernelNeed")}</span>
           <Link to="/kernels" className="font-semibold underline">
-            {t(locale, "goKernels")}
+            {t("goKernels")}
           </Link>
         </div>
       ) : null}
@@ -259,7 +257,7 @@ function EnvironmentsPage() {
             </p>
             {purging.error ? <p className="mt-3 text-[13px] text-bad">{purging.error}</p> : null}
             <div className="mt-6 flex justify-end gap-2">
-              <Button onClick={() => setPurging(null)}>{t(locale, "cancel")}</Button>
+              <Button onClick={() => setPurging(null)}>{t("cancel")}</Button>
               <Button
                 variant="danger"
                 onClick={async () => {
@@ -268,7 +266,7 @@ function EnvironmentsPage() {
                   else setPurging({ ...purging, error: res.message ?? "删除失败。" });
                 }}
               >
-                {t(locale, "destroy")}
+                {t("destroy")}
               </Button>
             </div>
           </DialogContent>
@@ -295,7 +293,6 @@ function CreateWizard({
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
-  const locale = useLocale();
   const proxies = useEnclave((s) => s.proxies);
   const allEnvs = useEnclave((s) => s.environments);
   const existing = useMemo(() => allEnvs.filter((e) => !e.deletedAt), [allEnvs]);
@@ -316,7 +313,7 @@ function CreateWizard({
   const create = () => {
     try {
       if (!name.trim()) {
-        setError(locale === "zh" ? "请先填写环境名称。" : "Name is required.");
+        setError("请先填写环境名称。");
         setStep(1);
         return;
       }
@@ -327,7 +324,7 @@ function CreateWizard({
       const store = useEnclave.getState();
       if (source === "copy") {
         if (!copyId) {
-          setError(locale === "zh" ? "请选择要复制的环境。" : "Pick an environment to copy.");
+          setError("请选择要复制的环境。");
           setStep(1);
           return;
         }
@@ -382,11 +379,11 @@ function CreateWizard({
     }
   };
 
-  const steps = [t(locale, "step1"), t(locale, "step2"), t(locale, "step3")];
+  const steps = [t("step1"), t("step2"), t("step3")];
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={t(locale, "createTitle")}>
+      <DialogContent title={t("createTitle")}>
         <div className="mb-5 flex items-center gap-2">
           {steps.map((label, i) => (
             <span
@@ -406,8 +403,8 @@ function CreateWizard({
           <div className="grid grid-cols-2 gap-2">
             {(
               [
-                ["blank", t(locale, "blank")],
-                ["copy", t(locale, "fromCopy")],
+                ["blank", t("blank")],
+                ["copy", t("fromCopy")],
               ] as const
             ).map(([id, label]) => (
               <button
@@ -428,19 +425,19 @@ function CreateWizard({
 
         {step === 1 ? (
           <div className="grid gap-4">
-            <Field label={t(locale, "name")}>
+            <Field label={t("name")}>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder={locale === "zh" ? "例如 shop-us-01" : "e.g. shop-us-01"}
+                placeholder={"例如 shop-us-01"}
                 required
               />
             </Field>
-            <Field label={t(locale, "group")}>
+            <Field label={t("group")}>
               <Input value={group} onChange={(e) => setGroup(e.target.value)} />
             </Field>
             {source === "copy" ? (
-              <Field label={t(locale, "fromCopy")}>
+              <Field label={t("fromCopy")}>
                 <Select
                   value={copyId}
                   onChange={(e) => {
@@ -463,7 +460,7 @@ function CreateWizard({
               </Field>
             ) : (
               <>
-                <Field label={t(locale, "platform")}>
+                <Field label={t("platform")}>
                   <Select
                     value={platform}
                     onChange={(e) => setPlatform(e.target.value as PlatformId)}
@@ -474,19 +471,19 @@ function CreateWizard({
                   </Select>
                 </Field>
                 {platform === "windows" ? (
-                  <Field label={t(locale, "osVersion")} hint={t(locale, "osHint")}>
+                  <Field label={t("osVersion")} hint={t("osHint")}>
                     <Select
                       value={winEdition}
                       onChange={(e) => setWinEdition(e.target.value as "10" | "11")}
                     >
-                      <option value="10">{t(locale, "win10")}</option>
-                      <option value="11">{t(locale, "win11")}</option>
+                      <option value="10">{t("win10")}</option>
+                      <option value="11">{t("win11")}</option>
                     </Select>
                   </Field>
                 ) : null}
-                <Field label={t(locale, "searchEngine")}>
+                <Field label={t("searchEngine")}>
                   <Select value={engineId} onChange={(e) => setEngineId(e.target.value)}>
-                    <option value="none">{t(locale, "searchEngineNone")}</option>
+                    <option value="none">{t("searchEngineNone")}</option>
                     {catalog.map((engine) => (
                       <option key={engine.id} value={engine.id}>
                         {engine.name}
@@ -501,7 +498,7 @@ function CreateWizard({
 
         {step === 2 ? (
           <div className="grid gap-4">
-            <Field label={t(locale, "timezone")}>
+            <Field label={t("timezone")}>
               <Select value={timezone} onChange={(e) => setTimezone(e.target.value)}>
                 {TIMEZONES.map((tz) => (
                   <option key={tz} value={tz}>
@@ -511,11 +508,11 @@ function CreateWizard({
               </Select>
             </Field>
             <Field
-              label={t(locale, "proxy")}
+              label={t("proxy")}
               hint={proxies.length ? undefined : "还没有代理。可以先建环境，之后在网络页加。"}
             >
               <Select value={proxyId} onChange={(e) => setProxyId(e.target.value)}>
-                <option value="">{t(locale, "noProxy")}</option>
+                <option value="">{t("noProxy")}</option>
                 {proxies.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name}
@@ -530,7 +527,7 @@ function CreateWizard({
 
         <div className="mt-6 flex justify-between">
           <Button type="button" onClick={step === 0 ? onClose : () => setStep((s) => s - 1)}>
-            {step === 0 ? t(locale, "cancel") : t(locale, "back")}
+            {step === 0 ? t("cancel") : t("back")}
           </Button>
           {step < 2 ? (
             <Button
@@ -538,22 +535,22 @@ function CreateWizard({
               variant="primary"
               onClick={() => {
                 if (step === 1 && !name.trim()) {
-                  setError(locale === "zh" ? "请先填写环境名称。" : "Name is required.");
+                  setError("请先填写环境名称。");
                   return;
                 }
                 if (step === 1 && source === "copy" && !copyId) {
-                  setError(locale === "zh" ? "请选择要复制的环境。" : "Pick an environment to copy.");
+                  setError("请选择要复制的环境。");
                   return;
                 }
                 setError("");
                 setStep((s) => s + 1);
               }}
             >
-              {t(locale, "next")}
+              {t("next")}
             </Button>
           ) : (
             <Button type="button" variant="primary" onClick={create}>
-              {t(locale, "create")}
+              {t("create")}
             </Button>
           )}
         </div>

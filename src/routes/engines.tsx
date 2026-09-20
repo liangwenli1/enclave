@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button, Field, Input, Panel, PageHeader } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { type CatalogEngine } from "@/lib/engines";
 import { t } from "@/lib/i18n";
 import { makeId } from "@/lib/schema";
@@ -11,7 +10,6 @@ import { useEnclave } from "@/lib/store";
 export const Route = createFileRoute("/engines")({ component: EnginesPage });
 
 function EnginesPage() {
-  const locale = useLocale();
   const catalog = useEnclave((s) => s.searchCatalog);
   const environments = useEnclave((s) => s.environments);
   const [name, setName] = useState("");
@@ -52,17 +50,17 @@ function EnginesPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-6">
-      <PageHeader title={t(locale, "navEngines")} status={`${catalog.length} 个引擎`} />
+      <PageHeader title={t("navEngines")} status={`${catalog.length} 个引擎`} />
 
       <Panel className="p-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t(locale, "name")} error={errors.name}>
+          <Field label={t("name")} error={errors.name}>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Google" />
           </Field>
-          <Field label={t(locale, "engineKeyword")} error={errors.keyword}>
+          <Field label={t("engineKeyword")} error={errors.keyword}>
             <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="google.com" />
           </Field>
-          <Field label={t(locale, "engineUrl")} error={errors.url}>
+          <Field label={t("engineUrl")} error={errors.url}>
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}
@@ -72,7 +70,7 @@ function EnginesPage() {
         </div>
         <Button variant="primary" className="mt-4" onClick={add}>
           <Plus className="size-4" />
-          {t(locale, "engineAdd")}
+          {t("engineAdd")}
         </Button>
       </Panel>
 
@@ -80,8 +78,8 @@ function EnginesPage() {
         <table className="app-table">
           <thead>
             <tr>
-              <th>{t(locale, "name")}</th>
-              <th>{t(locale, "engineKeyword")}</th>
+              <th>{t("name")}</th>
+              <th>{t("engineKeyword")}</th>
               <th />
             </tr>
           </thead>
@@ -98,7 +96,7 @@ function EnginesPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        title={t(locale, "engineRemove")}
+                        title={t("engineRemove")}
                         onClick={() => remove(engine.id)}
                       >
                         <Trash2 className="size-3.5" />

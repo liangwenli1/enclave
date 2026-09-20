@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, CodeBlock, Panel, PanelHeader, PageHeader } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { admitKernel, getKernelView, type KernelView } from "@/lib/kernel/host-api";
 import { t } from "@/lib/i18n";
 import { KERNEL_PIN } from "@/lib/schema";
@@ -29,7 +28,6 @@ const ERROR_HINT: Record<string, string> = {
 };
 
 function KernelsPage() {
-  const locale = useLocale();
   const allowPreview = useEnclave((s) => s.settings.allowPreviewKernel);
   const [view, setView] = useState<KernelView | null>(null);
   const [busy, setBusy] = useState(false);
@@ -74,7 +72,7 @@ function KernelsPage() {
   if (view && !view.online) {
     return (
       <div className="mx-auto max-w-3xl px-8 py-6">
-        <PageHeader title={t(locale, "kernelsTitle")} />
+        <PageHeader title={t("kernelsTitle")} />
         <Panel className="p-6">
           <Badge tone="bad">连不上本机服务</Badge>
           <p className="mt-3 text-[13px] text-muted">重启工作台再试。</p>
@@ -86,7 +84,7 @@ function KernelsPage() {
   return (
     <div className="mx-auto max-w-3xl px-8 py-6">
       <PageHeader
-        title={t(locale, "kernelsTitle")}
+        title={t("kernelsTitle")}
         status={`${kernel?.id ?? KERNEL_PIN.id} ${kernel?.version ?? KERNEL_PIN.version} · ${label.text}`}
       />
 
@@ -152,7 +150,7 @@ function KernelsPage() {
               }
               onClick={() => void admit()}
             >
-              {state === "admitted" ? t(locale, "admitted") : t(locale, "download")}
+              {state === "admitted" ? t("admitted") : t("download")}
             </Button>
           </div>
         </div>

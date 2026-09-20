@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Badge, Button, Panel, PanelHeader, PageHeader } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { getKernelView, type KernelView } from "@/lib/kernel/host-api";
 import { eventLabel, t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
@@ -9,7 +8,6 @@ import { useEnclave } from "@/lib/store";
 export const Route = createFileRoute("/security")({ component: SecurityPage });
 
 function SecurityPage() {
-  const locale = useLocale();
   const settings = useEnclave((s) => s.settings);
   const audit = useEnclave((s) => s.audit);
   const [view, setView] = useState<KernelView | null>(null);
@@ -24,7 +22,7 @@ function SecurityPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-6">
-      <PageHeader title={t(locale, "securityTitle")} />
+      <PageHeader title={t("securityTitle")} />
 
       <div className="grid gap-4">
         <Panel>
@@ -142,7 +140,7 @@ previewChannel
         </Panel>
 
         <Panel>
-          <PanelHeader title={t(locale, "audit")} />
+          <PanelHeader title={t("audit")} />
           {audit.length === 0 ? (
             <p className="px-5 py-8 text-center text-[13px] text-subtle">还没有需要记录的操作。</p>
           ) : (

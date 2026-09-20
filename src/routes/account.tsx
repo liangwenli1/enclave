@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Badge, Button, Field, Input, Panel, PanelHeader, PageHeader } from "@/components/ui";
-import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import {
   currentAccount,
@@ -20,7 +19,6 @@ function fmtDate(ms: number | null | undefined): string {
 }
 
 function AccountPage() {
-  const locale = useLocale();
   const account = useEnclave((s) => s.account);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -67,7 +65,7 @@ function AccountPage() {
   return (
     <div className="mx-auto max-w-3xl px-8 py-6">
       <PageHeader
-        title={t(locale, "navAccount")}
+        title={t("navAccount")}
         status={
           account.signedIn
             ? `${account.email} · ${account.limits.label}`

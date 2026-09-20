@@ -11,7 +11,6 @@ import {
   PageHeader,
 } from "@/components/ui";
 import { rotateApiToken } from "@/lib/kernel/host-api";
-import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { envCount } from "@/lib/license/plans";
 import { useEnclave } from "@/lib/store";
@@ -21,40 +20,11 @@ import { setMasterPassword } from "@/lib/vault";
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
 function SettingsPage() {
-  const locale = useLocale();
-  const settings = useEnclave((s) => s.settings);
-  const patch = useEnclave((s) => s.patchSettings);
-
   return (
     <div className="mx-auto max-w-2xl px-8 py-6">
-      <PageHeader title={t(locale, "settingsTitle")} />
+      <PageHeader title={t("settingsTitle")} />
 
       <div className="grid gap-4">
-        <Panel className="p-5">
-          <h2 className="mb-4 text-base font-semibold text-ink">{t(locale, "language")}</h2>
-          <div className="inline-flex gap-1 rounded-md bg-surface-2 p-1">
-            {(
-              [
-                ["zh", "中文"],
-                ["en", "English"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => patch({ locale: id })}
-                className={
-                  settings.locale === id
-                    ? "rounded-[6px] bg-surface-3 px-4 py-1.5 text-[13px] font-semibold text-ink"
-                    : "rounded-[6px] px-4 py-1.5 text-[13px] font-medium text-subtle hover:text-ink"
-                }
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </Panel>
-
         <VaultPanel />
         <ApiPanel />
         <TransferPanel />
