@@ -11,9 +11,6 @@ export type PlanLimits = {
   label: string;
   envLimit: number;
   concurrent: number;
-  seats: number;
-  api: "off" | "discover" | "full";
-  syncWindows: boolean;
   deviceLimit: number;
 };
 
@@ -22,9 +19,6 @@ export const FREE: PlanLimits = {
   label: "Solo Free",
   envLimit: 3,
   concurrent: 1,
-  seats: 1,
-  api: "off",
-  syncWindows: false,
   deviceLimit: 1,
 };
 

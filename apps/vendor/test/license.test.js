@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { generateKeyPairSync, verify } from "node:crypto";
 import { test } from "node:test";
-import { issueLicense, verifyLicense, planOf, PLANS, GRACE_DAYS } from "../src/license.js";
+import { issueLicense, planOf, PLANS, GRACE_DAYS } from "../src/license.js";
+
+/** 测试里的验签。生产代码不需要它：服务端只签发，验签在客户端。 */
+function verifyLicense(token, publicKey) {
+  const [version, body, signature] = String(token).split(".");
+  if (version !== "v1" || !body || !signature) return null;
+  if (!verify(null, Buffer.from(body), publicKey, Buffer.from(signature, "base64url"))) return null;
+  return JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
+}
 
 const keys = generateKeyPairSync("ed25519");
 const user = { id: "u1", email: "a@b.com" };

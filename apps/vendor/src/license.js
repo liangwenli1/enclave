@@ -8,16 +8,16 @@
  * 客户端凭 payload 里的数字强制额度，而不是凭自己代码里那张表——
  * 那张表只在"完全没有许可证"时作为免费档兜底。
  */
-import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, verify } from "node:crypto";
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 
 /** 一个档位能做什么。改数字可以，改结构要同时改客户端。 */
 export const PLANS = {
-  free: { plan: "free", label: "Solo Free", envLimit: 3, concurrent: 1, seats: 1, api: "off", syncWindows: false, deviceLimit: 1 },
-  solo: { plan: "solo", label: "Solo", envLimit: 50, concurrent: 3, seats: 1, api: "discover", syncWindows: false, deviceLimit: 1 },
-  pro: { plan: "pro", label: "Pro", envLimit: 200, concurrent: 8, seats: 1, api: "full", syncWindows: true, deviceLimit: 2 },
-  team: { plan: "team", label: "Team", envLimit: 200, concurrent: 8, seats: 3, api: "full", syncWindows: true, deviceLimit: 6 },
+  free: { plan: "free", label: "Solo Free", envLimit: 3, concurrent: 1, deviceLimit: 1 },
+  solo: { plan: "solo", label: "Solo", envLimit: 50, concurrent: 3, deviceLimit: 1 },
+  pro: { plan: "pro", label: "Pro", envLimit: 200, concurrent: 8, deviceLimit: 2 },
+  team: { plan: "team", label: "Team", envLimit: 200, concurrent: 8, deviceLimit: 6 },
 };
 
 export function planOf(id) {
@@ -69,9 +69,6 @@ export function issueLicense({ privateKey, user, license, deviceId }) {
     label: effective.label,
     envLimit: effective.envLimit,
     concurrent: effective.concurrent,
-    seats: effective.seats,
-    api: effective.api,
-    syncWindows: effective.syncWindows,
     deviceLimit: license.device_limit ?? effective.deviceLimit,
     // 订阅到期时间（null = 不过期）
     expiresAt: expired ? null : (license.expires_at ?? null),
@@ -86,17 +83,4 @@ export function issueLicense({ privateKey, user, license, deviceId }) {
   const body = b64url(JSON.stringify(payload));
   const signature = b64url(sign(null, Buffer.from(body), privateKey));
   return { token: `v1.${body}.${signature}`, payload };
-}
-
-/** 服务端自检用；客户端有自己的一份实现。 */
-export function verifyLicense(token, publicKey) {
-  const parts = String(token).split(".");
-  if (parts.length !== 3 || parts[0] !== "v1") return null;
-  const ok = verify(null, Buffer.from(parts[1]), publicKey, Buffer.from(parts[2], "base64url"));
-  if (!ok) return null;
-  try {
-    return JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
-  } catch {
-    return null;
-  }
 }

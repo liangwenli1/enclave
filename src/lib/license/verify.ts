@@ -24,9 +24,6 @@ export type LicensePayload = {
   label: string;
   envLimit: number;
   concurrent: number;
-  seats: number;
-  api: PlanLimits["api"];
-  syncWindows: boolean;
   deviceLimit: number;
   /** 订阅到期，null 表示不过期 */
   expiresAt: number | null;
@@ -121,9 +118,6 @@ export function limitsOf(payload: LicensePayload): PlanLimits {
     label: payload.label,
     envLimit: payload.envLimit,
     concurrent: payload.concurrent,
-    seats: payload.seats,
-    api: payload.api,
-    syncWindows: payload.syncWindows,
     deviceLimit: payload.deviceLimit,
   };
 }
