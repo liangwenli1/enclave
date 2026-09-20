@@ -24,6 +24,31 @@ win-x64 目前是预览通道，需要先到安全中心勾选"允许使用预�
 
 ## 3. 打 MSI
 
+### 3a. 不用 Windows 机器：让 GitHub 打
+
+1. 仓库 Settings → Secrets and variables → Actions → **Variables**，新建
+   `VITE_ENCLAVE_VENDOR_URL` = `https://你的官网域名`（只设一次）。
+2. 版本号在三处，要一致：`package.json`、`apps/desktop/src-tauri/Cargo.toml`、
+   `apps/desktop/src-tauri/tauri.conf.json`。
+3. 打 tag 并推上去：
+
+   ```bash
+   git tag v0.9.2
+   git push origin main v0.9.2
+   ```
+
+4. Actions 里的 **Release** 跑完（约 15 分钟）后，Releases 页会多一个**草稿**，MSI 已经挂在上面，
+   SHA256 和字节数写在说明里，也在那次运行的 Summary 里。
+5. 用这两个值更新官网 `site/download.html`（下载地址、文件名、SHA256、字节）和 `docs/hashes.md`，
+   然后在草稿上点 **Publish**。先更新官网再发布，下载页上的哈希才不会有一刻对不上。
+
+只想试打一次、不建 Release：Actions → Release → Run workflow，MSI 在那次运行的 Artifacts 里。
+
+### 3b. 在自己的 Windows 机器上打
+
+这一步要能访问 npm 和 github.com：Tauri 第一次打包会下载 WiX。
+如果最后 `light.exe` 报错，到「设置 → 可选功能」里启用 **VBSCRIPT**（Win11 24H2 默认没开）。
+
 ```powershell
 $env:VITE_ENCLAVE_VENDOR_URL = "https://你的官网域名"
 powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1

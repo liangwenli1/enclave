@@ -8,7 +8,6 @@ function Need($cmd, $hint) {
   }
 }
 
-Need git "装 Git for Windows。"
 Need node "装 Node 22 LTS。"
 Need rustup "从 https://rustup.rs 装 Rust。"
 Need cargo "rustup default stable 之后重开终端。"

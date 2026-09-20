@@ -1,0 +1,79 @@
+name: Release
+
+# 推一个 v* 的 tag（比如 v0.9.2）就在 GitHub 的 Windows 机器上打 MSI，
+# 挂到同名的草稿 Release 上。草稿要你自己点"发布"才对外可见。
+# 也可以在 Actions 页面手动运行：只打包、把 MSI 当作构建产物留下，不建 Release。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-msi:
+    runs-on: windows-latest
+    env:
+      # 仓库 Settings → Secrets and variables → Actions → Variables 里设。
+      # 不设的话包里的账号登录不可用，额度停在免费档。
+      VITE_ENCLAVE_VENDOR_URL: ${{ vars.VITE_ENCLAVE_VENDOR_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: tag 必须和 tauri.conf.json 的版本一致
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            throw "tag 是 ${{ github.ref_name }}，tauri.conf.json 里是 $version。先改版本号再打 tag。"
+          }
+
+      - name: 没配许可证服务地址就别发版
+        if: startsWith(github.ref, 'refs/tags/v') && env.VITE_ENCLAVE_VENDOR_URL == ''
+        shell: pwsh
+        run: throw "先在仓库的 Actions Variables 里设置 VITE_ENCLAVE_VENDOR_URL。"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
+
+      # 和本地打包走同一个脚本：host → sidecar → 前端 → MSI。
+      - name: 打 MSI
+        shell: pwsh
+        run: ./scripts/windows-msi.ps1
+
+      - name: 算哈希
+        id: msi
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem apps/desktop/src-tauri/target/release/bundle/msi/*.msi | Select-Object -First 1
+          $sha = (Get-FileHash $msi.FullName -Algorithm SHA256).Hash.ToLower()
+          "path=$($msi.FullName)" >> $env:GITHUB_OUTPUT
+          "name=$($msi.Name)" >> $env:GITHUB_OUTPUT
+          "sha256=$sha" >> $env:GITHUB_OUTPUT
+          "bytes=$($msi.Length)" >> $env:GITHUB_OUTPUT
+          "### $($msi.Name)`n`n- SHA256 ``$sha```n- 字节 ``$($msi.Length)```n`n把这两个值更新到官网下载页和 docs/hashes.md。" >> $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.msi.outputs.name }}
+          path: ${{ steps.msi.outputs.path }}
+          if-no-files-found: error
+
+      - name: 建草稿 Release 并挂上 MSI
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $notes = "未签名预览版。安装前先核对：`n`n- SHA256 ``${{ steps.msi.outputs.sha256 }}```n- 字节 ``${{ steps.msi.outputs.bytes }}``"
+          gh release create "${{ github.ref_name }}" "${{ steps.msi.outputs.path }}" --draft --prerelease --title "Enclave ${{ github.ref_name }}" --notes $notes
