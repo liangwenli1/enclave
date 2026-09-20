@@ -571,7 +571,18 @@ async fn api_start(State(state): State<Arc<App>>, Path(id): Path<String>) -> Res
             .into_response();
         }
     }
-    run_start(&state, &id, &spec).await.into_response()
+    let Json(started) = run_start(&state, &id, &spec).await;
+    if started["ok"] != true {
+        return Json(started).into_response();
+    }
+    // 成功时回 API 自己的格式（和列表、详情同一个对象），不把工作台内部的启动结果漏给脚本。
+    let api = state.api.lock().await;
+    let runtimes = state.runtimes.lock().await;
+    match api.envs.get(&id) {
+        Some(e) => Json(json!({ "ok": true, "environment": api_env_view(e, runtimes.get(&id)) }))
+            .into_response(),
+        None => not_found(),
+    }
 }
 
 async fn api_stop(State(state): State<Arc<App>>, Path(id): Path<String>) -> Response {
