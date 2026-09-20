@@ -68,9 +68,14 @@ export async function startEnv(env: Environment) {
   const store = useEnclave.getState();
   const limits = store.account.limits;
 
-  // 1. 档位：同时运行数
-  const alreadyRunning = store.runtimes[env.id]?.status === "running";
-  if (!alreadyRunning && runningCount(store.runtimes) >= limits.concurrent) {
+  // 已经在启动了就别再来一次：第二次点击会把自己也算进「运行中」，误报已达上限。
+  if (store.runtimes[env.id]?.status === "starting") {
+    return { ok: false as const, code: "ALREADY_STARTING", message: "正在启动" };
+  }
+
+  // 1. 档位：同时运行数。只数别的环境，这一个不算自己。
+  const others = Object.fromEntries(Object.entries(store.runtimes).filter(([id]) => id !== env.id));
+  if (runningCount(others) >= limits.concurrent) {
     const code = "PLAN_CONCURRENT_LIMIT";
     failRuntime(env.id, code, `${limits.label} 最多同时运行 ${limits.concurrent} 个环境。`);
     store.setPlanNotice({

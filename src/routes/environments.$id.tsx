@@ -55,9 +55,14 @@ function EnvDetail() {
                 {t(locale, "stop")}
               </Button>
             ) : (
-              <Button variant="primary" onClick={() => void startEnv(env)}>
+              <Button
+                variant="primary"
+                disabled={status === "starting"}
+                title={status === "starting" ? t(locale, "starting") : undefined}
+                onClick={() => void startEnv(env)}
+              >
                 <Play className="size-3" />
-                {t(locale, "start")}
+                {status === "starting" ? t(locale, "starting") : t(locale, "start")}
               </Button>
             )}
             <Button

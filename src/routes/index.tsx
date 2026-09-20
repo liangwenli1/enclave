@@ -31,6 +31,26 @@ import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/")({ component: EnvironmentsPage });
 
+/**
+ * 环境数到上限了吗。到了就弹升级提示并记审计。
+ * 新建、向导最后一步、从回收站恢复 —— 所有让活动环境 +1 的路径都走这一个检查。
+ */
+function atEnvLimit(): boolean {
+  const store = useEnclave.getState();
+  const limits = store.account.limits;
+  if (envCount(store.environments) < limits.envLimit) return false;
+  store.setPlanNotice({
+    title: "环境数量已达上限",
+    body: `${limits.label} 最多 ${limits.envLimit} 个环境。删掉不用的，或者升级档位。`,
+  });
+  store.addAudit({
+    action: "create_blocked",
+    level: "warn",
+    detail: `PLAN_ENV_LIMIT ${limits.label} max ${limits.envLimit}`,
+  });
+  return true;
+}
+
 function EnvironmentsPage() {
   const locale = useLocale();
   const navigate = useNavigate();
@@ -58,20 +78,7 @@ function EnvironmentsPage() {
   }, [environments, query, trash]);
 
   const tryCreate = () => {
-    const store = useEnclave.getState();
-    if (envCount(store.environments) >= limits.envLimit) {
-      store.setPlanNotice({
-        title: "环境数量已达上限",
-        body: `${limits.label} 最多 ${limits.envLimit} 个环境。删掉不用的，或者升级档位。`,
-      });
-      store.addAudit({
-        action: "create_blocked",
-        level: "warn",
-        detail: `PLAN_ENV_LIMIT ${limits.label} max ${limits.envLimit}`,
-      });
-      return;
-    }
-    setWizard(true);
+    if (!atEnvLimit()) setWizard(true);
   };
 
   return (
@@ -84,10 +91,12 @@ function EnvironmentsPage() {
             <Button onClick={() => setTrash((v) => !v)}>
               {trash ? t(locale, "navEnv") : t(locale, "trash")}
             </Button>
-            <Button variant="primary" onClick={tryCreate}>
-              <Plus className="size-3.5" />
-              {t(locale, "newEnv")}
-            </Button>
+            {live.length > 0 ? (
+              <Button variant="primary" onClick={tryCreate}>
+                <Plus className="size-3.5" />
+                {t(locale, "newEnv")}
+              </Button>
+            ) : null}
           </>
         }
       />
@@ -102,7 +111,13 @@ function EnvironmentsPage() {
       ) : null}
 
       <Panel className="overflow-hidden">
-        {rows.length === 0 ? (
+        {rows.length === 0 && query.trim() ? (
+          <Empty
+            title={t(locale, "noMatch")}
+            body={`没有名字、分组或标签里带「${query.trim()}」的环境。`}
+            action={<Button onClick={() => setQuery("")}>清除搜索</Button>}
+          />
+        ) : rows.length === 0 ? (
           <Empty
             icon={<Boxes className="size-8" />}
             title={trash ? "回收站是空的" : t(locale, "emptyEnv")}
@@ -175,7 +190,11 @@ function EnvironmentsPage() {
                         <div className="flex justify-end gap-1.5">
                           {trash ? (
                             <>
-                              <Button onClick={() => useEnclave.getState().restoreEnv(env.id)}>
+                              <Button
+                                onClick={() => {
+                                  if (!atEnvLimit()) useEnclave.getState().restoreEnv(env.id);
+                                }}
+                              >
                                 {t(locale, "restore")}
                               </Button>
                               <Button
@@ -193,9 +212,13 @@ function EnvironmentsPage() {
                                   {t(locale, "stop")}
                                 </Button>
                               ) : (
-                                <Button onClick={() => void startEnv(env)}>
+                                <Button
+                                  disabled={status === "starting"}
+                                  title={status === "starting" ? t(locale, "starting") : undefined}
+                                  onClick={() => void startEnv(env)}
+                                >
                                   <Play className="size-3 text-accent" />
-                                  {t(locale, "start")}
+                                  {status === "starting" ? t(locale, "starting") : t(locale, "start")}
                                 </Button>
                               )}
                               <Button
@@ -297,21 +320,11 @@ function CreateWizard({
         setStep(1);
         return;
       }
-      const store = useEnclave.getState();
-      const limits = store.account.limits;
-      if (envCount(store.environments) >= limits.envLimit) {
+      if (atEnvLimit()) {
         onClose();
-        store.setPlanNotice({
-          title: "环境数量已达上限",
-          body: `${limits.label} 最多 ${limits.envLimit} 个环境。删掉不用的，或者升级档位。`,
-        });
-        store.addAudit({
-          action: "create_blocked",
-          level: "warn",
-          detail: `PLAN_ENV_LIMIT ${limits.label} max ${limits.envLimit}`,
-        });
         return;
       }
+      const store = useEnclave.getState();
       if (source === "copy") {
         if (!copyId) {
           setError(locale === "zh" ? "请选择要复制的环境。" : "Pick an environment to copy.");
