@@ -1,0 +1,60 @@
+name: CI
+
+# 每次推送都跑：工作台、许可证服务、本机 Host 三块都要过。
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  workbench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      # 先构建：路由表由插件生成，typecheck 依赖它
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run lint
+
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: npm test
+        working-directory: apps/vendor
+
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check -p enclave-host
+      - run: cargo clippy -p enclave-host -- -D warnings
+      - run: cargo test -p enclave-host
+
+  no-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 内核二进制和运行时数据永远不该进仓库
+      - name: 检查不该进仓库的东西
+        run: |
+          if git ls-files | grep -E '^(data/|dist/|node_modules/)'; then
+            echo "运行时数据或构建产物被提交了"
+            exit 1
+          fi
+          if git ls-files | grep -E '\.(msi|exe|dmg|zip|tar\.xz)$'; then
+            echo "二进制产物被提交了"
+            exit 1
+          fi

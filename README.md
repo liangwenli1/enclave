@@ -1,52 +1,79 @@
 # Enclave
 
-开发验证见 Linux Host；**发行物是桌面安装包**。
+本机多环境浏览器。内核 fingerprint-chromium 跑在**客户自己的电脑上**，
+每个环境独立的 Cookie、指纹和出口。发行物是桌面安装包，不是网页。
 
-客户用法（1.0）：官网下载 Windows / macOS 安装包 → 本机打开工作台 → 登录账号 → 启动环境时在**自己电脑**上 spawn 已准入的 fingerprint-chromium。不是 VPS 网页，不是 Serverless，不是 `npm run dev`。
+交付合同见 [docs/enclave-final-delivery.md](docs/enclave-final-delivery.md)。
+视觉规范见 [DESIGN.md](DESIGN.md)（和官网同一套 token）。
 
-本仓库目前是私有源码 + Linux 真 spawn 验证机。它证明单轨内核链路可走，**不是最终交付物**。合同见 [docs/enclave-final-delivery.md](docs/enclave-final-delivery.md)。
-
-## 现状
-
-| 模块 | 现在 | 1.0 |
-|---|---|---|
-| React 工作台 | 可用 | 塞进 Tauri WebView |
-| Linux / Windows 内核 148 哈希准入 + 真 spawn | Windows x64 已在客户机跑通 | 同一套适配器加 mac-arm64 |
-| 实验室：对照页 vs 内核 CDP | 采集本机内核窗口 | `runtime: native` |
-| GitHub 预览 tag | `v0.9.0-windows-preview` | 不是 1.0 |
-| 签过名的 `.msi` / `.dmg` | 未做 | 必须 |
-| 账号订阅与额度 | 未做 | 必须 |
-
-
-## 仓库
+## 仓库结构
 
 ```
-apps/desktop/          # Tauri 壳（有桌面会话的机器上构建）
-crates/host/           # Rust Host：校验、spawn、CDP
-src/                   # React 工作台（验证期仍由 Vite 加载）
-kernels.manifest.json  # linux-x64 stable；win-x64 / mac-arm64 为 pending
-docs/enclave-final-delivery.md
-security/
-deploy/                # 仅内部 Linux 验证机，不是客户交付
+src/                      React 工作台（纯前端 SPA，没有服务端）
+crates/host/              Rust 本机服务：哈希准入、spawn、CDP，只绑 127.0.0.1
+apps/desktop/src-tauri/   Tauri 壳：生成令牌、拉起本机服务、注入令牌给工作台
+apps/vendor/              许可证服务：账号、档位、设备绑定、Ed25519 签名许可证
+kernels.manifest.json     内核清单（url / bytes / sha256 / 通道）
+docs/  security/          交付合同、内核准入、威胁模型
 ```
 
-内核二进制禁止进 Git。没有 sha256 的平台不得进入 `stable`。
+官网在另一个仓库 `enclave-www`，它同时负责把 `apps/vendor` 跑起来。
 
-## 内部验证机（非 1.0）
+## 三个进程，一条链路
 
-Linux x64，常驻进程，用于验证适配器。不要拿去卖。
+```
+Enclave.exe (Tauri)
+ ├─ 生成 32 字节令牌
+ ├─ 带着令牌启动 enclave-host（sidecar）
+ └─ 把同一个令牌注入 WebView
+
+工作台 (WebView)  ──令牌──>  enclave-host (127.0.0.1:17891)  ──spawn──>  fingerprint-chromium
+      │
+      └──HTTPS──> 许可证服务（只做登录和续签，不碰环境数据）
+```
+
+本机接口三道门：Host 头必须回环、Origin 必须是工作台自己、Bearer 令牌必须匹配。
+**没有跳过鉴权的开关。**
+
+## 开发
+
+需要 Node 22+、Rust stable。
 
 ```bash
 npm ci
-cargo build --release -p enclave-host
-./target/release/enclave-host   # 本机回环 Host
-npm run dev                     # 只给开发预览，不是发行路径
+npm run dev          # 自动构建并拉起 enclave-host，然后起 vite dev
 ```
 
-首次打开「内核」下载并校验 linux-x64 148。无显示器时强制 headless，UI 会标明。root / 容器需在安全中心明确勾选 `--no-sandbox`，默认不开。
+开发模式下工作台从 `data/host.token` 取令牌（只在 `vite dev` 存在这个通道）。
+打开 http://127.0.0.1:8080 —— 只绑回环，不在局域网里裸奔。
 
-[`deploy/enclave.service`](deploy/enclave.service) 只给内部验证机。
+首次在内核页准入：下载对应平台的内核包、校验 SHA256、解压，并记录**实际可执行文件**
+的哈希。之后每次启动环境都核对它。
 
-## 1.0 还不包含
+```bash
+npm run build        # 产物在 dist/，Tauri 直接打包这个目录
+npm test             # 许可证验签等
+npm run typecheck
+cargo test -p enclave-host
+```
 
-签名安装包、公证、账号后台、Windows / macOS 已准入内核。那些在交付文档 P2–P4，未完成不得打 `1.0.0`。
+无显示器时内核强制无头，界面会标明。root / 容器里需要在安全中心明确勾选关闭沙箱，默认不开。
+
+## 打 Windows 安装包
+
+在有桌面会话的 Windows 上：
+
+```powershell
+$env:VITE_ENCLAVE_VENDOR_URL = "https://你的官网域名"
+powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1
+```
+
+细节和代码签名见 [docs/windows.md](docs/windows.md)。
+**没有 Authenticode 正式签名之前不能叫 1.0。**
+
+## 不许做的事
+
+- 内核二进制、`data/`、构建产物进 Git。
+- 没有 sha256 的内核进 `stable` 通道。
+- 界面上出现没接通的按钮、占位区块、内部术语。
+- 向第三方发任何请求（工作台只连本机服务和自己的许可证服务）。
