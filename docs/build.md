@@ -1,4 +1,4 @@
-# Windows：开发与打包
+# 开发与打包（Windows / macOS）
 
 ## 1. 工具
 
@@ -26,8 +26,9 @@ win-x64 目前是预览通道，需要先到安全中心勾选"允许使用预�
 
 ### 3a. 不用 Windows 机器：让 GitHub 打
 
-1. 仓库 Settings → Secrets and variables → Actions → **Variables**，新建
-   `VITE_ENCLAVE_VENDOR_URL` = `https://你的官网域名`（只设一次）。
+1. （有域名之后再做）仓库 Settings → Secrets and variables → Actions → **Variables**，新建
+   `VITE_ENCLAVE_VENDOR_URL` = `https://你的官网域名`。这是许可证服务的地址，构建时写进前端。
+   **不设也能打包**：包里的账号页不能登录、额度停在免费档，其余功能照常。和签名没有关系。
 2. 版本号在三处，要一致：`package.json`、`apps/desktop/src-tauri/Cargo.toml`、
    `apps/desktop/src-tauri/tauri.conf.json`。
 3. 打 tag 并推上去：
@@ -43,6 +44,8 @@ win-x64 目前是预览通道，需要先到安全中心勾选"允许使用预�
    然后在草稿上点 **Publish**。先更新官网再发布，下载页上的哈希才不会有一刻对不上。
 
 只想试打一次、不建 Release：Actions → Release → Run workflow，MSI 在那次运行的 Artifacts 里。
+
+同一次运行也会打 macOS 的 dmg，见第 6 节。
 
 ### 3b. 在自己的 Windows 机器上打
 
@@ -97,3 +100,23 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows-sign.ps1
 
 打完包在一台干净的机器上按 `docs/enclave-final-delivery.md` 第 5 节的清单过一遍。
 第 6、8、10 条（改内核文件拒启、网页调不动本机接口、锁着保险箱拒启）是这版的重点。
+
+## 6. macOS（Apple Silicon）
+
+和 MSI 一起由 Release 工作流打出来，挂在同一个草稿 Release 上。自己有 Mac 的话：
+
+```bash
+./scripts/macos-dmg.sh
+```
+
+打包之前，工作流会先在 GitHub 的 mac 机器上跑 `scripts/smoke-host.sh`：用清单里真实的内核走一遍
+下载 → 校验哈希 → 挂载 dmg 拷出 `Chromium.app` → 启动 → 调试端口握手 → 停止。这一步不过就不出包。
+它验证的是本机服务这条链路；**窗口界面没有人在真 Mac 上看过**。
+
+dmg 是 ad-hoc 签名、未公证的。从浏览器下载的 app 会被 Gatekeeper 标成"已损坏"，装好后先执行：
+
+```bash
+xattr -cr /Applications/Enclave.app
+```
+
+要去掉这一步，需要 Apple 开发者账号做公证。只支持 Apple Silicon，不出 Intel 包。

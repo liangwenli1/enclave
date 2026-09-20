@@ -68,7 +68,7 @@ $env:VITE_ENCLAVE_VENDOR_URL = "https://你的官网域名"
 powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1
 ```
 
-细节和代码签名见 [docs/windows.md](docs/windows.md)。
+细节和代码签名见 [docs/build.md](docs/build.md)。
 **没有 Authenticode 正式签名之前不能叫 1.0。**
 
 ## 不许做的事

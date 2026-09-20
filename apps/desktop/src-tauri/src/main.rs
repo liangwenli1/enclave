@@ -83,6 +83,13 @@ fn kill_orphan_host() {
             .creation_flags(CREATE_NO_WINDOW)
             .output();
     }
+    // -x 是按进程名精确匹配，只会碰到叫 enclave-host 的进程。
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("pkill")
+            .args(["-x", "enclave-host"])
+            .output();
+    }
 }
 
 /// 把安装包里的内核清单放到 Host 的工作目录。每次启动都覆盖：清单跟着版本走。

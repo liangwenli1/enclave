@@ -1,8 +1,8 @@
 name: Release
 
-# 推一个 v* 的 tag（比如 v0.9.2）就在 GitHub 的 Windows 机器上打 MSI，
+# 推一个 v* 的 tag（比如 v0.9.2）就在 GitHub 的机器上打 Windows 的 MSI 和 macOS 的 dmg，
 # 挂到同名的草稿 Release 上。草稿要你自己点"发布"才对外可见。
-# 也可以在 Actions 页面手动运行：只打包、把 MSI 当作构建产物留下，不建 Release。
+# 也可以在 Actions 页面手动运行：只打包、把安装包当作构建产物留下，不建 Release。
 on:
   push:
     tags: ["v*"]
@@ -11,12 +11,13 @@ on:
 permissions:
   contents: write
 
+# 许可证服务地址（仓库 Settings → Secrets and variables → Actions → Variables）。
+# 不设也能打包：包里的账号登录不可用，额度停在免费档，其余功能照常。
+
 jobs:
   windows-msi:
     runs-on: windows-latest
     env:
-      # 仓库 Settings → Secrets and variables → Actions → Variables 里设。
-      # 不设的话包里的账号登录不可用，额度停在免费档。
       VITE_ENCLAVE_VENDOR_URL: ${{ vars.VITE_ENCLAVE_VENDOR_URL }}
     steps:
       - uses: actions/checkout@v4
@@ -29,11 +30,6 @@ jobs:
           if ("v$version" -ne "${{ github.ref_name }}") {
             throw "tag 是 ${{ github.ref_name }}，tauri.conf.json 里是 $version。先改版本号再打 tag。"
           }
-
-      - name: 没配许可证服务地址就别发版
-        if: startsWith(github.ref, 'refs/tags/v') && env.VITE_ENCLAVE_VENDOR_URL == ''
-        shell: pwsh
-        run: throw "先在仓库的 Actions Variables 里设置 VITE_ENCLAVE_VENDOR_URL。"
 
       - uses: actions/setup-node@v4
         with:
@@ -75,5 +71,62 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $notes = "未签名预览版。安装前先核对：`n`n- SHA256 ``${{ steps.msi.outputs.sha256 }}```n- 字节 ``${{ steps.msi.outputs.bytes }}``"
-          gh release create "${{ github.ref_name }}" "${{ steps.msi.outputs.path }}" --draft --prerelease --title "Enclave ${{ github.ref_name }}" --notes $notes
+          $line = "- ``${{ steps.msi.outputs.name }}`` · SHA256 ``${{ steps.msi.outputs.sha256 }}`` · ${{ steps.msi.outputs.bytes }} 字节"
+          ./scripts/release-attach.ps1 -Tag "${{ github.ref_name }}" -File "${{ steps.msi.outputs.path }}" -Line $line
+
+  macos-dmg:
+    # macos-latest 是 Apple Silicon。只出 arm64 的包。
+    runs-on: macos-latest
+    env:
+      VITE_ENCLAVE_VENDOR_URL: ${{ vars.VITE_ENCLAVE_VENDOR_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            apps/desktop/src-tauri -> target
+
+      # 没人有 Mac，这台 runner 就是那台 Mac：用真实的内核走一遍准入、启动、握手、停止。
+      # 这一步不过就不出包。
+      - name: 真机冒烟
+        run: |
+          cargo build --release -p enclave-host
+          ./scripts/smoke-host.sh target/release/enclave-host
+
+      - name: 打 dmg
+        run: ./scripts/macos-dmg.sh
+
+      - name: 算哈希
+        id: dmg
+        run: |
+          dmg="$(ls apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg | head -1)"
+          sha="$(shasum -a 256 "$dmg" | cut -d' ' -f1)"
+          bytes="$(stat -f%z "$dmg")"
+          {
+            echo "path=$dmg"
+            echo "name=$(basename "$dmg")"
+            echo "sha256=$sha"
+            echo "bytes=$bytes"
+          } >> "$GITHUB_OUTPUT"
+          printf '### %s\n\n- SHA256 `%s`\n- 字节 `%s`\n' "$(basename "$dmg")" "$sha" "$bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.dmg.outputs.name }}
+          path: ${{ steps.dmg.outputs.path }}
+          if-no-files-found: error
+
+      - name: 挂到草稿 Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $line = "- ``${{ steps.dmg.outputs.name }}`` · SHA256 ``${{ steps.dmg.outputs.sha256 }}`` · ${{ steps.dmg.outputs.bytes }} 字节（未公证：装好后先执行 ``xattr -cr /Applications/Enclave.app``）"
+          ./scripts/release-attach.ps1 -Tag "${{ github.ref_name }}" -File "${{ steps.dmg.outputs.path }}" -Line $line

@@ -33,7 +33,12 @@ jobs:
         working-directory: apps/vendor
 
   host:
-    runs-on: ubuntu-latest
+    # 三个系统各有自己的分支（解包、找可执行文件、停进程），都要编过、测过。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
