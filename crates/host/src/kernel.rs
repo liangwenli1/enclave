@@ -1,3 +1,4 @@
+use crate::api::StartSpec;
 use crate::flags::{classify, FlagClass};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -186,13 +187,14 @@ pub fn kernel_for_this_os(manifest: &ManifestFile) -> Result<&KernelRecord> {
         .with_context(|| format!("no hashed kernel for {platform}"))
 }
 
-
 /// 环境 id 会被拼进文件路径（profiles/env_<id>），purge 还会对它 remove_dir_all。
 /// 只认字母数字、下划线和连字符，`..`、斜杠、空串一律不行。
 pub fn valid_env_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 64
-        && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
 /// 彻底删除一个环境在磁盘上的全部数据：Cookie、登录态、缓存。调用前要先停掉它。
@@ -252,10 +254,13 @@ pub fn sha256_str(input: &str) -> String {
 }
 
 fn find_chrome(dir: &Path) -> Option<PathBuf> {
-    let names = ["chrome", "chromium", "ungoogled-chromium", "chrome-wrapper"];
+    // 不含 chrome-wrapper：那是个壳脚本，准入时记下的哈希必须是真正执行的那个文件。
+    let names = ["chrome", "chromium", "ungoogled-chromium"];
     let mut stack = vec![dir.to_path_buf()];
     while let Some(cur) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&cur) else { continue };
+        let Ok(rd) = std::fs::read_dir(&cur) else {
+            continue;
+        };
         for ent in rd.flatten() {
             let p = ent.path();
             let name = ent.file_name();
@@ -342,7 +347,9 @@ async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
             cmd.args([
                 "-NoProfile",
                 "-Command",
-                &format!("Expand-Archive -LiteralPath '{archive}' -DestinationPath '{dest}' -Force"),
+                &format!(
+                    "Expand-Archive -LiteralPath '{archive}' -DestinationPath '{dest}' -Force"
+                ),
             ]);
             hide_window(&mut cmd);
             let out = cmd.output().await?;
@@ -354,7 +361,12 @@ async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
         #[cfg(not(windows))]
         {
             let out = Command::new("unzip")
-                .args(["-o", archive.to_str().unwrap(), "-d", dest.to_str().unwrap()])
+                .args([
+                    "-o",
+                    archive.to_str().unwrap(),
+                    "-d",
+                    dest.to_str().unwrap(),
+                ])
                 .output()
                 .await?;
             if !out.status.success() {
@@ -391,30 +403,11 @@ async fn apply_search_engine(
     provider: Option<&SearchProvider>,
 ) -> Result<Option<PathBuf>> {
     let ext_dir = user_data_dir.join("enclave-search");
-    let policy_dir = user_data_dir.join("policies").join("managed");
-    let policy_path = policy_dir.join("enclave.json");
-    let chosen = resolve_search_provider(engine, provider);
     let _ = tokio::fs::remove_dir_all(&ext_dir).await;
-    if chosen.is_none() {
-        let _ = tokio::fs::remove_file(&policy_path).await;
+    let Some(chosen) = resolve_search_provider(engine, provider) else {
         return Ok(None);
-    }
-    let chosen = chosen.unwrap();
+    };
     let favicon = favicon_url_for(&chosen.keyword, &chosen.url);
-    tokio::fs::create_dir_all(&policy_dir).await?;
-    let mut policy = json!({
-        "DefaultSearchProviderEnabled": true,
-        "DefaultSearchProviderName": chosen.name,
-        "DefaultSearchProviderKeyword": chosen.keyword,
-        "DefaultSearchProviderSearchURL": chosen.url,
-        "DefaultSearchProviderFaviconURL": favicon,
-        "DefaultSearchProviderEncodings": ["UTF-8"]
-    });
-    if !chosen.suggest_url.is_empty() {
-        policy["DefaultSearchProviderSuggestURL"] = json!(chosen.suggest_url);
-    }
-    tokio::fs::write(&policy_path, serde_json::to_vec_pretty(&policy)?).await?;
-
     tokio::fs::create_dir_all(&ext_dir).await?;
     let mut search_provider = json!({
         "name": chosen.name,
@@ -435,7 +428,11 @@ async fn apply_search_engine(
             "search_provider": search_provider
         }
     });
-    tokio::fs::write(ext_dir.join("manifest.json"), serde_json::to_vec_pretty(&manifest)?).await?;
+    tokio::fs::write(
+        ext_dir.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )
+    .await?;
     Ok(Some(ext_dir))
 }
 
@@ -466,7 +463,8 @@ fn preset_provider(engine: &str) -> Option<SearchProvider> {
             name: "Google".into(),
             keyword: "google.com".into(),
             url: "https://www.google.com/search?q={searchTerms}".into(),
-            suggest_url: "https://www.google.com/complete/search?client=chrome&q={searchTerms}".into(),
+            suggest_url: "https://www.google.com/complete/search?client=chrome&q={searchTerms}"
+                .into(),
         }),
         "bing" => Some(SearchProvider {
             name: "Microsoft Bing".into(),
@@ -490,7 +488,10 @@ fn preset_provider(engine: &str) -> Option<SearchProvider> {
     }
 }
 
-fn resolve_search_provider(engine: Option<&str>, provider: Option<&SearchProvider>) -> Option<SearchProvider> {
+fn resolve_search_provider(
+    engine: Option<&str>,
+    provider: Option<&SearchProvider>,
+) -> Option<SearchProvider> {
     if let Some(p) = provider {
         if p.url.contains("{searchTerms}") && !p.url.starts_with("http://{") {
             return Some(p.clone());
@@ -519,7 +520,10 @@ fn favicon_url_for(keyword: &str, url: &str) -> String {
 }
 
 pub fn list_search_engines(paths: &HostPaths, env_id: &str) -> Vec<SearchEngineRow> {
-    let user_data = paths.profiles.join(format!("env_{env_id}")).join("user-data");
+    let user_data = paths
+        .profiles
+        .join(format!("env_{env_id}"))
+        .join("user-data");
     let mut rows = profile_search_engines(&user_data);
     let default_kw = rows
         .iter()
@@ -528,7 +532,10 @@ pub fn list_search_engines(paths: &HostPaths, env_id: &str) -> Vec<SearchEngineR
         .unwrap_or_else(|| "nosearch".into());
     for preset in ["google", "bing", "baidu", "duckduckgo"] {
         if let Some(p) = preset_provider(preset) {
-            if !rows.iter().any(|r| r.keyword.eq_ignore_ascii_case(&p.keyword) || r.url == p.url) {
+            if !rows
+                .iter()
+                .any(|r| r.keyword.eq_ignore_ascii_case(&p.keyword) || r.url == p.url)
+            {
                 rows.push(SearchEngineRow {
                     id: preset.into(),
                     name: p.name,
@@ -540,7 +547,10 @@ pub fn list_search_engines(paths: &HostPaths, env_id: &str) -> Vec<SearchEngineR
             }
         }
     }
-    if !rows.iter().any(|r| r.keyword.eq_ignore_ascii_case("nosearch")) {
+    if !rows
+        .iter()
+        .any(|r| r.keyword.eq_ignore_ascii_case("nosearch"))
+    {
         rows.insert(
             0,
             SearchEngineRow {
@@ -567,10 +577,9 @@ fn profile_search_engines(user_data: &Path) -> Vec<SearchEngineRow> {
     }
     let default_kw = default_search_keyword(user_data);
     let mut rows = vec![];
-    if let Ok(conn) = rusqlite::Connection::open_with_flags(
-        &tmp,
-        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-    ) {
+    if let Ok(conn) =
+        rusqlite::Connection::open_with_flags(&tmp, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+    {
         let sql = "SELECT short_name, keyword, url, IFNULL(suggest_url,'') FROM keywords WHERE url IS NOT NULL AND trim(url) != ''";
         let sql_fallback = "SELECT short_name, keyword, url FROM keywords WHERE url IS NOT NULL AND trim(url) != ''";
         let mut with_suggest = true;
@@ -595,7 +604,8 @@ fn profile_search_engines(user_data: &Path) -> Vec<SearchEngineRow> {
                 for item in iter.flatten() {
                     let (name, keyword, url, suggest) = item;
                     let id = engine_id_from_keyword(&keyword, &url);
-                    let is_default = (!default_kw.is_empty() && keyword.eq_ignore_ascii_case(&default_kw))
+                    let is_default = (!default_kw.is_empty()
+                        && keyword.eq_ignore_ascii_case(&default_kw))
                         || (default_kw.is_empty() && keyword.eq_ignore_ascii_case("nosearch"));
                     rows.push(SearchEngineRow {
                         id,
@@ -615,8 +625,12 @@ fn profile_search_engines(user_data: &Path) -> Vec<SearchEngineRow> {
 
 fn default_search_keyword(user_data: &Path) -> String {
     let path = user_data.join("Default").join("Preferences");
-    let Ok(raw) = std::fs::read_to_string(path) else { return String::new() };
-    let Ok(v) = serde_json::from_str::<Value>(&raw) else { return String::new() };
+    let Ok(raw) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    let Ok(v) = serde_json::from_str::<Value>(&raw) else {
+        return String::new();
+    };
     v.pointer("/default_search_provider_data/template_url_data/keyword")
         .and_then(|x| x.as_str())
         .unwrap_or("")
@@ -741,7 +755,11 @@ pub async fn read_status_fast(paths: &HostPaths, k: &KernelRecord) -> KernelStat
 
     // 这里只做便宜的判断给界面用：可执行文件在、大小和修改时间与准入时一致。
     // 真正的信任判断在 verify_executable —— 启动时才算数。
-    let stamp_ok = match (exe.as_deref().and_then(file_stamp), status.exe_size, status.exe_mtime) {
+    let stamp_ok = match (
+        exe.as_deref().and_then(file_stamp),
+        status.exe_size,
+        status.exe_mtime,
+    ) {
         (Some((s, m)), Some(rs), Some(rm)) => s == rs && m == rm,
         _ => false,
     };
@@ -782,12 +800,16 @@ pub async fn admit(
         s.bytes_expected = k.bytes;
         s.sha256_expected = k.sha256.clone();
         s.error = None;
-        let _ = persist_status(paths, &s).await;
+        // 过程中的状态只放内存。落盘的话，准入到一半进程被杀，下次启动会永远卡在"解压中"。
     }
     if !archive.exists() || std::fs::metadata(&archive).map(|m| m.len()).unwrap_or(0) != k.bytes {
         let tmp = archive.with_extension("part");
+        // 读超时是"两次收到数据之间"的间隔，慢但在走的下载不受影响；
+        // 没有它，一条半死的连接会让准入永远结束不了，用户只能重启。
         let client = reqwest::Client::builder()
             .user_agent("EnclaveHost/0.1")
+            .connect_timeout(Duration::from_secs(30))
+            .read_timeout(Duration::from_secs(60))
             .redirect(reqwest::redirect::Policy::limited(8))
             .build()?;
         let mut resp = client.get(&k.url).send().await?;
@@ -808,9 +830,7 @@ pub async fn admit(
         tokio::fs::rename(&tmp, &archive).await?;
     }
     {
-        let mut s = status.lock().await;
-        s.state = "verifying".into();
-        let _ = persist_status(paths, &s).await;
+        status.lock().await.state = "verifying".into();
     }
     let actual = sha256_file(&archive).await?;
     if actual != k.sha256 {
@@ -819,13 +839,14 @@ pub async fn admit(
         s.sha256_actual = Some(actual);
         s.error = Some("KERNEL_HASH_MISMATCH".into());
         persist_status(paths, &s).await?;
+        // 留着这个文件的话大小是对的，下次重试会跳过下载，再失败一次，永远如此。
+        let _ = tokio::fs::remove_file(&archive).await;
         bail!("KERNEL_HASH_MISMATCH");
     }
     {
         let mut s = status.lock().await;
         s.state = "extracting".into();
         s.sha256_actual = Some(actual.clone());
-        let _ = persist_status(paths, &s).await;
     }
 
     // 每次准入都重新解压。之前是"目录里已经有 chrome 就跳过"，那样一个被替换过的
@@ -886,15 +907,12 @@ pub async fn start_environment(
     paths: &HostPaths,
     k: &KernelRecord,
     env_id: &str,
-    profile: &FingerprintProfile,
-    extra_flags: &[String],
-    allow_no_sandbox: bool,
-    proxy_server: Option<&str>,
-    search_engine: Option<&str>,
-    search_provider: Option<&SearchProvider>,
+    spec: &StartSpec,
     runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
     full_verify: bool,
 ) -> Result<Spawned, (String, String)> {
+    let profile = &spec.profile;
+    let allow_no_sandbox = spec.allow_no_sandbox;
     {
         let map = runtimes.lock().await;
         if let Some(rt) = map.get(env_id) {
@@ -912,27 +930,45 @@ pub async fn start_environment(
     // 启动前核对真正要执行的文件。第一次启动做全量 sha256，之后比对大小与修改时间。
     let recorded = read_status_fast(paths, k).await;
     let (exe, exe_sha) = verify_executable(paths, k, &recorded, full_verify).await?;
-    let port = pick_port().await.map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
-    let user_data_dir = paths.profiles.join(format!("env_{env_id}")).join("user-data");
+    let port = pick_port()
+        .await
+        .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
+    let user_data_dir = paths
+        .profiles
+        .join(format!("env_{env_id}"))
+        .join("user-data");
     tokio::fs::create_dir_all(&user_data_dir)
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
-    let search_ext = apply_search_engine(&user_data_dir, search_engine, search_provider)
-        .await
-        .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
+    let search_ext = apply_search_engine(
+        &user_data_dir,
+        spec.search_engine.as_deref(),
+        spec.search_provider.as_ref(),
+    )
+    .await
+    .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
 
     let mut args = vec![
         format!("--user-data-dir={}", user_data_dir.display()),
         format!("--fingerprint={}", profile.seed),
         format!("--fingerprint-platform={}", profile.platform),
-        format!("--fingerprint-platform-version={}", profile.platform_version),
+        format!(
+            "--fingerprint-platform-version={}",
+            profile.platform_version
+        ),
         format!("--fingerprint-brand={}", profile.brand),
         format!("--fingerprint-brand-version={}", profile.brand_version),
-        format!("--fingerprint-hardware-concurrency={}", profile.hardware_concurrency),
+        format!(
+            "--fingerprint-hardware-concurrency={}",
+            profile.hardware_concurrency
+        ),
         format!("--lang={}", profile.locale),
         format!("--accept-lang={}", profile.languages.join(",")),
         format!("--timezone={}", profile.timezone),
-        format!("--window-size={},{}", profile.screen.width, profile.screen.height),
+        format!(
+            "--window-size={},{}",
+            profile.screen.width, profile.screen.height
+        ),
         format!("--remote-debugging-port={port}"),
         "--remote-debugging-address=127.0.0.1".into(),
         "--remote-allow-origins=http://127.0.0.1".into(),
@@ -942,9 +978,6 @@ pub async fn start_environment(
         "--disable-sync".into(),
         "--mute-audio".into(),
     ];
-    if let Some(ext) = search_ext {
-        args.push(format!("--load-extension={}", ext.display()));
-    }
     if force_headless() {
         args.push("--headless=new".into());
         args.push("--disable-gpu".into());
@@ -955,9 +988,12 @@ pub async fn start_environment(
         args.push("--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into());
     }
     if !profile.disable_spoofing.is_empty() {
-        args.push(format!("--disable-spoofing={}", profile.disable_spoofing.join(",")));
+        args.push(format!(
+            "--disable-spoofing={}",
+            profile.disable_spoofing.join(",")
+        ));
     }
-    if let Some(p) = proxy_server {
+    if let Some(p) = spec.proxy_server.as_deref() {
         args.push(format!("--proxy-server={p}"));
         args.push("--proxy-bypass-list=<-loopback>".into());
         args.push("--disable-quic".into());
@@ -969,17 +1005,54 @@ pub async fn start_environment(
         args.push("--no-sandbox".into());
         args.push("--disable-gpu-sandbox".into());
     }
-    let extra: Vec<String> = extra_flags
+    let mut extra: Vec<String> = spec
+        .extra_flags
         .iter()
-        .map(|f| if f.starts_with("--") { f.clone() } else { format!("--{f}") })
+        .map(|f| {
+            if f.starts_with("--") {
+                f.clone()
+            } else {
+                format!("--{f}")
+            }
+        })
         .collect();
-    let classified: Vec<_> = extra.iter().map(|f| classify(f)).collect();
-    let rejected: Vec<String> = classified.iter().filter(|c| c.class == FlagClass::Reject).map(|c| c.raw.clone()).collect();
-    let warned: Vec<String> = classified.iter().filter(|c| c.class == FlagClass::Warn).map(|c| c.raw.clone()).collect();
-    if !rejected.is_empty() {
-        return Err(("SANDBOX_DISABLED_BLOCKED".into(), format!("Rejected flags: {}", rejected.join(", "))));
+    // 同名开关 Chromium 只认最后一个：搜索引擎扩展和用户的扩展必须并进同一个 --load-extension。
+    if let Some(ext) = search_ext {
+        let ours = ext.display().to_string();
+        match extra
+            .iter_mut()
+            .find(|f| f.starts_with("--load-extension="))
+        {
+            Some(flag) => {
+                flag.push(',');
+                flag.push_str(&ours);
+            }
+            None => extra.push(format!("--load-extension={ours}")),
+        }
     }
-    args.extend(classified.into_iter().filter(|c| c.class != FlagClass::Reject).map(|c| c.raw));
+    let classified: Vec<_> = extra.iter().map(|f| classify(f)).collect();
+    let rejected: Vec<String> = classified
+        .iter()
+        .filter(|c| c.class == FlagClass::Reject)
+        .map(|c| c.raw.clone())
+        .collect();
+    let warned: Vec<String> = classified
+        .iter()
+        .filter(|c| c.class == FlagClass::Warn)
+        .map(|c| c.raw.clone())
+        .collect();
+    if !rejected.is_empty() {
+        return Err((
+            "SANDBOX_DISABLED_BLOCKED".into(),
+            format!("Rejected flags: {}", rejected.join(", ")),
+        ));
+    }
+    args.extend(
+        classified
+            .into_iter()
+            .filter(|c| c.class != FlagClass::Reject)
+            .map(|c| c.raw),
+    );
 
     let mut cmd = Command::new(&exe);
     cmd.args(&args)
@@ -992,8 +1065,12 @@ pub async fn start_environment(
     {
         cmd.process_group(0);
     }
-    let mut child = cmd.spawn().map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
-    let pid = child.id().ok_or_else(|| ("SPAWN_FAILED".into(), "no pid".into()))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
+    let pid = child
+        .id()
+        .ok_or_else(|| ("SPAWN_FAILED".into(), "no pid".into()))?;
     let stderr_buf = std::sync::Arc::new(tokio::sync::Mutex::new(String::new()));
     if let Some(mut err) = child.stderr.take() {
         let buf = stderr_buf.clone();
@@ -1012,9 +1089,20 @@ pub async fn start_environment(
             }
         });
     }
-    tokio::spawn(async move {
-        let _ = child.wait().await;
-    });
+    {
+        // 用户直接关掉浏览器窗口是最常见的结束方式。进程一退就把这一行拿掉，
+        // 否则它永远显示"运行中"、占着并发名额，之后点停止还会去杀一个早已易主的 pid。
+        let (paths, runtimes, env_id) = (paths.clone(), runtimes.clone(), env_id.to_string());
+        tokio::spawn(async move {
+            let _ = child.wait().await;
+            let mut map = runtimes.lock().await;
+            if map.get(&env_id).map(|r| r.pid) == Some(pid) {
+                map.remove(&env_id);
+                let rows: Vec<_> = map.values().cloned().collect();
+                let _ = persist_runtimes(&paths, &rows).await;
+            }
+        });
+    }
     if !wait_for_cdp(port, 12000).await {
         kill_pid(pid).await;
         let stderr = stderr_buf.lock().await.clone();
@@ -1026,11 +1114,26 @@ pub async fn start_environment(
         if sandbox_hint {
             return Err((
                 "SANDBOX_UNAVAILABLE".into(),
-                "Chromium sandbox cannot start on this host. Acknowledge --no-sandbox to continue.".into(),
+                "Chromium sandbox cannot start on this host. Acknowledge --no-sandbox to continue."
+                    .into(),
             ));
         }
-        let tail: String = stderr.chars().rev().take(1200).collect::<String>().chars().rev().collect();
-        return Err(("CDP_HANDSHAKE_FAILED".into(), if tail.is_empty() { "CDP did not come up".into() } else { tail }));
+        let tail: String = stderr
+            .chars()
+            .rev()
+            .take(1200)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+        return Err((
+            "CDP_HANDSHAKE_FAILED".into(),
+            if tail.is_empty() {
+                "CDP did not come up".into()
+            } else {
+                tail
+            },
+        ));
     }
     // 记进运行态的是可执行文件的哈希 —— 也就是刚才真正核对过的那个值。
     let sha = exe_sha;
@@ -1049,7 +1152,13 @@ pub async fn start_environment(
         let rows: Vec<_> = map.values().cloned().collect();
         let _ = persist_runtimes(paths, &rows).await;
     }
-    Ok(Spawned { pid, port, sha256: sha, user_data_dir, warned })
+    Ok(Spawned {
+        pid,
+        port,
+        sha256: sha,
+        user_data_dir,
+        warned,
+    })
 }
 
 pub fn pid_alive(pid: u32) -> bool {
@@ -1093,7 +1202,17 @@ mod env_id_tests {
 
     #[test]
     fn rejects_anything_that_could_leave_the_profiles_dir() {
-        for bad in ["", "..", "../x", "a/b", "a\\b", "env 1", "é", "x/../../etc", &"a".repeat(65)] {
+        for bad in [
+            "",
+            "..",
+            "../x",
+            "a/b",
+            "a\\b",
+            "env 1",
+            "é",
+            "x/../../etc",
+            &"a".repeat(65),
+        ] {
             assert!(!valid_env_id(bad), "{bad:?} 不该通过");
         }
     }
@@ -1126,7 +1245,10 @@ mod signal_tests {
     #[test]
     fn kills_only_the_target_group() {
         use std::os::unix::process::CommandExt;
-        let mut bystander = std::process::Command::new("sleep").arg("30").spawn().unwrap();
+        let mut bystander = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
         let mut target = std::process::Command::new("sleep")
             .arg("30")
             .process_group(0)
@@ -1153,7 +1275,10 @@ mod signal_tests {
 
 pub async fn wait_for_cdp(port: u16, timeout_ms: u64) -> bool {
     let url = format!("http://127.0.0.1:{port}/json/version");
-    let Ok(client) = reqwest::Client::builder().timeout(Duration::from_millis(800)).build() else {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_millis(800))
+        .build()
+    else {
         return false;
     };
     let start = std::time::Instant::now();
@@ -1195,12 +1320,29 @@ pub async fn restore_runtimes(
     paths: &HostPaths,
     runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
 ) {
-    let Ok(raw) = tokio::fs::read_to_string(&paths.runtimes).await else { return };
-    let Ok(rows) = serde_json::from_str::<Vec<RuntimeRow>>(&raw) else { return };
-    let mut map = runtimes.lock().await;
+    let Ok(raw) = tokio::fs::read_to_string(&paths.runtimes).await else {
+        return;
+    };
+    let Ok(rows) = serde_json::from_str::<Vec<RuntimeRow>>(&raw) else {
+        return;
+    };
     for row in rows {
         if pid_alive(row.pid) && wait_for_cdp(row.port, 1500).await {
-            map.insert(row.env_id.clone(), row);
+            runtimes.lock().await.insert(row.env_id.clone(), row);
         }
+    }
+}
+
+/// Host 重启后接管回来的浏览器不是它的子进程，等不到退出信号，只能看 pid 还在不在。
+pub async fn prune_dead(
+    paths: &HostPaths,
+    runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
+) {
+    let mut map = runtimes.lock().await;
+    let before = map.len();
+    map.retain(|_, row| pid_alive(row.pid));
+    if map.len() != before {
+        let rows: Vec<_> = map.values().cloned().collect();
+        let _ = persist_runtimes(paths, &rows).await;
     }
 }

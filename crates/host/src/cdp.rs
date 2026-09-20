@@ -53,7 +53,10 @@ struct Target {
 pub async fn collect(port: u16) -> Result<LabSnapshot> {
     let ws_url = page_websocket(port).await?;
     let raw = evaluate(&ws_url, COLLECT).await?;
-    let canvas = raw.get("canvasSample").and_then(|v| v.as_str()).unwrap_or("");
+    let canvas = raw
+        .get("canvasSample")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
     Ok(LabSnapshot {
         user_agent: s(&raw, "userAgent"),
         platform: s(&raw, "platform"),
@@ -62,7 +65,11 @@ pub async fn collect(port: u16) -> Result<LabSnapshot> {
         languages: raw
             .get("languages")
             .and_then(|v| v.as_array())
-            .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
             .unwrap_or_default(),
         hardware_concurrency: n(&raw, "hardwareConcurrency"),
         device_memory: raw.get("deviceMemory").and_then(|v| v.as_f64()),
@@ -92,7 +99,10 @@ fn n(v: &Value, k: &str) -> f64 {
     v.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0)
 }
 fn nn(v: &Value, a: &str, b: &str) -> f64 {
-    v.get(a).and_then(|x| x.get(b)).and_then(|x| x.as_f64()).unwrap_or(0.0)
+    v.get(a)
+        .and_then(|x| x.get(b))
+        .and_then(|x| x.as_f64())
+        .unwrap_or(0.0)
 }
 
 async fn page_websocket(port: u16) -> Result<String> {
@@ -105,7 +115,10 @@ async fn page_websocket(port: u16) -> Result<String> {
         .await?
         .json()
         .await?;
-    if let Some(page) = listed.iter().find(|t| t.kind.as_deref() == Some("page") && t.ws.is_some()) {
+    if let Some(page) = listed
+        .iter()
+        .find(|t| t.kind.as_deref() == Some("page") && t.ws.is_some())
+    {
         return Ok(page.ws.clone().unwrap());
     }
     let version: Value = client
@@ -128,8 +141,18 @@ async fn page_websocket(port: u16) -> Result<String> {
         .await?;
     if let Some(page) = again
         .iter()
-        .find(|t| t.ws.is_some() && t.url.as_deref().map(|u| u.contains(&target_id)).unwrap_or(false))
-        .or_else(|| again.iter().find(|t| t.kind.as_deref() == Some("page") && t.ws.is_some()))
+        .find(|t| {
+            t.ws.is_some()
+                && t.url
+                    .as_deref()
+                    .map(|u| u.contains(&target_id))
+                    .unwrap_or(false)
+        })
+        .or_else(|| {
+            again
+                .iter()
+                .find(|t| t.kind.as_deref() == Some("page") && t.ws.is_some())
+        })
     {
         return Ok(page.ws.clone().unwrap());
     }
@@ -139,7 +162,8 @@ async fn page_websocket(port: u16) -> Result<String> {
 async fn create_target(browser_ws: &str) -> Result<String> {
     let (mut ws, _) = connect_async(browser_ws).await?;
     ws.send(Message::Text(
-        json!({ "id": 1, "method": "Target.createTarget", "params": { "url": "about:blank" } }).to_string(),
+        json!({ "id": 1, "method": "Target.createTarget", "params": { "url": "about:blank" } })
+            .to_string(),
     ))
     .await?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -148,7 +172,11 @@ async fn create_target(browser_ws: &str) -> Result<String> {
             Ok(Some(Ok(Message::Text(t)))) => {
                 let v: Value = serde_json::from_str(&t)?;
                 if v.get("id").and_then(|x| x.as_i64()) == Some(1) {
-                    let id = v.pointer("/result/targetId").and_then(|x| x.as_str()).unwrap_or("").to_string();
+                    let id = v
+                        .pointer("/result/targetId")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string();
                     let _ = ws.close(None).await;
                     return Ok(id);
                 }
@@ -172,17 +200,24 @@ async fn evaluate(ws_url: &str, expression: &str) -> Result<Value> {
     )
     .await?;
     let _ = ws.close(None).await;
-    Ok(result.pointer("/result/value").cloned().unwrap_or(Value::Object(Default::default())))
+    Ok(result
+        .pointer("/result/value")
+        .cloned()
+        .unwrap_or(Value::Object(Default::default())))
 }
 
 async fn cdp_rpc(
-    ws: &mut tokio_tungstenite::WebSocketStream<impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin>,
+    ws: &mut tokio_tungstenite::WebSocketStream<
+        impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    >,
     id: i64,
     method: &str,
     params: Value,
 ) -> Result<Value> {
-    ws.send(Message::Text(json!({ "id": id, "method": method, "params": params }).to_string()))
-        .await?;
+    ws.send(Message::Text(
+        json!({ "id": id, "method": method, "params": params }).to_string(),
+    ))
+    .await?;
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(8);
     while tokio::time::Instant::now() < deadline {
         match tokio::time::timeout(std::time::Duration::from_secs(8), ws.next()).await {

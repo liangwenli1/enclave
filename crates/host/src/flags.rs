@@ -11,7 +11,12 @@ pub struct Classified {
 }
 
 fn flag_name(raw: &str) -> String {
-    raw.trim().trim_start_matches('-').split('=').next().unwrap_or("").to_string()
+    raw.trim()
+        .trim_start_matches('-')
+        .split('=')
+        .next()
+        .unwrap_or("")
+        .to_string()
 }
 
 fn flag_value(raw: &str) -> &str {
@@ -22,10 +27,16 @@ pub fn classify(raw: &str) -> Classified {
     let name = flag_name(raw);
     let value = flag_value(raw);
     if name == "remote-debugging-address" && !value.is_empty() && value != "127.0.0.1" {
-        return Classified { raw: raw.to_string(), class: FlagClass::Reject };
+        return Classified {
+            raw: raw.to_string(),
+            class: FlagClass::Reject,
+        };
     }
     if name == "no-sandbox" || name == "disable-gpu-sandbox" {
-        return Classified { raw: raw.to_string(), class: FlagClass::Warn };
+        return Classified {
+            raw: raw.to_string(),
+            class: FlagClass::Warn,
+        };
     }
     const REJECT: &[&str] = &[
         "disable-web-security",
@@ -34,7 +45,10 @@ pub fn classify(raw: &str) -> Classified {
         "host-resolver-rules",
     ];
     if REJECT.contains(&name.as_str()) {
-        return Classified { raw: raw.to_string(), class: FlagClass::Reject };
+        return Classified {
+            raw: raw.to_string(),
+            class: FlagClass::Reject,
+        };
     }
     const WARN: &[&str] = &[
         "disable-setuid-sandbox",
@@ -44,7 +58,10 @@ pub fn classify(raw: &str) -> Classified {
         "allow-running-insecure-content",
     ];
     if WARN.contains(&name.as_str()) {
-        return Classified { raw: raw.to_string(), class: FlagClass::Warn };
+        return Classified {
+            raw: raw.to_string(),
+            class: FlagClass::Warn,
+        };
     }
     const ALLOW: &[&str] = &[
         "user-data-dir",
@@ -78,9 +95,15 @@ pub fn classify(raw: &str) -> Classified {
         "disable-webrtc",
     ];
     if ALLOW.contains(&name.as_str()) || name.starts_with("fingerprint") {
-        return Classified { raw: raw.to_string(), class: FlagClass::Allow };
+        return Classified {
+            raw: raw.to_string(),
+            class: FlagClass::Allow,
+        };
     }
-    Classified { raw: raw.to_string(), class: FlagClass::Reject }
+    Classified {
+        raw: raw.to_string(),
+        class: FlagClass::Reject,
+    }
 }
 
 #[cfg(test)]
@@ -100,9 +123,18 @@ mod tests {
 
     #[test]
     fn debugging_port_cannot_be_moved_off_loopback() {
-        assert_eq!(class_of("--remote-debugging-address=127.0.0.1"), FlagClass::Allow);
-        assert_eq!(class_of("--remote-debugging-address=0.0.0.0"), FlagClass::Reject);
-        assert_eq!(class_of("--remote-debugging-address=192.168.1.5"), FlagClass::Reject);
+        assert_eq!(
+            class_of("--remote-debugging-address=127.0.0.1"),
+            FlagClass::Allow
+        );
+        assert_eq!(
+            class_of("--remote-debugging-address=0.0.0.0"),
+            FlagClass::Reject
+        );
+        assert_eq!(
+            class_of("--remote-debugging-address=192.168.1.5"),
+            FlagClass::Reject
+        );
     }
 
     #[test]

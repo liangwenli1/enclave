@@ -17,8 +17,9 @@ use axum::{Json, Router};
 use enclave_host::api::{allows, ApiLevel, EnvEntry, StartSpec};
 use enclave_host::kernel::{
     admit, capabilities, ensure_dirs, kernel_for_this_os, list_search_engines, load_manifest,
-    purge_environment, read_status_fast, restore_runtimes, valid_env_id, start_environment, stop_environment, HostPaths,
-    KernelRecord, KernelStatus, ManifestFile, RuntimeRow,
+    prune_dead, purge_environment, read_status_fast, restore_runtimes, start_environment,
+    stop_environment, valid_env_id, HostPaths, KernelRecord, KernelStatus, ManifestFile,
+    RuntimeRow,
 };
 use rand::RngCore;
 use serde::Deserialize;
@@ -105,7 +106,6 @@ async fn main() {
         .route("/v1/health", get(health))
         .route("/v1/kernel", get(kernel_view))
         .route("/v1/kernel/admit", post(kernel_admit))
-        .route("/v1/runtimes", get(list_runtimes))
         .route("/v1/environments/start", post(env_start))
         .route("/v1/environments/stop", post(env_stop))
         .route("/v1/environments/purge", post(env_purge))
@@ -209,7 +209,7 @@ async fn guard(State(state): State<Arc<App>>, req: Request, next: Next) -> Respo
         .and_then(|v| v.to_str().ok())
         .map(|h| {
             let name = h.split(':').next().unwrap_or("");
-            name == "127.0.0.1" || name == "localhost" || name == "[::1]"
+            name == "127.0.0.1" || name == "localhost"
         })
         .unwrap_or(false);
     if !host_ok {
@@ -230,14 +230,21 @@ async fn guard(State(state): State<Arc<App>>, req: Request, next: Next) -> Respo
             return unauthorized("缺少或错误的 API 令牌。");
         }
         if !allows(api.level, req.method().as_str(), req.uri().path()) {
-            return deny("API_SCOPE", "当前档位的本机 API 是只读的，不能启动或停止环境。");
+            return deny(
+                "API_SCOPE",
+                "当前档位的本机 API 是只读的，不能启动或停止环境。",
+            );
         }
         drop(api);
         return next.run(req).await;
     }
 
     // 2. 有 Origin 就必须在名单里。网页发来的请求一定带 Origin。
-    if let Some(origin) = req.headers().get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
+    if let Some(origin) = req
+        .headers()
+        .get(header::ORIGIN)
+        .and_then(|v| v.to_str().ok())
+    {
         if !APP_ORIGINS.contains(&origin) {
             return deny("FORBIDDEN_ORIGIN", "这个来源不允许调用本机接口。");
         }
@@ -281,8 +288,21 @@ async fn health() -> Json<Value> {
 }
 
 async fn kernel_view(State(state): State<Arc<App>>) -> Json<Value> {
-    let status = read_status_fast(&state.paths, &state.kernel).await;
-    *state.status.lock().await = status.clone();
+    // 准入进行中、或者刚失败，真相在内存里：下载写的是 .part，磁盘上看不出进度，
+    // 失败原因也不落盘。这时从磁盘重算会把它们盖成"未下载"，界面既没进度也没报错。
+    let live = {
+        let s = state.status.lock().await;
+        (*state.admitting.lock().await || s.state == "error").then(|| s.clone())
+    };
+    let status = match live {
+        Some(s) => s,
+        None => {
+            let s = read_status_fast(&state.paths, &state.kernel).await;
+            *state.status.lock().await = s.clone();
+            s
+        }
+    };
+    prune_dead(&state.paths, &state.runtimes).await;
     let runtimes: Vec<RuntimeRow> = state.runtimes.lock().await.values().cloned().collect();
     Json(json!({
         "status": status,
@@ -305,10 +325,7 @@ struct AdmitBody {
     allow_preview_channel: bool,
 }
 
-async fn kernel_admit(
-    State(state): State<Arc<App>>,
-    body: Option<Json<AdmitBody>>,
-) -> Json<Value> {
+async fn kernel_admit(State(state): State<Arc<App>>, body: Option<Json<AdmitBody>>) -> Json<Value> {
     let allow_preview = body.map(|b| b.allow_preview_channel).unwrap_or(false);
     if state.kernel.channel != "stable" && !allow_preview {
         return Json(json!({
@@ -334,7 +351,7 @@ async fn kernel_admit(
             let mut s = status.lock().await;
             if s.state != "hash_mismatch" {
                 s.state = "error".into();
-                s.error = Some(e.to_string());
+                s.error = Some(format!("内核没能下载或解压，检查网络后重试。（{e}）"));
             }
         } else {
             // 准入过程本身刚做过全量校验，本进程内不必立刻再做一次。
@@ -374,12 +391,7 @@ async fn run_start(state: &Arc<App>, env_id: &str, spec: &StartSpec) -> Json<Val
         &state.paths,
         &state.kernel,
         env_id,
-        &spec.profile,
-        &spec.extra_flags,
-        spec.allow_no_sandbox,
-        spec.proxy_server.as_deref(),
-        spec.search_engine.as_deref(),
-        spec.search_provider.as_ref(),
+        spec,
         &state.runtimes,
         full_verify,
     )
@@ -397,9 +409,7 @@ async fn run_start(state: &Arc<App>, env_id: &str, spec: &StartSpec) -> Json<Val
                 "userDataDir": s.user_data_dir,
             }))
         }
-        Err((code, message)) => {
-            Json(json!({ "ok": false, "code": code, "message": message }))
-        }
+        Err((code, message)) => Json(json!({ "ok": false, "code": code, "message": message })),
     }
 }
 
@@ -432,17 +442,6 @@ async fn env_purge(State(state): State<Arc<App>>, Json(body): Json<StopBody>) ->
     }
 }
 
-async fn list_runtimes(State(state): State<Arc<App>>) -> Json<Value> {
-    restore_runtimes(&state.paths, &state.runtimes).await;
-    Json(json!(state
-        .runtimes
-        .lock()
-        .await
-        .values()
-        .cloned()
-        .collect::<Vec<_>>()))
-}
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CollectBody {
@@ -458,9 +457,9 @@ async fn lab_collect(State(state): State<Arc<App>>, Json(body): Json<CollectBody
     };
     match enclave_host::cdp::collect(rt.port).await {
         Ok(snap) => Json(json!({ "ok": true, "snapshot": snap })),
-        Err(e) => Json(
-            json!({ "ok": false, "code": "CDP_HANDSHAKE_FAILED", "message": e.to_string() }),
-        ),
+        Err(e) => {
+            Json(json!({ "ok": false, "code": "CDP_HANDSHAKE_FAILED", "message": e.to_string() }))
+        }
     }
 }
 
@@ -484,7 +483,11 @@ async fn api_config(State(state): State<Arc<App>>, Json(body): Json<ApiConfigBod
     api.enabled = body.enabled && body.level != ApiLevel::Off;
     api.level = body.level;
     api.concurrent = body.concurrent;
-    api.envs = body.environments.into_iter().map(|e| (e.id.clone(), e)).collect();
+    api.envs = body
+        .environments
+        .into_iter()
+        .map(|e| (e.id.clone(), e))
+        .collect();
     if api.enabled && api.token.is_empty() {
         api.token = new_token();
         write_private(&api_token_path(&state.paths), &api.token);
@@ -517,7 +520,7 @@ fn api_env_view(entry: &EnvEntry, rt: Option<&RuntimeRow>) -> Value {
 }
 
 async fn api_list(State(state): State<Arc<App>>) -> Json<Value> {
-    restore_runtimes(&state.paths, &state.runtimes).await;
+    prune_dead(&state.paths, &state.runtimes).await;
     let api = state.api.lock().await;
     let runtimes = state.runtimes.lock().await;
     let mut envs: Vec<Value> = api
@@ -556,6 +559,7 @@ async fn api_start(State(state): State<Arc<App>>, Path(id): Path<String>) -> Res
         }
     };
     // 档位的同时运行上限对 API 同样生效，脚本不能绕过它。
+    prune_dead(&state.paths, &state.runtimes).await;
     {
         let runtimes = state.runtimes.lock().await;
         if !runtimes.contains_key(&id) && concurrent > 0 && runtimes.len() >= concurrent {

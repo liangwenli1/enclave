@@ -66,21 +66,45 @@ mod tests {
     #[test]
     fn off_allows_nothing() {
         assert!(!allows(ApiLevel::Off, "GET", "/api/v1/environments"));
-        assert!(!allows(ApiLevel::Off, "POST", "/api/v1/environments/x/start"));
+        assert!(!allows(
+            ApiLevel::Off,
+            "POST",
+            "/api/v1/environments/x/start"
+        ));
     }
 
     #[test]
     fn discover_is_read_only() {
         assert!(allows(ApiLevel::Discover, "GET", "/api/v1/environments"));
-        assert!(allows(ApiLevel::Discover, "GET", "/api/v1/environments/env_1"));
-        assert!(!allows(ApiLevel::Discover, "POST", "/api/v1/environments/env_1/start"));
-        assert!(!allows(ApiLevel::Discover, "POST", "/api/v1/environments/env_1/stop"));
+        assert!(allows(
+            ApiLevel::Discover,
+            "GET",
+            "/api/v1/environments/env_1"
+        ));
+        assert!(!allows(
+            ApiLevel::Discover,
+            "POST",
+            "/api/v1/environments/env_1/start"
+        ));
+        assert!(!allows(
+            ApiLevel::Discover,
+            "POST",
+            "/api/v1/environments/env_1/stop"
+        ));
     }
 
     #[test]
     fn full_can_start_and_stop() {
-        assert!(allows(ApiLevel::Full, "POST", "/api/v1/environments/env_1/start"));
-        assert!(allows(ApiLevel::Full, "POST", "/api/v1/environments/env_1/stop"));
+        assert!(allows(
+            ApiLevel::Full,
+            "POST",
+            "/api/v1/environments/env_1/start"
+        ));
+        assert!(allows(
+            ApiLevel::Full,
+            "POST",
+            "/api/v1/environments/env_1/stop"
+        ));
     }
 
     #[test]
@@ -95,8 +119,17 @@ mod tests {
 
     #[test]
     fn level_parses_from_licence_strings() {
-        assert_eq!(serde_json::from_str::<ApiLevel>("\"off\"").unwrap(), ApiLevel::Off);
-        assert_eq!(serde_json::from_str::<ApiLevel>("\"discover\"").unwrap(), ApiLevel::Discover);
-        assert_eq!(serde_json::from_str::<ApiLevel>("\"full\"").unwrap(), ApiLevel::Full);
+        assert_eq!(
+            serde_json::from_str::<ApiLevel>("\"off\"").unwrap(),
+            ApiLevel::Off
+        );
+        assert_eq!(
+            serde_json::from_str::<ApiLevel>("\"discover\"").unwrap(),
+            ApiLevel::Discover
+        );
+        assert_eq!(
+            serde_json::from_str::<ApiLevel>("\"full\"").unwrap(),
+            ApiLevel::Full
+        );
     }
 }
