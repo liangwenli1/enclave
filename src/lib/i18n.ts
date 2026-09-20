@@ -99,7 +99,6 @@ const dict = {
     next: "继续",
     back: "返回",
     blank: "空白",
-    template: "模板",
     fromCopy: "复制已有",
     name: "名称",
     note: "备注",
@@ -145,11 +144,6 @@ const dict = {
     step1: "来源",
     step2: "身份",
     step3: "网络与内核",
-    templates: {
-      checkout: "结账会话",
-      research: "调研会话",
-      ads: "投放会话",
-    },
   },
   en: {
     navEnv: "Environments",
@@ -249,7 +243,6 @@ const dict = {
     next: "Continue",
     back: "Back",
     blank: "Blank",
-    template: "Template",
     fromCopy: "Copy existing",
     name: "Name",
     note: "Note",
@@ -290,11 +283,6 @@ const dict = {
     step1: "Source",
     step2: "Identity",
     step3: "Network and kernel",
-    templates: {
-      checkout: "Checkout session",
-      research: "Research session",
-      ads: "Ads session",
-    },
     onboard: "First run",
     onboardTitle: "Three steps: admit the kernel, create an environment, start it",
     onboardSample: "Creates a sample environment, then opens the lab to collect the kernel page.",
@@ -303,7 +291,7 @@ const dict = {
   },
 } as const;
 
-export type MessageKey = Exclude<keyof (typeof dict)["zh"], "templates">;
+export type MessageKey = keyof (typeof dict)["zh"];
 
 export function t(locale: Locale, key: MessageKey): string {
   const table = dict[locale];

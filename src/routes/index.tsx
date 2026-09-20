@@ -251,7 +251,7 @@ function CreateWizard({
   const catalog = useEnclave((s) => s.searchCatalog) ?? [];
 
   const [step, setStep] = useState(0);
-  const [source, setSource] = useState<"blank" | "template" | "copy">("blank");
+  const [source, setSource] = useState<"blank" | "copy">("blank");
   const [name, setName] = useState("");
   const [group, setGroup] = useState("default");
   const [platform, setPlatform] = useState<PlatformId>("windows");
@@ -345,11 +345,10 @@ function CreateWizard({
         </div>
 
         {step === 0 ? (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {(
               [
                 ["blank", t(locale, "blank")],
-                ["template", t(locale, "template")],
                 ["copy", t(locale, "fromCopy")],
               ] as const
             ).map(([id, label]) => (
