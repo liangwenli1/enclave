@@ -1,6 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useRef, useState } from "react";
-import { Badge, Button, Field, Input, Panel, PanelHeader, PageHeader } from "@/components/ui";
+import {
+  Badge,
+  Button,
+  CodeBlock,
+  Field,
+  Input,
+  Panel,
+  PanelHeader,
+  PageHeader,
+} from "@/components/ui";
+import { rotateApiToken } from "@/lib/kernel/host-api";
 import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { envCount } from "@/lib/license/plans";
@@ -46,6 +56,7 @@ function SettingsPage() {
         </Panel>
 
         <VaultPanel />
+        <ApiPanel />
         <TransferPanel />
 
       </div>
@@ -136,6 +147,75 @@ function VaultPanel() {
           </Button>
         </div>
       </form>
+    </Panel>
+  );
+}
+
+/** 给脚本用的本机 API。能不能开、开到什么程度，由档位决定。 */
+function ApiPanel() {
+  const enabled = useEnclave((s) => s.settings.apiEnabled);
+  const level = useEnclave((s) => s.account.limits.api);
+  const label = useEnclave((s) => s.account.limits.label);
+  const api = useEnclave((s) => s.api);
+  const locked = level === "off";
+
+  return (
+    <Panel>
+      <PanelHeader
+        title="本机 API"
+        actions={
+          <Badge tone={api.active ? "ok" : "neutral"}>
+            {api.active ? (level === "full" ? "已开启 · 完整" : "已开启 · 只读") : "未开启"}
+          </Badge>
+        }
+      />
+      <div className="grid gap-4 p-5">
+        <label className="flex cursor-pointer items-center gap-3 text-[13px]">
+          <input
+            type="checkbox"
+            className="size-4 accent-[var(--enclave-accent)]"
+            checked={enabled && !locked}
+            disabled={locked}
+            onChange={(e) => {
+              useEnclave.getState().patchSettings({ apiEnabled: e.target.checked });
+              useEnclave.getState().addAudit({
+                action: "api_toggle",
+                level: "warn",
+                detail: e.target.checked ? "开启本机 API" : "关闭本机 API",
+              });
+            }}
+          />
+          <span className={locked ? "text-subtle" : "text-ink"}>
+            {locked ? `${label} 不含本机 API` : "允许本机脚本调用"}
+          </span>
+        </label>
+
+        {api.active ? (
+          <>
+            <CodeBlock label="API 令牌" value={api.token} />
+            <CodeBlock
+              label="示例"
+              value={`curl -H "Authorization: Bearer ${api.token}" ${api.baseUrl}/api/v1/environments`}
+            />
+            <div>
+              <Button
+                onClick={async () => {
+                  const token = await rotateApiToken();
+                  if (!token) return;
+                  useEnclave.setState((s) => ({ api: { ...s.api, token } }));
+                  useEnclave.getState().addAudit({
+                    action: "api_token_rotate",
+                    level: "warn",
+                    detail: "旧令牌已失效",
+                  });
+                }}
+              >
+                重置令牌
+              </Button>
+            </div>
+          </>
+        ) : null}
+      </div>
     </Panel>
   );
 }

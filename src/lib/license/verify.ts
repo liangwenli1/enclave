@@ -24,6 +24,7 @@ export type LicensePayload = {
   label: string;
   envLimit: number;
   concurrent: number;
+  api: PlanLimits["api"];
   deviceLimit: number;
   /** 订阅到期，null 表示不过期 */
   expiresAt: number | null;
@@ -118,6 +119,7 @@ export function limitsOf(payload: LicensePayload): PlanLimits {
     label: payload.label,
     envLimit: payload.envLimit,
     concurrent: payload.concurrent,
+    api: payload.api ?? "off",
     deviceLimit: payload.deviceLimit,
   };
 }

@@ -35,6 +35,7 @@ function payload(overrides: Record<string, unknown> = {}) {
     label: "Pro",
     envLimit: 200,
     concurrent: 8,
+    api: "full",
     deviceLimit: 2,
     expiresAt: null,
     issuedAt: now,

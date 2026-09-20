@@ -14,10 +14,10 @@ import path from "node:path";
 
 /** 一个档位能做什么。改数字可以，改结构要同时改客户端。 */
 export const PLANS = {
-  free: { plan: "free", label: "Solo Free", envLimit: 3, concurrent: 1, deviceLimit: 1 },
-  solo: { plan: "solo", label: "Solo", envLimit: 50, concurrent: 3, deviceLimit: 1 },
-  pro: { plan: "pro", label: "Pro", envLimit: 200, concurrent: 8, deviceLimit: 2 },
-  team: { plan: "team", label: "Team", envLimit: 200, concurrent: 8, deviceLimit: 6 },
+  free: { plan: "free", label: "Solo Free", envLimit: 3, concurrent: 1, deviceLimit: 1, api: "off" },
+  solo: { plan: "solo", label: "Solo", envLimit: 50, concurrent: 3, deviceLimit: 1, api: "discover" },
+  pro: { plan: "pro", label: "Pro", envLimit: 200, concurrent: 8, deviceLimit: 2, api: "full" },
+  team: { plan: "team", label: "Team", envLimit: 200, concurrent: 8, deviceLimit: 6, api: "full" },
 };
 
 export function planOf(id) {
@@ -69,6 +69,7 @@ export function issueLicense({ privateKey, user, license, deviceId }) {
     label: effective.label,
     envLimit: effective.envLimit,
     concurrent: effective.concurrent,
+    api: effective.api,
     deviceLimit: license.device_limit ?? effective.deviceLimit,
     // 订阅到期时间（null = 不过期）
     expiresAt: expired ? null : (license.expires_at ?? null),

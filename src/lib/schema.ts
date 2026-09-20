@@ -122,6 +122,8 @@ export type AppSettings = {
   allowNoSandboxHost: boolean;
   /** 内核还在预览通道时，用户明确同意后才允许准入和启动。 */
   allowPreviewKernel: boolean;
+  /** 用户想不想开本机 API。真正能不能开还要看档位。 */
+  apiEnabled: boolean;
   onboarded: boolean;
 };
 

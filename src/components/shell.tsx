@@ -19,9 +19,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding";
 import { cn } from "@/lib/cn";
-import { getKernelView } from "@/lib/kernel/host-api";
+import { configureApi, getKernelView, hostBaseUrl } from "@/lib/kernel/host-api";
 import { currentAccount, refresh } from "@/lib/license/client";
-import { stopEnv } from "@/lib/host";
+import { launchSpec, needsLockedSecret, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
 import { useLocale } from "@/lib/use-locale";
@@ -140,6 +140,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <PlanNotice />
       <AccountSync />
       <HostSync />
+      <ApiSync />
     </div>
   );
 }
@@ -234,6 +235,46 @@ function PlanNotice() {
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * 本机 API 的配置跟着工作台的状态走：环境、代理、扩展、档位、保险箱任何一项变了，
+ * 就把最新的一份推给 Host。代理密码在锁着的保险箱里的环境不推 —— 拿不到密码就不能
+ * 让脚本启动它，否则它会用本机网络出网。
+ */
+function ApiSync() {
+  const environments = useEnclave((s) => s.environments);
+  const proxies = useEnclave((s) => s.proxies);
+  const extensions = useEnclave((s) => s.extensions);
+  const settings = useEnclave((s) => s.settings);
+  const limits = useEnclave((s) => s.account.limits);
+  const vaultUnlocked = useEnclave((s) => s.vault.unlocked);
+
+  useEffect(() => {
+    const timer = window.setTimeout(async () => {
+      const enabled = settings.apiEnabled && limits.api !== "off";
+      const result = await configureApi({
+        enabled,
+        level: limits.api,
+        concurrent: limits.concurrent,
+        environments: enabled
+          ? environments
+              .filter((e) => !e.deletedAt && !needsLockedSecret(e))
+              .map((e) => ({ id: e.id, name: e.name, group: e.group, spec: launchSpec(e) }))
+          : [],
+      });
+      useEnclave.setState({
+        api: {
+          active: Boolean(result?.enabled),
+          token: result?.token ?? "",
+          baseUrl: (await hostBaseUrl()) ?? "",
+        },
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [environments, proxies, extensions, settings, limits, vaultUnlocked]);
+
+  return null;
 }
 
 /** 把 Host 里真实的运行态同步进界面。界面永远不自己编造 Running。 */

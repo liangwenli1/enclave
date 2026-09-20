@@ -11,6 +11,8 @@ export type PlanLimits = {
   label: string;
   envLimit: number;
   concurrent: number;
+  /** 给脚本用的本机 API：关 / 只读 / 完整 */
+  api: "off" | "discover" | "full";
   deviceLimit: number;
 };
 
@@ -19,6 +21,7 @@ export const FREE: PlanLimits = {
   label: "Solo Free",
   envLimit: 3,
   concurrent: 1,
+  api: "off",
   deviceLimit: 1,
 };
 

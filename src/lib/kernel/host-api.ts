@@ -245,3 +245,42 @@ export async function collectCdp(envId: string): Promise<LabSnapshot> {
   if (!body.ok || !body.snapshot) throw new Error(body.message ?? "CDP_HANDSHAKE_FAILED");
   return body.snapshot;
 }
+
+/* ── 给脚本用的本机 API ────────────────────────────────────────────── */
+
+export type ApiEnvEntry = {
+  id: string;
+  name: string;
+  group: string;
+  spec: Omit<Parameters<typeof startEnvironment>[0], "envId">;
+};
+
+/**
+ * 把开关、档位和环境清单推给 Host。环境的启动参数里有带密码的代理地址，
+ * Host 只放内存，不落盘。返回 API 令牌（由 Host 生成和保存）。
+ */
+export async function configureApi(input: {
+  enabled: boolean;
+  level: "off" | "discover" | "full";
+  concurrent: number;
+  environments: ApiEnvEntry[];
+}): Promise<{ enabled: boolean; token: string } | null> {
+  try {
+    return await call("/v1/api/config", { method: "POST", body: JSON.stringify(input) });
+  } catch {
+    return null;
+  }
+}
+
+export async function rotateApiToken(): Promise<string | null> {
+  try {
+    const res = await call<{ token: string }>("/v1/api/rotate", { method: "POST", body: "{}" });
+    return res.token;
+  } catch {
+    return null;
+  }
+}
+
+export async function hostBaseUrl(): Promise<string | null> {
+  return (await connection())?.base ?? null;
+}
