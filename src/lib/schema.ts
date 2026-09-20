@@ -76,8 +76,6 @@ export type Environment = {
   allowNoSandbox: boolean;
   extraFlags: string[];
   deletedAt: number | null;
-  lastIntegrity?: { at: number; ok: boolean; reason?: string };
-  lastLab?: { at: number; pass: boolean; summary: string };
   createdAt: number;
   updatedAt: number;
   timeline: TimelineEvent[];

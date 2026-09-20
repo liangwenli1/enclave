@@ -161,7 +161,7 @@ export async function startEnv(env: Environment) {
   });
   store.patchEnv(
     env.id,
-    { lastIntegrity: { at: Date.now(), ok: true } },
+    {},
     {
       at: Date.now(),
       kind: "running",

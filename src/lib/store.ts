@@ -49,7 +49,7 @@ type Store = {
   /** 保险箱是否已建、是否已解锁。由 lib/vault.ts 写入。 */
   vault: { exists: boolean; unlocked: boolean };
   /** 本机 API 的运行状态。令牌由 Host 生成，这里只在内存里留一份给设置页显示。 */
-  api: { active: boolean; token: string; baseUrl: string };
+  api: { active: boolean; failed: boolean; token: string; baseUrl: string };
   setAccount: (account: AccountState) => void;
   setLocale: (locale: AppSettings["locale"]) => void;
   setPlanNotice: (notice: { title: string; body: string } | null) => void;
@@ -93,7 +93,7 @@ export const useEnclave = create<Store>()(
       planNotice: null,
       account: SIGNED_OUT,
       vault: { exists: false, unlocked: false },
-      api: { active: false, token: "", baseUrl: "" },
+      api: { active: false, failed: false, token: "", baseUrl: "" },
       setAccount: (account) => set({ account }),
       setLocale: (locale) =>
         set((s) => ({ settings: { ...s.settings, locale } })),

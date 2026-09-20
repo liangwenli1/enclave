@@ -29,6 +29,7 @@ function LabPage() {
   const lab = useEnclave((s) => s.lab);
   const [envId, setEnvId] = useState(envFromSearch ?? environments[0]?.id ?? "");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const env = environments.find((e) => e.id === envId);
   const proxy = proxies.find((p) => p.id === env?.proxyId);
   const staticChecks = env ? staticConsistency(env, proxy) : [];
@@ -58,28 +59,18 @@ function LabPage() {
         <Button
           onClick={async () => {
             setBusy(true);
+            setError("");
             try {
               const snap = await collectPageFingerprint("page");
               useEnclave.getState().setControlSnap(snap);
+            } catch (err) {
+              setError(`采集对照失败：${err instanceof Error ? err.message : String(err)}`);
             } finally {
               setBusy(false);
             }
           }}
         >
           {t(locale, "collectPage")}
-        </Button>
-        <Button
-          disabled={!env}
-          onClick={() => {
-            if (!env) return;
-            const checks = staticConsistency(env, proxy);
-            const pass = checks.every((c) => c.ok || c.warn);
-            useEnclave.getState().patchEnv(env.id, {
-              lastLab: { at: Date.now(), pass, summary: `${checks.filter((c) => c.ok).length}/${checks.length}` },
-            });
-          }}
-        >
-          {t(locale, "runStatic")}
         </Button>
         <Button
           variant="primary"
@@ -94,8 +85,11 @@ function LabPage() {
           onClick={async () => {
             if (!env) return;
             setBusy(true);
+            setError("");
             try {
               await collectEnvCdp(env.id);
+            } catch (err) {
+              setError(`采集内核窗口失败：${err instanceof Error ? err.message : String(err)}`);
             } finally {
               setBusy(false);
             }
@@ -104,6 +98,8 @@ function LabPage() {
           {t(locale, "collectCdp")}
         </Button>
       </div>
+
+      {error ? <p className="mt-3 text-[13px] text-bad">{error}</p> : null}
 
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
         <Panel className="p-4">

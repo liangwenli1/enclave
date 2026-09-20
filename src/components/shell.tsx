@@ -266,6 +266,8 @@ function ApiSync() {
       useEnclave.setState({
         api: {
           active: Boolean(result?.enabled),
+          // 想开却没开成（本机服务没应答）：设置页要说出来，而不是只显示「未开启」。
+          failed: enabled && !result,
           token: result?.token ?? "",
           baseUrl: (await hostBaseUrl()) ?? "",
         },

@@ -164,8 +164,14 @@ function ApiPanel() {
       <PanelHeader
         title="本机 API"
         actions={
-          <Badge tone={api.active ? "ok" : "neutral"}>
-            {api.active ? (level === "full" ? "已开启 · 完整" : "已开启 · 只读") : "未开启"}
+          <Badge tone={api.active ? "ok" : api.failed ? "bad" : "neutral"}>
+            {api.active
+              ? level === "full"
+                ? "已开启 · 完整"
+                : "已开启 · 只读"
+              : api.failed
+                ? "没开成"
+                : "未开启"}
           </Badge>
         }
       />
@@ -189,6 +195,10 @@ function ApiPanel() {
             {locked ? `${label} 不含本机 API` : "允许本机脚本调用"}
           </span>
         </label>
+
+        {api.failed ? (
+          <p className="text-[13px] text-bad">连不上本机服务，API 没开成。重启工作台再试。</p>
+        ) : null}
 
         {api.active ? (
           <>

@@ -18,8 +18,17 @@ function EnginesPage() {
   const [keyword, setKeyword] = useState("");
   const [url, setUrl] = useState("https://www.google.com/search?q={searchTerms}");
 
+  const [errors, setErrors] = useState<{ name?: string; keyword?: string; url?: string }>({});
+
   const add = () => {
-    if (!name.trim() || !keyword.trim() || !url.includes("{searchTerms}")) return;
+    const found: typeof errors = {};
+    if (!name.trim()) found.name = "填一个名字。";
+    if (!keyword.trim()) found.keyword = "填关键字，比如 google.com。";
+    else if (catalog.some((e) => e.keyword === keyword.trim())) found.keyword = "这个关键字已经有了。";
+    if (!/^https?:\/\/\S+$/.test(url.trim())) found.url = "要以 http:// 或 https:// 开头。";
+    else if (!url.includes("{searchTerms}")) found.url = "地址里要有 {searchTerms}，它会被替换成搜索词。";
+    setErrors(found);
+    if (Object.keys(found).length) return;
     const engine: CatalogEngine = {
       id: makeId("se"),
       name: name.trim(),
@@ -47,13 +56,13 @@ function EnginesPage() {
 
       <Panel className="p-5">
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label={t(locale, "name")}>
+          <Field label={t(locale, "name")} error={errors.name}>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Google" />
           </Field>
-          <Field label={t(locale, "engineKeyword")}>
+          <Field label={t(locale, "engineKeyword")} error={errors.keyword}>
             <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="google.com" />
           </Field>
-          <Field label={t(locale, "engineUrl")}>
+          <Field label={t(locale, "engineUrl")} error={errors.url}>
             <Input
               value={url}
               onChange={(e) => setUrl(e.target.value)}

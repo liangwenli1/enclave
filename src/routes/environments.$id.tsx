@@ -29,6 +29,7 @@ function EnvDetail() {
   const proxies = useEnclave((s) => s.proxies);
   const runtime = useEnclave((s) => s.runtimes[id]);
   const [tab, setTab] = useState<"overview" | "fingerprint" | "flags" | "timeline">("overview");
+  const [collect, setCollect] = useState<{ busy: boolean; note?: string; bad?: boolean }>({ busy: false });
 
   if (!env) {
     return (
@@ -199,9 +200,28 @@ function EnvDetail() {
             </p>
           ) : null}
           {runtime?.status === "running" ? (
-            <Button className="mt-3 w-full" onClick={() => void collectEnvCdp(env.id)}>
-              {t(locale, "collectPage")}
+            <Button
+              className="mt-3 w-full"
+              disabled={collect.busy}
+              onClick={async () => {
+                setCollect({ busy: true });
+                try {
+                  await collectEnvCdp(env.id);
+                  setCollect({ busy: false, note: "已采集，到实验室看对比。" });
+                } catch (err) {
+                  setCollect({
+                    busy: false,
+                    bad: true,
+                    note: `采集失败：${err instanceof Error ? err.message : String(err)}`,
+                  });
+                }
+              }}
+            >
+              {collect.busy ? "采集中…" : t(locale, "collectPage")}
             </Button>
+          ) : null}
+          {runtime?.status === "running" && collect.note ? (
+            <p className={`mt-2 text-[13px] ${collect.bad ? "text-bad" : "text-subtle"}`}>{collect.note}</p>
           ) : null}
         </Panel>
       </aside>
@@ -413,6 +433,8 @@ function FlagsForm({
   const locale = useLocale();
   const [draft, setDraft] = useState(extraFlags.join("\n"));
   const classified = useMemo(() => classifyAll(draft.split(/\s+/).filter(Boolean)), [draft]);
+  const rejected = classified.filter((f) => f.cls === "reject").length;
+  const dirty = classified.map((f) => f.raw).join("\n") !== extraFlags.join("\n");
   return (
     <div className="grid gap-3">
       <label className="flex items-center gap-2 text-[13px]">
@@ -454,16 +476,26 @@ function FlagsForm({
           </li>
         ))}
       </ul>
-      <Button
-        onClick={() => {
-          if (classified.some((f) => f.cls === "reject")) return;
-          useEnclave.getState().patchEnv(envId, {
-            extraFlags: classified.map((f) => f.raw),
-          });
-        }}
-      >
-        {t(locale, "save")}
-      </Button>
+      {rejected ? (
+        <p className="text-[13px] text-bad">有 {rejected} 个参数不允许，删掉才能保存。</p>
+      ) : null}
+      <div className="flex items-center gap-3">
+        <Button
+          disabled={!dirty || rejected > 0}
+          onClick={() => {
+            useEnclave.getState().patchEnv(
+              envId,
+              { extraFlags: classified.map((f) => f.raw) },
+              { at: Date.now(), kind: "flag", message: "启动参数已更新", level: "info" },
+            );
+          }}
+        >
+          {t(locale, "save")}
+        </Button>
+        {!dirty && extraFlags.length ? (
+          <span className="text-[13px] text-subtle">已保存，重新启动后生效。</span>
+        ) : null}
+      </div>
     </div>
   );
 }
