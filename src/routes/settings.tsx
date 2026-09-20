@@ -1,12 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Badge, Button, Field, Input, Panel, PanelHeader, PageHeader } from "@/components/ui";
 import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { envCount } from "@/lib/license/plans";
 import { useEnclave } from "@/lib/store";
 import { buildExport, downloadExport, importSecrets, parseExport } from "@/lib/transfer";
-import { setMasterPassword, subscribeVault, vaultExists, vaultUnlocked } from "@/lib/vault";
+import { setMasterPassword } from "@/lib/vault";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
@@ -48,14 +48,6 @@ function SettingsPage() {
         <VaultPanel />
         <TransferPanel />
 
-        <Panel className="p-5">
-          <h2 className="text-base font-semibold text-ink">数据放在哪</h2>
-          <p className="mt-2 text-[13px] leading-relaxed text-subtle">
-            环境定义、画像和代理配置存在本机的工作台数据目录；每个环境的 Cookie
-            和缓存存在各自独立的 user-data 目录；代理密码只以密文存在保险箱里。
-            这些数据都不会上传 —— 工作台只在登录和续签许可证时联网。
-          </p>
-        </Panel>
       </div>
     </div>
   );
@@ -63,22 +55,12 @@ function SettingsPage() {
 
 /** 主密码：保险箱的唯一钥匙。没设之前不保存任何代理密码。 */
 function VaultPanel() {
-  const [exists, setExists] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
+  const { exists, unlocked } = useEnclave((s) => s.vault);
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
   const [again, setAgain] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
-
-  useEffect(() => {
-    const sync = () => {
-      setExists(vaultExists());
-      setUnlocked(vaultUnlocked());
-    };
-    sync();
-    return subscribeVault(sync);
-  }, []);
 
   const submit = async () => {
     setError("");
@@ -102,7 +84,6 @@ function VaultPanel() {
     <Panel>
       <PanelHeader
         title="主密码与保险箱"
-        hint="代理密码只以密文存在本机"
         actions={
           exists ? (
             <Badge tone={unlocked ? "ok" : "warn"}>{unlocked ? "已解锁" : "已锁定"}</Badge>
@@ -118,12 +99,7 @@ function VaultPanel() {
           void submit();
         }}
       >
-        <p className="text-[13px] leading-relaxed text-subtle">
-          主密码经过 PBKDF2 派生成 AES-GCM 密钥，只在内存里；锁定或关掉工作台就丢掉。
-          {exists ? "" : " 没有设置主密码之前，工作台不会保存任何代理密码。"}
-          <br />
-          主密码忘了没有找回途径 —— 只能清空保险箱重新填写各个代理的密码。
-        </p>
+        <p className="text-[13px] text-warn">主密码无法找回，忘了只能清空保险箱重填。</p>
         {exists && !unlocked ? (
           <Field label="当前主密码">
             <Input
@@ -233,16 +209,12 @@ function TransferPanel() {
 
   return (
     <Panel>
-      <PanelHeader title="导出 / 导入环境包" hint="换电脑或备份用" />
+      <PanelHeader title="导出 / 导入环境包" />
       <div className="grid gap-5 p-5">
-        <p className="text-[13px] leading-relaxed text-subtle">
-          环境包里是环境定义、画像、代理和搜索引擎配置。
-          <span className="text-muted"> Cookie、缓存和浏览记录不在里面</span>
-          ，换机器后需要重新登录各个站点。
-        </p>
+        <p className="text-[13px] text-subtle">不含 Cookie 和浏览记录。</p>
 
         <div className="grid gap-3">
-          <Field label="导出口令（可选，填了才会带上代理密码）">
+          <Field label="导出口令" hint="填了才会带上代理密码">
             <Input
               type="password"
               value={passphrase}
@@ -267,7 +239,7 @@ function TransferPanel() {
               }}
             />
           </div>
-          <Field label="导入口令（文件里带密码时才需要）">
+          <Field label="导入口令" hint="文件里带密码时才需要">
             <Input
               type="password"
               value={importPass}

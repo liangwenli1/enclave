@@ -1,11 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Badge, Button, CodeBlock, Field, Input, Panel, PanelHeader, PageHeader } from "@/components/ui";
+import { Badge, Button, Field, Input, Panel, PanelHeader, PageHeader } from "@/components/ui";
 import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import {
   currentAccount,
-  licenseKeyFingerprint,
   refresh,
   signIn,
   signOut,
@@ -72,7 +71,7 @@ function AccountPage() {
         status={
           account.signedIn
             ? `${account.email} · ${account.limits.label}`
-            : "未登录：当前按免费档执行，3 个环境、1 个同时运行"
+            : "未登录 · Solo Free"
         }
       />
 
@@ -81,7 +80,6 @@ function AccountPage() {
           <Panel>
             <PanelHeader
               title="档位"
-              hint="额度以厂商签名的许可证为准"
               actions={
                 <Button onClick={() => void doRefresh()} disabled={busy}>
                   同步
@@ -123,29 +121,20 @@ function AccountPage() {
             </Panel>
           ) : null}
 
-          <Panel className="p-5">
-            <h2 className="text-base font-semibold text-ink">升级或调整档位</h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-subtle">
-              在官网账号页提交申请，我们一个工作日内回复价格和开通方式。开通后在这里点「同步」即可生效，不用重装。
-            </p>
-          </Panel>
+          <p className="text-[13px] text-subtle">升级在官网账号页申请，开通后点「同步」生效。</p>
 
           <div>
             <Button onClick={() => void doSignOut()} disabled={busy} variant="danger">
               退出登录
             </Button>
-            <p className="mt-2 text-[13px] text-subtle">
-              退出会清掉本机许可，额度回到免费档。你的环境、画像和代理配置都留在本机，不受影响。
-            </p>
+            <p className="mt-2 text-[13px] text-subtle">退出后额度回到免费档，本机环境不受影响。</p>
           </div>
         </div>
       ) : (
         <div className="grid gap-4">
           <Panel className="max-w-md p-6">
             <h2 className="text-lg font-bold text-ink">登录</h2>
-            <p className="mt-2 mb-5 text-[13px] text-subtle">
-              登录后额度按你的档位解锁。环境数据始终只在本机，不会上传。
-            </p>
+            <div className="mb-5" />
             {vendorConfigured ? (
               <form
                 className="grid gap-4"
@@ -184,21 +173,10 @@ function AccountPage() {
             )}
           </Panel>
 
-          <Panel className="max-w-md p-5">
-            <h2 className="text-base font-semibold text-ink">还没有账号</h2>
-            <p className="mt-2 text-[13px] leading-relaxed text-subtle">
-              在官网注册即开通免费档。注册和升级都在官网完成，工作台只负责登录和同步额度。
-            </p>
-          </Panel>
+          <p className="text-[13px] text-subtle">没有账号？在官网注册。</p>
         </div>
       )}
 
-      <div className="mt-8">
-        <CodeBlock label="许可证签名公钥（前 12 位）" value={licenseKeyFingerprint} />
-        <p className="mt-2 text-[13px] text-subtle">
-          工作台用这把公钥验证许可证。和官网 /api/v1/pubkey 返回的值一致才说明连的是同一个厂商服务。
-        </p>
-      </div>
     </div>
   );
 }

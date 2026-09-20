@@ -26,7 +26,7 @@ function EnvDetail() {
   if (!env) {
     return (
       <div className="p-8 text-subtle">
-        Missing environment. <Link to="/">Back</Link>
+        这个环境不存在了。<Link to="/" className="text-accent underline">回到环境列表</Link>
       </div>
     );
   }
@@ -221,9 +221,7 @@ function ExtensionPicker({ envId, selected }: { envId: string; selected: string[
   return (
     <Panel className="p-4 md:col-span-2">
       <div className="mb-1 text-[13px] font-medium text-ink">扩展</div>
-      <p className="mb-3 text-[13px] text-subtle">
-        勾选的扩展会在启动时加载到这个环境。改完需要重新启动环境才生效。
-      </p>
+      <p className="mb-3 text-[13px] text-subtle">重新启动后生效。</p>
       <div className="grid gap-2">
         {extensions.map((ext) => (
           <label key={ext.id} className="flex cursor-pointer items-start gap-2.5 text-[13px]">

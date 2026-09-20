@@ -5,7 +5,6 @@ import { useLocale } from "@/lib/use-locale";
 import { getKernelView, type KernelView } from "@/lib/kernel/host-api";
 import { t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
-import { vaultExists } from "@/lib/vault";
 
 export const Route = createFileRoute("/security")({ component: SecurityPage });
 
@@ -14,11 +13,10 @@ function SecurityPage() {
   const settings = useEnclave((s) => s.settings);
   const audit = useEnclave((s) => s.audit);
   const [view, setView] = useState<KernelView | null>(null);
-  const [hasVault, setHasVault] = useState(false);
+  const hasVault = useEnclave((s) => s.vault.exists);
 
   useEffect(() => {
     void getKernelView().then(setView);
-    setHasVault(vaultExists());
   }, []);
 
   const admitted = view?.status.state === "admitted";
@@ -26,10 +24,7 @@ function SecurityPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-8 py-6">
-      <PageHeader
-        title={t(locale, "securityTitle")}
-        status="这台机器上现在的保护状态，以及你自己关掉过哪些保护。"
-      />
+      <PageHeader title={t(locale, "securityTitle")} />
 
       <div className="grid gap-4">
         <Panel>
@@ -39,56 +34,50 @@ function SecurityPage() {
               ok={admitted}
               label="内核完整性"
               detail={
-                admitted
-                  ? "启动前会核对磁盘上真正要执行的那个文件，哈希不符直接拒启。"
-                  : "内核还没准入，环境无法启动。"
+admitted ? "每次启动前核对可执行文件哈希" : "内核还没准入，环境无法启动"
               }
             />
             <Check
               ok
               label="本机接口"
-              detail="只监听 127.0.0.1，要求本机令牌，并且只接受工作台自身的来源。网页无法调用它。"
+              detail="仅 127.0.0.1 · 需要令牌 · 限工作台来源"
             />
             <Check
               ok={!settings.allowNoSandboxHost}
               label="内核沙箱"
               detail={
-                settings.allowNoSandboxHost
-                  ? "你已允许在启动时关闭沙箱。这会让网页里的漏洞更容易影响到系统。"
-                  : "默认开启。"
+settings.allowNoSandboxHost ? "你已允许关闭沙箱" : "开启"
               }
             />
             <Check
               ok={hasVault}
               label="保险箱"
               detail={
-                hasVault
-                  ? "代理密码只以密文存在本机，解锁后才可用。"
-                  : "还没设主密码。在设置页设一个之后才能保存代理密码。"
+hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会被保存"
               }
             />
             <Check
               ok={!previewChannel || !settings.allowPreviewKernel}
               label="内核通道"
               detail={
-                previewChannel
+previewChannel
                   ? settings.allowPreviewKernel
-                    ? "你已同意使用预览通道的内核。预览通道只记录了哈希，还没在这个平台上做过完整行为基线。"
-                    : "这个平台的内核还在预览通道，需要你明确同意才能使用。"
-                  : "稳定通道。"
+                    ? "预览通道，你已同意使用"
+                    : "预览通道，需要你同意后才能用"
+                  : "稳定通道"
               }
             />
-            <Check ok={false} neutral label="安装包签名" detail="正式代码签名证书还没买，安装时系统会提示未知发布者。请靠下载页的 SHA256 核对。" />
+            <Check ok={false} neutral label="安装包签名" detail="未签名，请用下载页的 SHA256 核对" />
           </ul>
         </Panel>
 
         <Panel>
-          <PanelHeader title="你可以自己关掉的保护" hint="每次改动都记进下面的审计日志" />
+          <PanelHeader title="你可以自己关掉的保护" />
           <div className="grid gap-4 p-5">
             <Consent
               checked={settings.allowNoSandboxHost}
               title="允许在启动时关闭内核沙箱"
-              body="只有在这台机器上沙箱确实起不来时才勾。关掉之后，网页里的漏洞更容易影响到你的系统。"
+              body="关掉后，网页里的漏洞更容易影响到你的系统。"
               onChange={(checked) => {
                 useEnclave.getState().patchSettings({ allowNoSandboxHost: checked });
                 useEnclave.getState().addAudit({
@@ -101,7 +90,7 @@ function SecurityPage() {
             <Consent
               checked={settings.allowPreviewKernel}
               title="允许使用预览通道的内核"
-              body="预览通道的内核记录了官方哈希，但还没在这个平台上做过完整行为基线。Windows 和 macOS 目前都在预览通道。"
+              body="哈希已核对，但还没在这个平台上做过完整行为测试。"
               onChange={(checked) => {
                 useEnclave.getState().patchSettings({ allowPreviewKernel: checked });
                 useEnclave.getState().addAudit({
@@ -117,7 +106,7 @@ function SecurityPage() {
         <Panel>
           <PanelHeader
             title="诊断包"
-            hint="出问题时发给我们，里面没有 Cookie、密码和网址"
+            hint="不含 Cookie、密码和网址"
             actions={
               <Button
                 onClick={() => {
@@ -153,7 +142,7 @@ function SecurityPage() {
         </Panel>
 
         <Panel>
-          <PanelHeader title={t(locale, "audit")} hint="只存在本机，不上传" />
+          <PanelHeader title={t(locale, "audit")} />
           {audit.length === 0 ? (
             <p className="px-5 py-8 text-center text-[13px] text-subtle">还没有需要记录的操作。</p>
           ) : (
@@ -183,15 +172,6 @@ function SecurityPage() {
           )}
         </Panel>
 
-        <Panel className="p-5">
-          <h2 className="text-base font-semibold text-ink">我们不承诺的</h2>
-          <ul className="mt-3 grid gap-2 text-[13px] leading-relaxed text-subtle">
-            <li>不承诺过任何网站的风控。指纹隔离是工具，结果取决于你怎么用。</li>
-            <li>不承诺防住已经被入侵的操作系统。</li>
-            <li>不承诺覆盖你自己关掉的保护。</li>
-            <li>不声称 100% 自研内核：内核基于 Ungoogled Chromium，BSD-3-Clause。</li>
-          </ul>
-        </Panel>
       </div>
     </div>
   );

@@ -25,7 +25,7 @@ import { stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
 import { useLocale } from "@/lib/use-locale";
-import { lockVault, unlockVault, vaultExists } from "@/lib/vault";
+import { lockVault, unlockVault } from "@/lib/vault";
 
 const NAV = [
   { to: "/", key: "navEnv" as const, icon: Box },
@@ -39,7 +39,6 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const locale = useLocale();
-  const density = useEnclave((s) => s.settings.density);
   const locked = useEnclave((s) => s.locked);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -62,10 +61,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div
-      className={cn(
-        "flex h-full min-h-full bg-canvas text-muted",
-        density === "comfortable" && "text-[15px]",
-      )}
+      className="flex h-full min-h-full bg-canvas text-muted"
     >
       <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
         <div className="flex h-16 items-center gap-2.5 px-5">
@@ -177,8 +173,7 @@ function AccountChip() {
 /** 保险箱没建起来之前不显示锁按钮：那把锁是假的。 */
 function LockButton() {
   const locale = useLocale();
-  const [exists, setExists] = useState(false);
-  useEffect(() => setExists(vaultExists()), []);
+  const exists = useEnclave((s) => s.vault.exists);
   if (!exists) return null;
   return (
     <Button

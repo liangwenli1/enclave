@@ -10,7 +10,6 @@
  *   - 本机只存设备令牌，**从不存账号密码**。
  */
 import { FREE, type PlanLimits } from "./plans";
-import { LICENSE_PUBLIC_KEY } from "./public-key";
 import { VENDOR_URL, vendorConfigured } from "./vendor-url";
 import { limitsOf, verifyLicense, type LicensePayload } from "./verify";
 
@@ -219,6 +218,4 @@ export async function signOut(): Promise<AccountState> {
   return SIGNED_OUT;
 }
 
-/** 给账号页显示，方便用户核对客户端用的是哪把公钥。 */
-export const licenseKeyFingerprint = LICENSE_PUBLIC_KEY.slice(0, 12);
 export { vendorConfigured };

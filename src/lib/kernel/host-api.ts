@@ -171,17 +171,6 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-export async function hostOnline(): Promise<boolean> {
-  const conn = await connection();
-  if (!conn) return false;
-  try {
-    const res = await fetch(`${conn.base}/v1/health`, { signal: AbortSignal.timeout(2500) });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 const OFFLINE_VIEW: KernelView = {
   status: {
     state: "error",

@@ -24,7 +24,6 @@ type RuntimeView = {
   hashOk: boolean;
   sha256?: string;
   error?: string;
-  probe?: { ok: boolean; detail: string };
 };
 
 type LabState = {
@@ -43,13 +42,13 @@ type Store = {
   runtimes: Record<string, RuntimeView>;
   lab: LabState;
   locked: boolean;
-  selectedIds: string[];
   planNotice: { title: string; body: string } | null;
   /** 账号与额度。来自厂商签名的许可证，不持久化在这里——见 lib/license/client.ts。 */
   account: AccountState;
+  /** 保险箱是否已建、是否已解锁。由 lib/vault.ts 写入。 */
+  vault: { exists: boolean; unlocked: boolean };
   setAccount: (account: AccountState) => void;
   setLocale: (locale: AppSettings["locale"]) => void;
-  setDensity: (density: AppSettings["density"]) => void;
   setLocked: (locked: boolean) => void;
   setPlanNotice: (notice: { title: string; body: string } | null) => void;
   patchSettings: (patch: Partial<AppSettings>) => void;
@@ -59,7 +58,6 @@ type Store = {
   restoreEnv: (id: string) => void;
   destroyEnv: (id: string) => void;
   duplicateEnv: (id: string) => Environment | null;
-  setSelected: (ids: string[]) => void;
   upsertProxy: (proxy: ProxyItem) => void;
   removeProxy: (id: string) => void;
   upsertExt: (ext: ExtensionItem) => void;
@@ -74,7 +72,6 @@ type Store = {
 
 const initialSettings: AppSettings = {
   locale: "zh",
-  density: "compact",
   allowNoSandboxHost: false,
   allowPreviewKernel: false,
   onboarded: false,
@@ -92,14 +89,12 @@ export const useEnclave = create<Store>()(
       runtimes: {},
       lab: { lastByEnv: {}, lastRunId: null },
       locked: false,
-      selectedIds: [],
       planNotice: null,
       account: SIGNED_OUT,
+      vault: { exists: false, unlocked: false },
       setAccount: (account) => set({ account }),
       setLocale: (locale) =>
         set((s) => ({ settings: { ...s.settings, locale } })),
-      setDensity: (density) =>
-        set((s) => ({ settings: { ...s.settings, density } })),
       setLocked: (locked) => set({ locked }),
       setPlanNotice: (planNotice) => set({ planNotice }),
       patchSettings: (patch) =>
@@ -150,7 +145,6 @@ export const useEnclave = create<Store>()(
       destroyEnv: (id) =>
         set((s) => ({
           environments: s.environments.filter((e) => e.id !== id),
-          selectedIds: s.selectedIds.filter((x) => x !== id),
         })),
       duplicateEnv: (id) => {
         const src = get().environments.find((e) => e.id === id);
@@ -166,7 +160,6 @@ export const useEnclave = create<Store>()(
         set((s) => ({ environments: [copy, ...s.environments] }));
         return copy;
       },
-      setSelected: (ids) => set({ selectedIds: ids }),
       upsertProxy: (proxy) =>
         set((s) => ({
           proxies: [proxy, ...s.proxies.filter((p) => p.id !== proxy.id)],

@@ -20,11 +20,10 @@ const STATE_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "bad" }>
   error: { text: "出错了", tone: "bad" },
 };
 
+/** 只在出错时出现，所以写得具体一点：说清是什么、下一步做什么。 */
 const ERROR_HINT: Record<string, string> = {
-  KERNEL_HASH_MISMATCH:
-    "下载到的文件和清单里的哈希对不上。可能是网络中间被改写，也可能下载没完成。删掉重下；反复出现请联系我们。",
-  KERNEL_CHANNEL_BLOCKED:
-    "这个平台的内核还在预览通道。到安全中心明确同意后才能准入。",
+  KERNEL_HASH_MISMATCH: "文件和清单里的哈希对不上，已拒用。重新准入一次；反复出现请联系我们。",
+  KERNEL_CHANNEL_BLOCKED: "这个平台的内核还在预览通道，要先到安全中心同意。",
   KERNEL_UNTRUSTED_SOURCE: "清单里没有这个平台的哈希，或者文件不在了。",
   HOST_UNAVAILABLE: "连不上本机服务。重启工作台再试。",
 };
@@ -78,9 +77,7 @@ function KernelsPage() {
         <PageHeader title={t(locale, "kernelsTitle")} />
         <Panel className="p-6">
           <Badge tone="bad">连不上本机服务</Badge>
-          <p className="mt-3 text-[13px] leading-relaxed text-muted">
-            工作台找不到本机的 Enclave 服务，所有需要动内核的操作都不可用。重启工作台通常能解决。
-          </p>
+          <p className="mt-3 text-[13px] text-muted">重启工作台再试。</p>
         </Panel>
       </div>
     );
@@ -90,7 +87,7 @@ function KernelsPage() {
     <div className="mx-auto max-w-3xl px-8 py-6">
       <PageHeader
         title={t(locale, "kernelsTitle")}
-        status="内核在你本机下载、校验、运行。每次启动环境前都会重新核对要执行的那个文件。"
+        status={`${kernel?.id ?? KERNEL_PIN.id} ${kernel?.version ?? KERNEL_PIN.version} · ${label.text}`}
       />
 
       <Panel>
@@ -162,18 +159,11 @@ function KernelsPage() {
       </Panel>
 
       <Panel className="mt-4 p-5">
-        <h2 className="text-base font-semibold text-ink">这台机器上的运行条件</h2>
-        <dl className="mt-3 grid gap-2 text-[13px]">
-          <Line
-            k="窗口"
-            v={caps?.headlessForced ? "没有显示器，内核以无头模式运行" : "内核会弹出可见窗口"}
-          />
-          <Line k="沙箱" v={caps?.sandboxLikely === false ? "当前环境可能无法启用沙箱" : "默认开启"} />
-          <Line k="调试端口" v="只绑 127.0.0.1，且要求本机令牌" />
+        <dl className="grid gap-2 text-[13px]">
+          <Line k="窗口" v={caps?.headlessForced ? "无头（没有显示器）" : "可见窗口"} />
+          <Line k="沙箱" v={caps?.sandboxLikely === false ? "本机可能无法启用" : "默认开启"} />
+          <Line k="许可证" v="Ungoogled Chromium · BSD-3-Clause" />
         </dl>
-        <p className="mt-4 text-[13px] leading-relaxed text-subtle">
-          内核基于 Ungoogled Chromium，BSD-3-Clause 许可证。我们不声称 100% 自研内核，也不声称做过完整安全审计。
-        </p>
       </Panel>
     </div>
   );

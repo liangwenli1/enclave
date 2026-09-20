@@ -6,6 +6,8 @@
  *
  * 没设主密码时**不保存任何密码**——宁可让用户每次填，也不明文落盘。
  */
+import { useEnclave } from "@/lib/store";
+
 const KEY = "enclave.vault.v1";
 const ITERATIONS = 310_000;
 
@@ -89,24 +91,12 @@ async function open(key: CryptoKey, box: { iv: string; ct: string }): Promise<st
 /** 解锁后的密钥只在内存里。锁屏、刷新、退出都会丢。 */
 let unlockedKey: CryptoKey | null = null;
 let cache: Record<string, string> = {};
-const listeners = new Set<() => void>();
 
+/** 界面只从 store 读保险箱状态；这里是唯一的写入点。 */
 function notify() {
-  for (const fn of listeners) fn();
+  useEnclave.setState({ vault: { exists: readFile() !== null, unlocked: unlockedKey !== null } });
 }
-
-export function subscribeVault(fn: () => void): () => void {
-  listeners.add(fn);
-  return () => listeners.delete(fn);
-}
-
-export function vaultExists(): boolean {
-  return readFile() !== null;
-}
-
-export function vaultUnlocked(): boolean {
-  return unlockedKey !== null;
-}
+notify();
 
 /** 第一次设置主密码，或改主密码（会把已存的密码重新加密）。 */
 export async function setMasterPassword(password: string, current?: string): Promise<void> {
@@ -175,10 +165,6 @@ export async function putSecret(id: string, secret: string): Promise<void> {
 export function getSecret(id: string): string | null {
   if (!unlockedKey) return null;
   return cache[id] ?? null;
-}
-
-export function hasSecret(id: string): boolean {
-  return Boolean(cache[id]);
 }
 
 export async function removeSecret(id: string): Promise<void> {

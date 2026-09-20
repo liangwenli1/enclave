@@ -41,10 +41,7 @@ function LabPage() {
       <h1 className="text-[32px] leading-tight font-bold tracking-tight text-ink">
         {t(locale, "labTitle")}
       </h1>
-      <p className="mt-2 max-w-[68ch] text-[13px] text-subtle">
-        左边是工作台这一页（对照），右边是真正的内核窗口。两边并排比，就知道这个环境在外面长什么样。
-        内核窗口的数据通过本机调试端口采集，采不到就说采不到，不会拿对照组顶替。
-      </p>
+      <p className="mt-2 text-[13px] text-subtle">对照是工作台这一页，另一边是真正的内核窗口。</p>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <select
           className="h-8 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] text-ink"

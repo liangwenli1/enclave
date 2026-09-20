@@ -7,7 +7,7 @@ import {
 import { runningCount } from "@/lib/license/plans";
 import type { Environment, ProxyItem } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
-import { getSecret, vaultUnlocked } from "@/lib/vault";
+import { getSecret } from "@/lib/vault";
 
 /**
  * 代理地址。密码来自保险箱，保险箱锁着就拿不到 —— 这时宁可报错，
@@ -58,7 +58,7 @@ export async function startEnv(env: Environment) {
 
   // 2. 代理密码：保险箱锁着就先解锁，别让用户以为在走代理
   const proxy = store.proxies.find((p) => p.id === env.proxyId);
-  if (proxy?.auth?.hasPassword && !vaultUnlocked()) {
+  if (proxy?.auth?.hasPassword && !store.vault.unlocked) {
     const code = "VAULT_LOCKED";
     failRuntime(env.id, code);
     store.setPlanNotice({

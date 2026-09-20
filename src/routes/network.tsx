@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Globe } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   Badge,
   Button,
@@ -17,7 +17,7 @@ import { useLocale } from "@/lib/use-locale";
 import { t } from "@/lib/i18n";
 import { makeId, type ProxyItem } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
-import { putSecret, removeSecret, subscribeVault, vaultExists, vaultUnlocked } from "@/lib/vault";
+import { putSecret, removeSecret } from "@/lib/vault";
 
 export const Route = createFileRoute("/network")({ component: NetworkPage });
 
@@ -31,7 +31,7 @@ function NetworkPage() {
     <div className="mx-auto max-w-4xl px-8 py-6">
       <PageHeader
         title={t(locale, "netTitle")}
-        status="代理绑定到环境后，内核启动时会同时关掉 QUIC 和 DoH，避免绕过代理直连。"
+        status={`${proxies.length} 个代理`}
         actions={
           <Button variant="primary" onClick={() => setOpen(true)}>
             {t(locale, "addProxy")}
@@ -44,7 +44,7 @@ function NetworkPage() {
           <Empty
             icon={<Globe className="size-8" />}
             title="还没有代理"
-            body="添加 HTTP / HTTPS / SOCKS5 代理，然后在环境详情里绑定。不绑代理的环境走你本机的网络。"
+            body="不绑代理的环境走本机网络出网。"
             action={
               <Button variant="primary" onClick={() => setOpen(true)}>
                 {t(locale, "addProxy")}
@@ -108,11 +108,6 @@ function NetworkPage() {
         )}
       </Panel>
 
-      <p className="mt-4 max-w-[68ch] text-[13px] leading-relaxed text-subtle">
-        工作台不会替你去探测代理的出口 IP —— 那样探到的是本机网络，不是环境真正的出口，容易看错。
-        要确认出口，启动环境后在那个窗口里打开查 IP 的网站。
-      </p>
-
       {open ? <ProxyDialog onClose={() => setOpen(false)} /> : null}
     </div>
   );
@@ -130,13 +125,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
     country: "",
   });
   const [error, setError] = useState("");
-  const [vault, setVault] = useState({ exists: false, unlocked: false });
-
-  useEffect(() => {
-    const sync = () => setVault({ exists: vaultExists(), unlocked: vaultUnlocked() });
-    sync();
-    return subscribeVault(sync);
-  }, []);
+  const vault = useEnclave((s) => s.vault);
 
   const canStorePassword = vault.exists && vault.unlocked;
 

@@ -32,7 +32,7 @@ function ExtensionsPage() {
     <div className="mx-auto max-w-4xl px-8 py-6">
       <PageHeader
         title={t(locale, "extTitle")}
-        status="扩展是解压后的文件夹，启动环境时按环境各自的选择加载。加载扩展会让指纹更独特。"
+        status={`${extensions.length} 个扩展`}
         actions={
           <Button variant="primary" onClick={() => setOpen(true)}>
             {t(locale, "addExt")}
@@ -45,7 +45,7 @@ function ExtensionsPage() {
           <Empty
             icon={<Puzzle className="size-8" />}
             title="还没有扩展"
-            body="添加一个解压好的扩展文件夹，然后在环境详情里勾选要用它的环境。"
+            body="添加后在环境详情里勾选。"
             action={
               <Button variant="primary" onClick={() => setOpen(true)}>
                 {t(locale, "addExt")}
@@ -133,7 +133,7 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
       return;
     }
     if (clean.toLowerCase().endsWith(".crx")) {
-      setError("内核只能加载解压后的文件夹。先把 .crx 解压出来，再填那个文件夹。");
+      setError("只能加载解压后的文件夹，先把 .crx 解压。");
       return;
     }
     const permissions = perms.split(/[,\s]+/).filter(Boolean);
@@ -144,7 +144,6 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
       path: clean,
       permissions,
       highRisk: permissions.some((p) => RISKY.includes(p)),
-      enabledByDefault: false,
     });
     onClose();
   };

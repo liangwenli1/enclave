@@ -46,13 +46,6 @@ export type ProxyItem = {
   auth?: ProxyAuth;
   country?: string;
   city?: string;
-  lastProbe?: {
-    at: number;
-    ok: boolean;
-    latencyMs?: number;
-    exitIp?: string;
-    error?: string;
-  };
 };
 
 export type ExtensionItem = {
@@ -63,7 +56,6 @@ export type ExtensionItem = {
   version?: string;
   permissions: string[];
   highRisk: boolean;
-  enabledByDefault: boolean;
 };
 
 export type TimelineEvent = {
@@ -127,7 +119,6 @@ export type LabSnapshot = {
 
 export type AppSettings = {
   locale: "zh" | "en";
-  density: "compact" | "comfortable";
   allowNoSandboxHost: boolean;
   /** 内核还在预览通道时，用户明确同意后才允许准入和启动。 */
   allowPreviewKernel: boolean;
