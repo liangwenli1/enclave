@@ -44,7 +44,6 @@ type Store = {
   audit: AuditEvent[];
   runtimes: Record<string, RuntimeView>;
   lab: LabState;
-  locked: boolean;
   planNotice: { title: string; body: string } | null;
   /** 账号与额度。来自厂商签名的许可证，不持久化在这里——见 lib/license/client.ts。 */
   account: AccountState;
@@ -54,7 +53,6 @@ type Store = {
   api: { active: boolean; token: string; baseUrl: string };
   setAccount: (account: AccountState) => void;
   setLocale: (locale: AppSettings["locale"]) => void;
-  setLocked: (locked: boolean) => void;
   setPlanNotice: (notice: { title: string; body: string } | null) => void;
   patchSettings: (patch: Partial<AppSettings>) => void;
   upsertEnv: (env: Environment) => void;
@@ -94,7 +92,6 @@ export const useEnclave = create<Store>()(
       audit: [],
       runtimes: {},
       lab: { lastByEnv: {}, lastRunId: null },
-      locked: false,
       planNotice: null,
       account: SIGNED_OUT,
       vault: { exists: false, unlocked: false },
@@ -102,7 +99,6 @@ export const useEnclave = create<Store>()(
       setAccount: (account) => set({ account }),
       setLocale: (locale) =>
         set((s) => ({ settings: { ...s.settings, locale } })),
-      setLocked: (locked) => set({ locked }),
       setPlanNotice: (planNotice) => set({ planNotice }),
       patchSettings: (patch) =>
         set((s) => ({ settings: { ...s.settings, ...patch } })),

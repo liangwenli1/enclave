@@ -227,7 +227,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               disabled={!canStorePassword}
             />
           </Field>
-          {!canStorePassword ? (
+          {!vault.exists ? (
             <Link to="/settings" className="text-[13px] font-medium text-accent underline">
               去设置主密码
             </Link>

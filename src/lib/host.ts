@@ -89,10 +89,6 @@ export async function startEnv(env: Environment) {
   if (needsLockedSecret(env)) {
     const code = "VAULT_LOCKED";
     failRuntime(env.id, code, "代理密码在锁着的保险箱里，先解锁。");
-    store.setPlanNotice({
-      title: "保险箱是锁着的",
-      body: `环境「${env.name}」绑定的代理需要密码，密码在保险箱里。先解锁保险箱再启动，否则这个环境会用你本机的网络出网。`,
-    });
     return { ok: false as const, code, message: "代理密码在锁着的保险箱里" };
   }
 

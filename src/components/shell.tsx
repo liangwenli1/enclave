@@ -39,7 +39,8 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const locale = useLocale();
-  const locked = useEnclave((s) => s.locked);
+  // 锁没锁只有一个事实来源：保险箱建了、但密钥不在内存里。重启后天然就是这个状态。
+  const locked = useEnclave((s) => s.vault.exists && !s.vault.unlocked);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
@@ -183,7 +184,6 @@ function LockButton() {
       title={t(locale, "lockNow")}
       onClick={() => {
         lockVault();
-        useEnclave.getState().setLocked(true);
       }}
     >
       <Lock className="size-3.5" />
@@ -349,7 +349,6 @@ function LockScreen() {
       return;
     }
     setValue("");
-    useEnclave.getState().setLocked(false);
   };
 
   return (
