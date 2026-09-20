@@ -15,11 +15,12 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use enclave_host::api::{allows, ApiLevel, EnvEntry, StartSpec};
+use enclave_host::feed;
 use enclave_host::kernel::{
     admit, capabilities, default_version, ensure_dirs, kernels_for_this_os, list_search_engines,
     load_manifest, prune_dead, purge_environment, read_status_fast, remove_kernel,
-    restore_runtimes, start_environment, stop_environment, valid_env_id, HostPaths, KernelRecord,
-    KernelStatus, RuntimeRow,
+    restore_runtimes, saved_records, start_environment, stop_environment, this_platform,
+    valid_env_id, version_key, HostPaths, KernelRecord, KernelStatus, RuntimeRow,
 };
 use rand::RngCore;
 use serde::Deserialize;
@@ -45,6 +46,10 @@ struct App {
     paths: HostPaths,
     /// 这个系统能用的全部内核版本，新的在前。
     kernels: Mutex<Vec<Arc<KernelSlot>>>,
+    /// 安装包自带清单里的版本。永远可信，远程清单盖不掉它们。
+    bundled: Vec<KernelRecord>,
+    /// 已接受的远程清单的签发时间。比它旧的清单不收，防止有人拿旧清单回放。
+    feed_issued_at: Mutex<u64>,
     token: String,
     runtimes: Arc<Mutex<HashMap<String, RuntimeRow>>>,
     api: Arc<Mutex<ApiState>>,
@@ -53,6 +58,8 @@ struct App {
 /// 一个内核版本和它在本进程里的状态。版本之间互不影响：可以一个在下载、另一个在跑。
 struct KernelSlot {
     record: KernelRecord,
+    /// 清单里已经没有它了，只是本机还留着下载好的文件：能用、能删，不能再下载。
+    withdrawn: bool,
     status: Arc<Mutex<KernelStatus>>,
     admitting: Arc<Mutex<bool>>,
     /// 本进程是否已经完整校验过这个版本的可执行文件。第一次启动环境时做全量 sha256，
@@ -61,10 +68,11 @@ struct KernelSlot {
 }
 
 impl KernelSlot {
-    async fn load(paths: &HostPaths, record: KernelRecord) -> Arc<Self> {
+    async fn load(paths: &HostPaths, record: KernelRecord, withdrawn: bool) -> Arc<Self> {
         let status = read_status_fast(paths, &record).await;
         Arc::new(Self {
             record,
+            withdrawn,
             status: Arc::new(Mutex::new(status)),
             admitting: Arc::new(Mutex::new(false)),
             verified_once: AtomicBool::new(false),
@@ -87,6 +95,60 @@ impl KernelSlot {
 }
 
 impl App {
+    /// 重新拼出版本列表：自带的 + 远程上架的（同版本以自带的为准）+ 本机还留着的已下架版本。
+    /// 记录没变的版本沿用原来的槽位，正在下载的、校验过的状态都不丢。
+    async fn rebuild_kernels(&self, remote: &[KernelRecord]) {
+        let mut wanted: Vec<(KernelRecord, bool)> = Vec::new();
+        let listed = self.bundled.iter().chain(remote.iter());
+        for record in listed.filter(|k| k.platform == this_platform()) {
+            if !wanted.iter().any(|(k, _)| k.version == record.version) {
+                wanted.push((record.clone(), false));
+            }
+        }
+        for record in saved_records(&self.paths) {
+            if !wanted.iter().any(|(k, _)| k.version == record.version) {
+                wanted.push((record, true));
+            }
+        }
+        wanted.sort_by_key(|(k, _)| std::cmp::Reverse(version_key(&k.version)));
+
+        let mut slots = self.kernels.lock().await;
+        let mut next = Vec::new();
+        for (record, withdrawn) in wanted {
+            let kept = slots
+                .iter()
+                .find(|s| s.record == record && s.withdrawn == withdrawn)
+                .cloned();
+            next.push(match kept {
+                Some(slot) => slot,
+                None => KernelSlot::load(&self.paths, record, withdrawn).await,
+            });
+        }
+        // 正在下载的版本即使被下架了也让它做完，下一次重拼时再按规矩处理。
+        for slot in slots.iter() {
+            let gone = !next.iter().any(|n| n.record.version == slot.record.version);
+            if gone && *slot.admitting.lock().await {
+                next.push(slot.clone());
+            }
+        }
+        *slots = next;
+    }
+
+    /// 收下一份远程清单：验签、不许回退、落盘、重拼。
+    async fn accept_feed(&self, signed: &str) -> anyhow::Result<usize> {
+        let list = feed::verify(signed, &feed::vendor_key()?)?;
+        {
+            let mut latest = self.feed_issued_at.lock().await;
+            if list.issued_at < *latest {
+                anyhow::bail!("这份清单比已经接受过的旧");
+            }
+            *latest = list.issued_at;
+        }
+        tokio::fs::write(feed_path(&self.paths), signed).await?;
+        self.rebuild_kernels(&list.kernels).await;
+        Ok(list.kernels.len())
+    }
+
     async fn slot(&self, version: &str) -> Option<Arc<KernelSlot>> {
         self.kernels
             .lock()
@@ -95,6 +157,11 @@ impl App {
             .find(|k| k.record.version == version)
             .cloned()
     }
+}
+
+/// 上一次接受的远程清单。重启、离线时靠它，版本列表不会缩回去。
+fn feed_path(paths: &HostPaths) -> PathBuf {
+    paths.kernel_root.join("feed.signed")
 }
 
 fn unknown_kernel(version: &str) -> Json<Value> {
@@ -123,12 +190,8 @@ async fn main() {
     ensure_dirs(&paths).await.expect("data dirs");
     let token = load_or_create_token(&paths.token);
     let manifest = load_manifest(&paths.manifest).expect("kernels.manifest.json");
-    let records = kernels_for_this_os(&manifest);
-    assert!(!records.is_empty(), "本平台没有可用内核清单");
-    let mut kernels = Vec::new();
-    for record in records {
-        kernels.push(KernelSlot::load(&paths, record).await);
-    }
+    let bundled = kernels_for_this_os(&manifest);
+    assert!(!bundled.is_empty(), "本平台没有可用内核清单");
     let runtimes = Arc::new(Mutex::new(HashMap::new()));
     restore_runtimes(&paths, &runtimes).await;
     let api = ApiState {
@@ -139,11 +202,20 @@ async fn main() {
     };
     let state = Arc::new(App {
         paths,
-        kernels: Mutex::new(kernels),
+        kernels: Mutex::new(Vec::new()),
+        bundled,
+        feed_issued_at: Mutex::new(0),
         token,
         runtimes,
         api: Arc::new(Mutex::new(api)),
     });
+
+    // 落盘的那份清单重新验一遍再用：磁盘上的东西不因为是自己写的就可信。
+    let saved_feed = tokio::fs::read_to_string(feed_path(&state.paths)).await;
+    match saved_feed {
+        Ok(signed) if state.accept_feed(&signed).await.is_ok() => {}
+        _ => state.rebuild_kernels(&[]).await,
+    }
 
     let origins: Vec<HeaderValue> = APP_ORIGINS
         .iter()
@@ -155,6 +227,7 @@ async fn main() {
         .route("/v1/kernel", get(kernel_view))
         .route("/v1/kernel/admit", post(kernel_admit))
         .route("/v1/kernel/remove", post(kernel_remove))
+        .route("/v1/kernel/feed", post(kernel_feed))
         .route("/v1/environments/start", post(env_start))
         .route("/v1/environments/stop", post(env_stop))
         .route("/v1/environments/purge", post(env_purge))
@@ -342,10 +415,15 @@ async fn kernel_view(State(state): State<Arc<App>>) -> Json<Value> {
     for slot in &slots {
         kernels.push(json!({
             "record": slot.record,
+            "withdrawn": slot.withdrawn,
             "status": slot.current_status(&state.paths).await,
         }));
     }
-    let records: Vec<KernelRecord> = slots.iter().map(|s| s.record.clone()).collect();
+    let records: Vec<KernelRecord> = slots
+        .iter()
+        .filter(|s| !s.withdrawn)
+        .map(|s| s.record.clone())
+        .collect();
     prune_dead(&state.paths, &state.runtimes).await;
     let runtimes: Vec<RuntimeRow> = state.runtimes.lock().await.values().cloned().collect();
     Json(json!({
@@ -370,6 +448,13 @@ async fn kernel_admit(State(state): State<Arc<App>>, Json(body): Json<AdmitBody>
     let Some(slot) = state.slot(&body.version).await else {
         return unknown_kernel(&body.version);
     };
+    if slot.withdrawn {
+        return Json(json!({
+            "ok": false,
+            "code": "KERNEL_WITHDRAWN",
+            "message": "这个版本已经下架，不能再下载。",
+        }));
+    }
     if slot.record.channel != "stable" && !body.allow_preview_channel {
         return Json(json!({
             "ok": false,
@@ -442,7 +527,32 @@ async fn kernel_remove(State(state): State<Arc<App>>, Json(body): Json<RemoveBod
     }
     slot.verified_once.store(false, Ordering::Relaxed);
     *slot.status.lock().await = read_status_fast(&state.paths, &slot.record).await;
+    if slot.withdrawn {
+        // 下架的版本删掉之后就没有留在列表里的理由了。
+        state
+            .kernels
+            .lock()
+            .await
+            .retain(|s| !Arc::ptr_eq(s, &slot));
+    }
     Json(json!({ "ok": true }))
+}
+
+#[derive(Deserialize)]
+struct FeedBody {
+    signed: String,
+}
+
+/// 工作台从厂商那里拿到的签名清单，原样递过来。信不信由这里的验签决定，不由递的人决定。
+async fn kernel_feed(State(state): State<Arc<App>>, Json(body): Json<FeedBody>) -> Json<Value> {
+    match state.accept_feed(&body.signed).await {
+        Ok(count) => Json(json!({ "ok": true, "count": count })),
+        Err(e) => Json(json!({
+            "ok": false,
+            "code": "KERNEL_LIST_REJECTED",
+            "message": format!("内核清单没通过校验：{e:#}"),
+        })),
+    }
 }
 
 #[derive(Deserialize)]

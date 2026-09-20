@@ -11,7 +11,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
 use tokio::time::{sleep, Duration};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KernelRecord {
     pub id: String,
@@ -183,6 +183,15 @@ pub fn this_platform() -> &'static str {
     }
 }
 
+/// 版本号会被拼进本机路径（解压目录、准入记录），只许数字和点。
+pub fn valid_version(version: &str) -> bool {
+    !version.is_empty()
+        && version.len() <= 32
+        && version
+            .split('.')
+            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+}
+
 /// "148.0.7778.215" → [148, 0, 7778, 215]，用来比较新旧。
 pub fn version_key(version: &str) -> Vec<u64> {
     version.split('.').map(|p| p.parse().unwrap_or(0)).collect()
@@ -259,6 +268,27 @@ pub fn status_path(paths: &HostPaths, k: &KernelRecord) -> PathBuf {
     paths
         .kernel_root
         .join(format!("{}-{}.status.json", k.id, k.version))
+}
+
+/// 准入成功时把这个版本的清单记录存在它旁边。以后清单里没有它了（厂商下架、
+/// 或者新安装包不再自带这个旧版本），已经下载的这份照样认得、照样能用。
+pub fn record_path(paths: &HostPaths, k: &KernelRecord) -> PathBuf {
+    paths
+        .kernel_root
+        .join(format!("{}-{}.record.json", k.id, k.version))
+}
+
+/// 本机下载过、并且文件还在的全部版本。
+pub fn saved_records(paths: &HostPaths) -> Vec<KernelRecord> {
+    let Ok(dir) = std::fs::read_dir(&paths.kernel_root) else {
+        return Vec::new();
+    };
+    dir.flatten()
+        .filter(|e| e.file_name().to_string_lossy().ends_with(".record.json"))
+        .filter_map(|e| std::fs::read(e.path()).ok())
+        .filter_map(|raw| serde_json::from_slice::<KernelRecord>(&raw).ok())
+        .filter(|k| k.platform == this_platform() && resolve_executable(paths, k).is_some())
+        .collect()
 }
 
 pub fn extract_dir(paths: &HostPaths, k: &KernelRecord) -> PathBuf {
@@ -995,6 +1025,7 @@ pub async fn admit(
         admitted_at: Some(now_ms()),
     };
     persist_status(paths, k, &s).await?;
+    tokio::fs::write(record_path(paths, k), serde_json::to_vec_pretty(k)?).await?;
     Ok(())
 }
 
@@ -1462,6 +1493,7 @@ pub async fn remove_kernel(paths: &HostPaths, k: &KernelRecord) -> Result<()> {
         archive.with_extension("part"),
         archive,
         status_path(paths, k),
+        record_path(paths, k),
     ] {
         if file.exists() {
             tokio::fs::remove_file(&file).await?;
