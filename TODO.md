@@ -99,3 +99,13 @@ Team 账号的所有者邀请成员；成员用自己的账号登录，按角色
 - 一个环境的会话资产超过 5 MB 时：拒绝同步并提示，还是分块。
 - 成员离开团队后，他本机上已经解密过的会话副本无法收回 —— 只能在文档里说清楚，
   并在移除成员时轮换团队密钥。
+
+## 3. macOS 版
+
+打包本身不缺 Mac：GitHub 有 macOS runner，`release.yml` 加一个 job 就行。缺的是产品侧两处，
+没有 Mac 验证之前不做：
+
+- 清单里的 mac 内核是 `.dmg`，Host 的 `extract_archive` 只会 zip 和 tar。要用 `hdiutil attach`
+  挂载后把 `Chromium.app` 拷出来。
+- `find_chrome` 要认 `Chromium.app/Contents/MacOS/Chromium`。
+- 未签名、未公证的 app 在 Apple Silicon 上会被 Gatekeeper 拦，至少要 ad-hoc 签名，对外分发要开发者账号。
