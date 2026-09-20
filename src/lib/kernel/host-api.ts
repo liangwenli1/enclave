@@ -188,10 +188,14 @@ export async function getKernelView(): Promise<KernelView> {
 }
 
 export async function admitKernel(allowPreviewChannel: boolean): Promise<KernelStatus & { code?: string; message?: string }> {
-  return call("/v1/kernel/admit", {
-    method: "POST",
-    body: JSON.stringify({ allowPreviewChannel }),
-  });
+  try {
+    return await call("/v1/kernel/admit", {
+      method: "POST",
+      body: JSON.stringify({ allowPreviewChannel }),
+    });
+  } catch {
+    return { ...OFFLINE_VIEW.status, code: "HOST_UNAVAILABLE", message: "连不上本机服务。" };
+  }
 }
 
 export async function startEnvironment(input: {

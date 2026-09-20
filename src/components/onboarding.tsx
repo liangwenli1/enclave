@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
 import { admitKernel, getKernelView } from "@/lib/kernel/host-api";
 import { t, type Locale } from "@/lib/i18n";
@@ -20,8 +20,20 @@ export function Onboarding() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [admitted, setAdmitted] = useState(false);
+  // 这个平台的内核是不是还在预览通道。是的话要先拿到同意，否则准入必然被 Host 拒绝，
+  // 而引导是全屏遮罩，用户到不了安全中心 —— 同意项必须就放在这一步里。
+  const [previewChannel, setPreviewChannel] = useState(false);
+
+  useEffect(() => {
+    if (onboarded) return;
+    void getKernelView().then((view) => {
+      setPreviewChannel(Boolean(view.kernel && view.kernel.manifest.channel !== "stable"));
+      if (view.status.state === "admitted") setAdmitted(true);
+    });
+  }, [onboarded]);
 
   if (onboarded) return null;
+  const needsConsent = previewChannel && !allowPreview;
 
   const finish = () => {
     useEnclave.getState().patchSettings({ onboarded: true });
@@ -31,8 +43,9 @@ export function Onboarding() {
     setBusy(true);
     setError(null);
     const res = (await admitKernel(allowPreview)) as { code?: string; message?: string };
-    if (res?.code === "KERNEL_CHANNEL_BLOCKED") {
-      setError("这个平台的内核还在预览通道，需要先到安全中心同意使用。");
+    if (res?.code) {
+      // 被拒或连不上：直接说原因，不进下面的轮询（否则按钮会转十分钟）。
+      setError(res.message ?? res.code);
       setBusy(false);
       return;
     }
@@ -79,9 +92,34 @@ export function Onboarding() {
           <div className="mt-5 grid gap-4">
             <p className="text-[13px] leading-relaxed text-muted">{t(locale, "kernelNeed")}</p>
             {admitted ? <Badge tone="ok">已准入</Badge> : null}
+            {previewChannel && !admitted ? (
+              <label className="flex cursor-pointer items-start gap-2.5 text-[13px]">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-4 flex-none accent-[var(--enclave-accent)]"
+                  checked={allowPreview}
+                  onChange={(e) => {
+                    useEnclave.getState().patchSettings({ allowPreviewKernel: e.target.checked });
+                    useEnclave.getState().addAudit({
+                      action: "preview_kernel_consent",
+                      level: "warn",
+                      detail: e.target.checked ? "允许预览通道内核" : "已撤销",
+                    });
+                  }}
+                />
+                <span className="text-muted">
+                  这个平台的内核还在预览通道：哈希已核对，但还没做过完整行为测试。我同意使用。
+                </span>
+              </label>
+            ) : null}
             {error ? <p className="text-[13px] text-bad">{error}</p> : null}
             <div>
-              <Button variant="primary" disabled={busy || admitted} onClick={() => void admit()}>
+              <Button
+                variant="primary"
+                disabled={busy || admitted || needsConsent}
+                title={needsConsent ? "先勾选上面的同意项" : undefined}
+                onClick={() => void admit()}
+              >
                 {busy ? "下载并校验中…" : admitted ? "已完成" : t(locale, "download")}
               </Button>
             </div>
@@ -124,7 +162,10 @@ export function Onboarding() {
         <div className="mt-6 flex justify-between">
           <Button onClick={finish}>{t(locale, "onboardSkip")}</Button>
           {step < 2 ? (
-            <Button variant="primary" onClick={() => setStep((s) => s + 1)}>
+            <Button
+              variant={step === 1 && !admitted ? "secondary" : "primary"}
+              onClick={() => setStep((s) => s + 1)}
+            >
               {t(locale, "next")}
             </Button>
           ) : null}
