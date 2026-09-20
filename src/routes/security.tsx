@@ -17,28 +17,35 @@ function SecurityPage() {
     void getKernelView().then(setView);
   }, []);
 
+  // 连不上本机服务时，内核的状态是"不知道"，不是"没准入"，更不是"正常"。
+  const online = view?.online ?? false;
   const admitted = view?.status.state === "admitted";
   const previewChannel = Boolean(view?.kernel && view.kernel.manifest.channel !== "stable");
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
       <PageHeader title={t("securityTitle")} />
 
       <div className="grid gap-4">
-        <Panel>
+        <Panel className="overflow-hidden">
           <PanelHeader title="当前状态" />
           <ul className="grid gap-px bg-line">
             <Check
-              ok={admitted}
-              label="内核完整性"
-              detail={
-admitted ? "每次启动前核对可执行文件哈希" : "内核还没准入，环境无法启动"
-              }
+              ok={online}
+              label="本机接口"
+              detail={online ? "仅 127.0.0.1 · 需要令牌 · 限工作台来源" : "连不上本机服务，重启工作台再试"}
             />
             <Check
-              ok
-              label="本机接口"
-              detail="仅 127.0.0.1 · 需要令牌 · 限工作台来源"
+              ok={admitted}
+              neutral={!online}
+              label="内核完整性"
+              detail={
+                !online
+                  ? "未知"
+                  : admitted
+                    ? "每次启动前核对可执行文件哈希"
+                    : "内核还没准入，环境无法启动"
+              }
             />
             <Check
               ok={!settings.allowNoSandboxHost}
@@ -56,9 +63,12 @@ hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会
             />
             <Check
               ok={!previewChannel || !settings.allowPreviewKernel}
+              neutral={!online}
               label="内核通道"
               detail={
-previewChannel
+                !online
+                  ? "未知"
+                  : previewChannel
                   ? settings.allowPreviewKernel
                     ? "预览通道，你已同意使用"
                     : "预览通道，需要你同意后才能用"
@@ -182,18 +192,20 @@ function Check({
   detail,
 }: {
   ok: boolean;
+  /** 不算好也不算坏：没连上所以不知道，或者这一项本来就没有。优先于 ok。 */
   neutral?: boolean;
   label: string;
   detail: string;
 }) {
+  const unknown = neutral && detail === "未知";
   return (
     <li className="flex flex-wrap items-start justify-between gap-3 bg-surface px-5 py-4">
       <div className="min-w-0">
         <div className="text-[13px] font-medium text-ink">{label}</div>
         <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-subtle">{detail}</p>
       </div>
-      <Badge tone={ok ? "ok" : neutral ? "neutral" : "warn"}>
-        {ok ? "正常" : neutral ? "未提供" : "需要注意"}
+      <Badge tone={neutral ? "neutral" : ok ? "ok" : "warn"}>
+        {neutral ? (unknown ? "未知" : "未提供") : ok ? "正常" : "需要注意"}
       </Badge>
     </li>
   );

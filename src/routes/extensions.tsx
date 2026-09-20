@@ -27,7 +27,7 @@ function ExtensionsPage() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-4xl px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6">
       <PageHeader
         title={t("extTitle")}
         status={`${extensions.length} 个扩展`}
@@ -69,7 +69,7 @@ function ExtensionsPage() {
                   ).length;
                   return (
                     <tr key={ext.id}>
-                      <td>
+                      <td className="wrap">
                         <div className="font-medium text-ink">{ext.name}</div>
                       </td>
                       <td className="app-mono max-w-[22ch] truncate text-xs" title={ext.path}>

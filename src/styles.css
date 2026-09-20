@@ -187,6 +187,14 @@ body {
   border-top: 1px solid var(--enclave-line);
   color: var(--enclave-muted);
   vertical-align: middle;
+  /* 中文在窄列里会被挤成一字一行；默认不折行，只有自由文本的格子自己放开。 */
+  white-space: nowrap;
+}
+
+.app-table tbody td.wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 12rem;
 }
 
 .app-table tbody tr:hover td {

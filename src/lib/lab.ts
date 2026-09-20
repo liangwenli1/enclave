@@ -124,34 +124,10 @@ export function staticConsistency(
   const p = env.profile;
   const checks: Check[] = [];
   checks.push({
-    id: "schema",
-    ok: p.schema === "fingerprint-profile/v1",
-    label: "画像格式",
-    detail: p.schema,
-  });
-  checks.push({
     id: "seed",
     ok: /^\d+$/.test(p.seed) && p.seed !== "0",
     label: "画像种子",
     detail: p.seedLocked ? `${p.seed} · 已锁定` : `${p.seed} · 未锁定`,
-  });
-  checks.push({
-    id: "webrtc",
-    ok: p.webrtc.mode !== ("real" as string),
-    label: "WebRTC",
-    detail: p.webrtc.mode === "disable" ? "关闭" : "不使用非代理 UDP",
-  });
-  checks.push({
-    id: "kernel",
-    ok: Boolean(env.kernelPin.sha256 && env.kernelPin.version),
-    label: "内核版本",
-    detail: `${env.kernelPin.id} ${env.kernelPin.version}`,
-  });
-  checks.push({
-    id: "tz",
-    ok: Boolean(p.timezone),
-    label: "时区",
-    detail: p.timezone,
   });
   if (proxy?.country) {
     const allowed = PROXY_GEO_TZ[proxy.country];

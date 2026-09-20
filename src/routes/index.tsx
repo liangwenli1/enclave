@@ -154,7 +154,7 @@ function EnvironmentsPage() {
                           : "idle";
                   return (
                     <tr key={env.id}>
-                      <td>
+                      <td className="wrap">
                         <Link
                           to="/environments/$id"
                           params={{ id: env.id }}

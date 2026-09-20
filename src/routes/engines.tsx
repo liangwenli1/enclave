@@ -49,7 +49,7 @@ function EnginesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
       <PageHeader title={t("navEngines")} status={`${catalog.length} 个引擎`} />
 
       <Panel className="p-5">

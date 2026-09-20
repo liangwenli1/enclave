@@ -10,6 +10,7 @@ import {
   vendorConfigured,
   VendorError,
 } from "@/lib/license/client";
+import { VENDOR_URL } from "@/lib/license/vendor-url";
 import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/account")({ component: AccountPage });
@@ -63,7 +64,7 @@ function AccountPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
       <PageHeader
         title={t("navAccount")}
         status={
@@ -171,7 +172,11 @@ function AccountPage() {
             )}
           </Panel>
 
-          <p className="text-[13px] text-subtle">没有账号？在官网注册。</p>
+          {vendorConfigured ? (
+            <p className="text-[13px] text-subtle">
+              没有账号？在 <span className="app-mono text-muted select-all">{VENDOR_URL}</span> 注册。
+            </p>
+          ) : null}
         </div>
       )}
 

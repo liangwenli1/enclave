@@ -21,7 +21,7 @@ export const Route = createFileRoute("/settings")({ component: SettingsPage });
 
 function SettingsPage() {
   return (
-    <div className="mx-auto max-w-2xl px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-2xl">
       <PageHeader title={t("settingsTitle")} />
 
       <div className="grid gap-4">

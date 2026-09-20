@@ -1,6 +1,5 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cva, type VariantProps } from "class-variance-authority";
 import { Check, Copy, X } from "lucide-react";
 import { useState } from "react";
@@ -16,15 +15,18 @@ import { cn } from "@/lib/cn";
 /* 组件规格见 DESIGN.md 第 4 节。主色 #faff69 只给主操作，一屏一个。 */
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold select-none transition-colors duration-150 disabled:pointer-events-none",
+  "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold whitespace-nowrap select-none transition-colors duration-150 disabled:cursor-not-allowed",
   {
     variants: {
       variant: {
-        primary: "bg-accent text-accent-fg hover:bg-[#e6eb52] disabled:bg-accent-dim disabled:text-subtle",
+        primary:
+          "bg-accent text-accent-fg hover:bg-[#e6eb52] disabled:bg-accent-dim disabled:text-subtle disabled:hover:bg-accent-dim",
         secondary:
           "bg-surface text-ink border border-line hover:bg-surface-2 disabled:text-faint disabled:hover:bg-surface",
-        ghost: "text-muted hover:bg-surface hover:text-ink disabled:text-faint",
-        danger: "text-bad border border-bad/40 hover:bg-bad/10 disabled:text-faint",
+        ghost:
+          "text-muted hover:bg-surface hover:text-ink disabled:text-faint disabled:hover:bg-transparent disabled:hover:text-faint",
+        danger:
+          "text-bad border border-bad/40 hover:bg-bad/10 disabled:text-faint disabled:hover:bg-transparent",
       },
       size: {
         sm: "h-8 px-3 text-[13px]",
@@ -285,24 +287,6 @@ export function MenuItem({
     >
       {children}
     </DropdownMenuPrimitive.Item>
-  );
-}
-
-export function Tooltip({ content, children }: { content: string; children: ReactNode }) {
-  return (
-    <TooltipPrimitive.Provider delayDuration={200}>
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-        <TooltipPrimitive.Portal>
-          <TooltipPrimitive.Content
-            sideOffset={6}
-            className="z-50 max-w-[42ch] rounded-md border border-line bg-surface-2 px-2.5 py-1.5 text-xs text-muted"
-          >
-            {content}
-          </TooltipPrimitive.Content>
-        </TooltipPrimitive.Portal>
-      </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
   );
 }
 

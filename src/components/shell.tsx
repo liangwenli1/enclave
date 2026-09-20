@@ -102,7 +102,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-surface px-3 text-[13px] text-subtle hover:bg-surface-2 hover:text-ink"
             >
               <Search className="size-3.5" />
-              <kbd className="hidden font-mono text-[10px] md:inline">⌘K</kbd>
+              <kbd className="hidden font-mono text-[10px] md:inline">Ctrl K</kbd>
             </button>
             <LockButton />
           </div>

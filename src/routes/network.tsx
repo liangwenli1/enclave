@@ -37,7 +37,7 @@ function NetworkPage() {
   };
 
   return (
-    <div className="mx-auto max-w-4xl px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6">
       <PageHeader
         title={t("netTitle")}
         status={`${proxies.length} 个代理`}
@@ -79,17 +79,20 @@ function NetworkPage() {
                   const used = environments.filter((e) => !e.deletedAt && e.proxyId === p.id).length;
                   return (
                     <tr key={p.id}>
-                      <td>
+                      <td className="wrap">
                         <div className="font-medium text-ink">{p.name}</div>
                         {p.country ? <div className="text-xs text-subtle">{p.country}</div> : null}
                       </td>
-                      <td className="app-mono text-xs">
+                      <td className="wrap app-mono text-xs">
                         {p.protocol}://{p.host}:{p.port}
                       </td>
                       <td>
                         {p.auth?.username ? (
                           <Badge tone={p.auth.hasPassword ? "ok" : "warn"}>
-                            {p.auth.hasPassword ? `${p.auth.username} · 密码已保存` : `${p.auth.username} · 没有密码`}
+                            <span className="max-w-[18ch] truncate" title={p.auth.username}>
+                              {p.auth.username}
+                            </span>
+                            <span>· {p.auth.hasPassword ? "密码已保存" : "没有密码"}</span>
                           </Badge>
                         ) : (
                           <span className="text-subtle">不需要</span>

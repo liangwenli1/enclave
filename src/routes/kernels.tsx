@@ -71,7 +71,7 @@ function KernelsPage() {
 
   if (view && !view.online) {
     return (
-      <div className="mx-auto max-w-3xl px-8 py-6">
+      <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
         <PageHeader title={t("kernelsTitle")} />
         <Panel className="p-6">
           <Badge tone="bad">连不上本机服务</Badge>
@@ -82,7 +82,7 @@ function KernelsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
       <PageHeader
         title={t("kernelsTitle")}
         status={`${kernel?.id ?? KERNEL_PIN.id} ${kernel?.version ?? KERNEL_PIN.version} · ${label.text}`}

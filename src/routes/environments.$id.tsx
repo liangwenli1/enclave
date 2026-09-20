@@ -50,7 +50,9 @@ function EnvDetail() {
             <ArrowLeft className="size-3.5" />
             {t("back")}
           </Button>
-          <h1 className="text-2xl font-bold tracking-tight text-ink">{env.name}</h1>
+          <h1 className="min-w-0 text-2xl font-bold tracking-tight text-ink [overflow-wrap:anywhere]">
+            {env.name}
+          </h1>
           <Badge tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}>
             {runtimeLabel(status, runtime?.error)}
           </Badge>
