@@ -11,7 +11,7 @@ import http from "node:http";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual, createHash } from "node:crypto";
 import path from "node:path";
 import { openDb } from "./db.js";
-import { PLANS, planOf, issueLicense, loadOrCreateKeys, publicKeyRaw } from "./license.js";
+import { PLANS, planOf, effectivePlan, issueLicense, loadOrCreateKeys, publicKeyRaw } from "./license.js";
 
 const PORT = Number(process.env.PORT || 3012);
 const DATA_DIR = process.env.ENCLAVE_DATA_DIR || "/data";
@@ -74,6 +74,8 @@ function rateLimited(ip, limit = 10, windowMs = 60_000) {
 }
 setInterval(() => {
   for (const [ip, slot] of hits) if (slot.resetAt < now()) hits.delete(ip);
+  // 会话 cookie 和会话同时到期，浏览器不会再带着过期的 cookie 回来，所以得主动清。
+  db.prepare("DELETE FROM sessions WHERE expires_at < ?").run(now());
 }, 60_000).unref();
 
 /* ── 数据访问 ──────────────────────────────────────────── */
@@ -146,14 +148,16 @@ async function readJson(req) {
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const body = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  if (!body || typeof body !== "object" || Array.isArray(body)) throw new SyntaxError("body must be an object");
+  return body;
 }
 
 function cookies(req) {
   const out = {};
   for (const part of (req.headers.cookie || "").split(";")) {
     const i = part.indexOf("=");
-    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i > 0) out[part.slice(0, i).trim()] = part.slice(i + 1).trim();
   }
   return out;
 }
@@ -252,7 +256,7 @@ route("GET", "/auth/me", async (req, res) => {
   const user = currentUser(req);
   if (!user) return ok(res, { user: null });
   const row = licenseRowOf(user.id);
-  const p = planOf(row.plan);
+  const { expired, plan: p } = effectivePlan(row);
   const devices = q.devicesOf.all(user.id).map((d) => ({
     id: d.id,
     name: d.name,
@@ -262,12 +266,15 @@ route("GET", "/auth/me", async (req, res) => {
   return ok(res, {
     user: { email: user.email },
     license: {
-      plan: row.plan,
+      plan: p.plan,
       label: p.label,
       envLimit: p.envLimit,
       concurrent: p.concurrent,
-      expiresAt: row.expires_at,
-      deviceLimit: row.device_limit ?? p.deviceLimit,
+      expiresAt: expired ? null : row.expires_at,
+      // 过期的那一档叫什么：账号页据此提示「Pro 已于某日到期」
+      expiredPlan: expired ? planOf(row.plan).label : null,
+      expiredAt: expired ? row.expires_at : null,
+      deviceLimit: expired ? p.deviceLimit : (row.device_limit ?? p.deviceLimit),
     },
     devices,
     pendingRequest: pending ? { plan: pending.plan, createdAt: pending.created_at } : null,
@@ -327,6 +334,9 @@ route("POST", "/v1/device/login", async (req, res) => {
   const deviceName = String(body.deviceName || "未命名设备").slice(0, 64);
   const row = licenseRowOf(user.id);
   const limit = row.device_limit ?? planOf(row.plan).deviceLimit;
+  // 设备 id 跟着这台机器走，不跟账号走。上一个账号离线退出时服务端那行会留下来，
+  // 换账号登录就会撞主键。一个安装同一时刻只登录一个账号，所以旧的那行就是残留。
+  db.prepare("DELETE FROM devices WHERE id = ? AND user_id <> ?").run(deviceId, user.id);
   const existing = q.deviceById.get(deviceId, user.id);
   if (!existing && q.devicesOf.all(user.id).length >= limit) {
     return fail(
@@ -404,11 +414,25 @@ route("POST", "/admin/plan", async (req, res) => {
   if (!user) return fail(res, 404, "NOT_FOUND", "没有这个账号。");
   const plan = String(body.plan || "");
   if (!PLANS[plan]) return fail(res, 400, "BAD_PLAN", "档位不对。");
-  const expiresAt = body.expiresAt ? Number(body.expiresAt) : null;
-  const deviceLimit = Number(body.deviceLimit || PLANS[plan].deviceLimit);
+  // 这个接口是人手敲 curl 调的，输错了必须当场报错，不能静默开出永久订阅或已过期订阅。
+  let expiresAt = null;
+  if (body.expiresAt != null) {
+    expiresAt = Number(body.expiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= now()) {
+      return fail(res, 400, "BAD_EXPIRES_AT", "expiresAt 要填将来的毫秒时间戳（例如 1790000000000），不是日期字符串，也不是秒。");
+    }
+  }
+  const deviceLimit = body.deviceLimit == null ? PLANS[plan].deviceLimit : Number(body.deviceLimit);
+  if (!Number.isInteger(deviceLimit) || deviceLimit < 1) {
+    return fail(res, 400, "BAD_DEVICE_LIMIT", "deviceLimit 要填大于等于 1 的整数。");
+  }
   q.setPlan.run(plan, expiresAt, deviceLimit, now(), user.id);
   q.closeRequests.run(user.id);
-  return ok(res, { email: user.email, plan, expiresAt, deviceLimit });
+
+  // 降档后超出上限的设备：保留最近用过的，其余解绑（它们下次续签会回到未登录）。
+  const extra = q.devicesOf.all(user.id).slice(deviceLimit);
+  for (const d of extra) q.deleteDevice.run(d.id, user.id);
+  return ok(res, { email: user.email, plan, expiresAt, deviceLimit, devicesUnbound: extra.length });
 });
 
 route("GET", "/admin/requests", async (req, res) => {
@@ -445,7 +469,12 @@ function match(method, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
-  let pathname = new URL(req.url, "http://localhost").pathname;
+  let pathname;
+  try {
+    pathname = new URL(req.url, "http://localhost").pathname;
+  } catch {
+    return fail(res, 400, "BAD_REQUEST", "请求格式不对。");
+  }
   if (pathname.startsWith("/api/")) pathname = pathname.slice(4);
   else if (pathname === "/api") pathname = "/";
   res.corsHeaders = corsHeaders(req, pathname);
@@ -456,13 +485,14 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  const hit = match(req.method, pathname);
-  if (!hit) return fail(res, 404, "NOT_FOUND", "没有这个接口。");
-
   try {
+    // match() 会解码路径参数，/devices/%ff 这种会抛 URIError；放在 try 外面就是未处理的
+    // rejection，Node 直接退出 —— 任何人一条请求就能把服务打挂。
+    const hit = match(req.method, pathname);
+    if (!hit) return fail(res, 404, "NOT_FOUND", "没有这个接口。");
     await hit.handler(req, res, hit.params);
   } catch (err) {
-    if (err instanceof SyntaxError || err.message === "PAYLOAD_TOO_LARGE") {
+    if (err instanceof SyntaxError || err instanceof URIError || err.message === "PAYLOAD_TOO_LARGE") {
       return fail(res, 400, "BAD_REQUEST", "请求格式不对。");
     }
     console.error("[vendor]", pathname, err);

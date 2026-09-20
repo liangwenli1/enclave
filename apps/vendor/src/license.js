@@ -54,11 +54,15 @@ export function publicKeyRaw(publicKey) {
   return b64url(der.subarray(der.length - 32));
 }
 
+/** 订阅过期的账号实际就是免费档。签发许可证和官网账号页都用这一个判断。 */
+export function effectivePlan(license, now = Date.now()) {
+  const expired = license.expires_at != null && license.expires_at < now;
+  return { expired, plan: expired ? PLANS.free : planOf(license.plan) };
+}
+
 export function issueLicense({ privateKey, user, license, deviceId }) {
   const now = Date.now();
-  const p = planOf(license.plan);
-  const expired = license.expires_at != null && license.expires_at < now;
-  const effective = expired ? PLANS.free : p;
+  const { expired, plan: effective } = effectivePlan(license, now);
 
   const payload = {
     v: 1,
