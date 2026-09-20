@@ -87,7 +87,12 @@ export type StartResult =
   | { ok: false; code: string; message: string };
 
 /** 一个内核版本：清单里的记录，加上它在这台机器上的状态。 */
-export type KernelEntry = { record: KernelRecord; status: KernelStatus };
+export type KernelEntry = {
+  record: KernelRecord;
+  status: KernelStatus;
+  /** 厂商已经下架，只是本机还留着下载好的文件：能用、能删，不能再下载。 */
+  withdrawn: boolean;
+};
 
 export type KernelView = {
   /** 这个系统能用的全部版本，新的在前。 */
@@ -199,6 +204,15 @@ export async function admitKernel(
     });
   } catch {
     return { code: "HOST_UNAVAILABLE", message: "连不上本机服务。" };
+  }
+}
+
+/** 把厂商签名的内核清单交给本机服务。验签在那边做；这里只转交，并把结论带回来。 */
+export async function submitKernelFeed(signed: string): Promise<{ ok: boolean; message?: string }> {
+  try {
+    return await call("/v1/kernel/feed", { method: "POST", body: JSON.stringify({ signed }) });
+  } catch {
+    return { ok: false, message: "连不上本机服务。" };
   }
 }
 

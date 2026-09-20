@@ -38,6 +38,7 @@ const ERROR_HINT: Record<string, string> = {
   KERNEL_HASH_MISMATCH: "文件和清单里的哈希对不上，已拒用。重新下载一次；反复出现请联系我们。",
   KERNEL_CHANNEL_BLOCKED: "这个版本还在预览通道，要先到安全中心同意。",
   KERNEL_UNTRUSTED_SOURCE: "清单里没有这个版本，或者文件不在了。",
+  KERNEL_WITHDRAWN: "这个版本已经下架，不能再下载。",
   HOST_UNAVAILABLE: "连不上本机服务。重启工作台再试。",
 };
 
@@ -190,6 +191,7 @@ function KernelCard({
       <PanelHeader
         title={record.version}
         hint={[
+          kernel.withdrawn ? "已下架，删除后不能再下载" : null,
           preview ? "预览通道" : "稳定通道",
           isDefault ? "新环境默认用它" : null,
           bound ? `${bound} 个环境在用` : null,

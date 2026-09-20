@@ -177,6 +177,12 @@ export async function signIn(email: string, password: string): Promise<AccountSt
   return currentAccount();
 }
 
+/** 厂商上架的内核清单，签过名的一段文字。工作台不解读它，原样交给本机服务去验。 */
+export async function fetchKernelFeed(): Promise<string> {
+  const res = await vendor<{ signed: string }>("/v1/kernels");
+  return res.signed;
+}
+
 /** 续签。没到期就不打扰服务器；服务器说设备被解绑就清掉本机登录。 */
 export async function refresh(force = false): Promise<AccountState> {
   const stored = read();

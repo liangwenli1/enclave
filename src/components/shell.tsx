@@ -19,8 +19,8 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding";
 import { cn } from "@/lib/cn";
-import { configureApi, getKernelView, hostBaseUrl } from "@/lib/kernel/host-api";
-import { currentAccount, refresh } from "@/lib/license/client";
+import { configureApi, getKernelView, hostBaseUrl, submitKernelFeed } from "@/lib/kernel/host-api";
+import { currentAccount, fetchKernelFeed, refresh, vendorConfigured } from "@/lib/license/client";
 import { launchSpec, needsLockedSecret, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { useEnclave } from "@/lib/store";
@@ -136,6 +136,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Onboarding />
       <PlanNotice />
       <AccountSync />
+      <KernelFeedSync />
       <HostSync />
       <ApiSync />
     </div>
@@ -200,6 +201,37 @@ function AccountSync() {
       alive = false;
       window.clearInterval(id);
     };
+  }, []);
+  return null;
+}
+
+/**
+ * 厂商上架了新内核时，不用重装就能在内核管理页看到。
+ * 清单是否可信由本机服务验签决定；被拒绝是件需要知道的事，记进审计。
+ * 没配置厂商地址、或者暂时连不上，都不算错：本机服务会继续用上一次接受的清单。
+ */
+function KernelFeedSync() {
+  useEffect(() => {
+    if (!vendorConfigured) return;
+    const sync = async () => {
+      let signed: string;
+      try {
+        signed = await fetchKernelFeed();
+      } catch {
+        return;
+      }
+      const res = await submitKernelFeed(signed);
+      if (!res.ok && res.message !== "连不上本机服务。") {
+        useEnclave.getState().addAudit({
+          action: "kernel_feed_rejected",
+          level: "bad",
+          detail: res.message ?? "内核清单被本机服务拒绝",
+        });
+      }
+    };
+    void sync();
+    const id = window.setInterval(() => void sync(), 6 * 3600_000);
+    return () => window.clearInterval(id);
   }, []);
   return null;
 }

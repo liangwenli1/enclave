@@ -166,6 +166,7 @@ const EVENT: Record<string, string> = {
   import: "导入",
   kernel_admit: "下载内核",
   kernel_remove: "删除内核",
+  kernel_feed_rejected: "内核清单被拒绝",
   kernel_change: "更换内核版本",
   kernel: "内核版本",
   preview_kernel_consent: "预览内核同意项",
