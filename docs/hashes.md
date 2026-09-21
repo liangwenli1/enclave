@@ -22,11 +22,9 @@
 
 | 版本 | 文件 | sha256 | bytes | 说明 |
 |---|---|---|---|---|
+| 0.9.2 | `Enclave_0.9.2_x64_en-US.msi` | `6a7a888aa7d301c8415a9f4ddb14c64f9d8fe891cd08a3d91de87c9d1163126c` | 7122944 | GitHub Actions 构建（提交 `efb0468`）。未签名；**没有配置许可证服务地址，账号登录不可用**；早于「内核管理」 |
+| 0.9.2 | `Enclave_0.9.2_aarch64.dmg` | `7b00f8ba371bbfeb4aac7c57b0b5c4080b5dde7f200205f8a9a141dee776a050` | 7207876 | 同上。Apple Silicon，ad-hoc 签名、未公证，装好后要 `xattr -cr`；构建前过了真机冒烟 |
 | 0.9.1 | `Enclave_0.9.1_x64_en-US.msi` | `6af96a9b4dca0f4aa026f6277974e6e37c10d8551c9fb94bda61f5028f270534` | 7245824 | 2026-09 构建，**早于本机接口鉴权等安全更新** |
 
-下一次构建后，用下面的命令取值并更新官网下载页与本表：
-
-```powershell
-Get-FileHash .\Enclave_x.y.z_x64_en-US.msi -Algorithm SHA256
-(Get-Item .\Enclave_x.y.z_x64_en-US.msi).Length
-```
+下一次发版后，SHA256 和字节数写在草稿 Release 的说明里（也在那次 Actions 运行的 Summary 里），
+照着更新官网下载页与本表，再发布草稿。
