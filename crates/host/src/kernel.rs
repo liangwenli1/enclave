@@ -444,6 +444,8 @@ pub fn sha256_str(input: &str) -> String {
 /// 解压目录里真正被执行的那个文件叫什么。各平台的包都实际看过目录：
 /// Chromium 类：Linux `chrome`，Windows `chrome.exe`，macOS `Chromium.app/Contents/MacOS/Chromium`；
 /// Firefox 类：Linux `camoufox-bin`，Windows `camoufox.exe`，macOS `Camoufox.app/Contents/MacOS/camoufox`。
+/// macOS 不走这张表，它只认 .app/Contents/MacOS 里的那个文件。
+#[cfg(not(target_os = "macos"))]
 fn executable_names(engine: Engine) -> &'static [&'static str] {
     match engine {
         // 不含 chrome-wrapper：那是个壳脚本，准入时记下的哈希必须是真正执行的那个文件。
