@@ -1,13 +1,5 @@
-import { PROXY_GEO_TZ, type Environment, type FingerprintProfile, type LabSnapshot, type ProxyItem } from "@/lib/schema";
-
-
-export type Check = {
-  id: string;
-  ok: boolean;
-  warn?: boolean;
-  label: string;
-  detail: string;
-};
+/** 在工作台自己的页面里采一份指纹，当对照组：它就是这台电脑不经内核伪装时的样子。 */
+import type { LabSnapshot } from "@/lib/schema";
 
 async function sha256Hex(input: string): Promise<string> {
   const data = new TextEncoder().encode(input);
@@ -104,6 +96,8 @@ export async function collectPageFingerprint(source: LabSnapshot["source"] = "pa
       screenH: window.screen.height,
       colorDepth: window.screen.colorDepth,
       dpr: window.devicePixelRatio,
+      outerW: window.outerWidth,
+      outerH: window.outerHeight,
     },
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     locale: Intl.DateTimeFormat().resolvedOptions().locale,
@@ -116,121 +110,3 @@ export async function collectPageFingerprint(source: LabSnapshot["source"] = "pa
     source,
   };
 }
-
-export function staticConsistency(
-  env: Environment,
-  proxy: ProxyItem | undefined,
-): Check[] {
-  const p = env.profile;
-  const checks: Check[] = [];
-  checks.push({
-    id: "seed",
-    ok: /^\d+$/.test(p.seed) && p.seed !== "0",
-    label: "画像种子",
-    detail: p.seedLocked ? `${p.seed} · 已锁定` : `${p.seed} · 未锁定`,
-  });
-  if (p.brandVersion !== env.kernelVersion) {
-    checks.push({
-      id: "brand-version",
-      ok: false,
-      label: "浏览器版本",
-      detail: `画像报 ${p.brandVersion}，内核是 ${env.kernelVersion}`,
-    });
-  }
-  if (proxy?.country) {
-    const allowed = PROXY_GEO_TZ[proxy.country];
-    const aligned = !allowed || allowed.includes(p.timezone);
-    checks.push({
-      id: "geo",
-      ok: aligned,
-      warn: !aligned,
-      label: "代理地区与时区",
-      detail: aligned
-        ? `${proxy.country} ↔ ${p.timezone}`
-        : `${proxy.country} 与 ${p.timezone} 对不上`,
-    });
-  }
-  if (env.allowNoSandbox || env.extraFlags.some((f) => f.includes("no-sandbox"))) {
-    checks.push({
-      id: "sandbox",
-      ok: false,
-      warn: true,
-      label: "沙箱",
-      detail: "这个环境会以 --no-sandbox 启动",
-    });
-  }
-  return checks;
-}
-
-export function snapshotChecks(profile: FingerprintProfile, snap: LabSnapshot): Check[] {
-  const uaOk = snap.userAgent.includes("Chrome/") && !snap.userAgent.includes("HeadlessChrome");
-  return [
-    {
-      id: "webdriver",
-      ok: snap.webdriver !== true,
-      label: "webdriver 标记",
-      detail: snap.webdriver === true ? "暴露了（异常）" : "未暴露",
-    },
-    {
-      id: "ua",
-      ok: uaOk,
-      warn: snap.userAgent.includes("Headless"),
-      label: "User-Agent",
-      detail: snap.userAgent.slice(0, 140),
-    },
-    {
-      id: "cores",
-      ok: snap.hardwareConcurrency === profile.hardwareConcurrency || snap.source === "page",
-      warn: snap.source === "page",
-      label: "CPU 核数",
-      detail: `窗口 ${snap.hardwareConcurrency} · 画像 ${profile.hardwareConcurrency}`,
-    },
-    {
-      id: "tz-live",
-      ok: snap.timezone === profile.timezone || snap.source === "page",
-      warn: snap.source === "page",
-      label: "实际时区",
-      detail: `窗口 ${snap.timezone} · 画像 ${profile.timezone}`,
-    },
-    {
-      id: "canvas",
-      ok: Boolean(snap.canvasHash),
-      label: "Canvas 指纹",
-      detail: snap.canvasHash.slice(0, 16),
-    },
-    {
-      id: "webgl",
-      ok: Boolean(snap.webglRenderer),
-      label: "WebGL",
-      detail: `${snap.webglVendor} / ${snap.webglRenderer}`,
-    },
-    {
-      id: "webrtc",
-      ok: profile.webrtc.mode !== "disable" || snap.webrtcIps.length === 0,
-      warn: snap.webrtcIps.length > 0 && profile.webrtc.mode !== "disable",
-      label: "WebRTC 暴露的 IP",
-      detail: snap.webrtcIps.join(", ") || "没有暴露",
-    },
-  ];
-}
-
-export function diffSnaps(a?: LabSnapshot, b?: LabSnapshot): { field: string; a: string; b: string; same: boolean }[] {
-  if (!a || !b) return [];
-  const rows = [
-    ["userAgent", a.userAgent, b.userAgent],
-    ["platform", a.platform, b.platform],
-    ["timezone", a.timezone, b.timezone],
-    ["cores", String(a.hardwareConcurrency), String(b.hardwareConcurrency)],
-    ["canvas", a.canvasHash, b.canvasHash],
-    ["webgl", `${a.webglVendor}|${a.webglRenderer}`, `${b.webglVendor}|${b.webglRenderer}`],
-    ["webdriver", String(a.webdriver), String(b.webdriver)],
-    ["webrtc", a.webrtcIps.join(","), b.webrtcIps.join(",")],
-  ] as const;
-  return rows.map(([field, left, right]) => ({
-    field,
-    a: left,
-    b: right,
-    same: left === right,
-  }));
-}
-

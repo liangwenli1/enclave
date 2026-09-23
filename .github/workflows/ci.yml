@@ -1,6 +1,6 @@
 name: CI
 
-# 每次推送都跑：工作台、许可证服务、本机 Host 三块都要过。
+# 每次推送都跑：工作台和本机 Host 都要过。账号服务在 enclave-www 仓库，有自己的 CI。
 on:
   push:
     branches: ["**"]
@@ -21,16 +21,6 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run lint
-
-  vendor:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-      - run: npm test
-        working-directory: apps/vendor
 
   host:
     # 三个系统各有自己的分支（解包、找可执行文件、停进程），都要编过、测过。

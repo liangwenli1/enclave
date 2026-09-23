@@ -1,13 +1,22 @@
 @import "tailwindcss";
 
-/* Enclave 工作台样式。token 见仓库根目录 DESIGN.md，和官网同一套。
-   不加载网络字体：桌面端必须离线可用，也不向任何第三方发请求。
-   只有深色：系统里没有浅色版。 */
+/* Enclave 工作台样式。规范见仓库根目录 DESIGN.md：纯黑、纯白、一种蓝。
+   字体打进安装包，不联网加载：桌面端必须离线可用，也不向任何第三方发请求。
+   亮色和暗色都有，默认跟随系统；用户在设置里选定后写到 <html data-theme>。 */
+
+@font-face {
+  font-family: "Archivo";
+  src: url("./assets/fonts/archivo-latin.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
 
 @theme {
-  --font-sans: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui,
-    -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* 西文和数字用 Archivo，中文落到系统字体。 */
+  --font-sans: "Archivo", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Noto Sans SC",
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* 等宽只给机器值：哈希、IP、端口、种子。 */
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
 
   --color-canvas: var(--enclave-canvas);
   --color-soft: var(--enclave-soft);
@@ -23,45 +32,99 @@
   --color-accent: var(--enclave-accent);
   --color-accent-fg: var(--enclave-accent-fg);
   --color-accent-dim: var(--enclave-accent-dim);
+  --color-accent-text: var(--enclave-accent-text);
+  --color-accent-wash: var(--enclave-accent-wash);
   --color-ok: var(--enclave-ok);
   --color-warn: var(--enclave-warn);
   --color-bad: var(--enclave-bad);
 
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 12px;
-  --radius-2xl: 12px;
+  /* 方一点。圆角只有这两档：控件 3px，容器 4px。 */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+  --radius-xl: 4px;
+  --radius-2xl: 4px;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  --enclave-canvas: #0a0a0a;
-  --enclave-soft: #121212;
-  --enclave-surface: #1a1a1a;
-  --enclave-surface-2: #242424;
-  --enclave-surface-3: #2e2e2e;
+  --enclave-canvas: #ffffff;
+  --enclave-soft: #fafafa;
+  --enclave-surface: #ffffff;
+  --enclave-surface-2: #f4f4f4;
+  --enclave-surface-3: #e9e9e9;
 
-  --enclave-ink: #ffffff;
-  --enclave-muted: #cccccc;
-  --enclave-subtle: #888888;
-  --enclave-faint: #5a5a5a;
+  --enclave-ink: #000000;
+  --enclave-muted: #3a3a3a;
+  --enclave-subtle: #6e6e6e;
+  --enclave-faint: #a6a6a6;
 
-  --enclave-line: #2a2a2a;
-  --enclave-line-strong: #3a3a3a;
+  --enclave-line: #e4e4e4;
+  --enclave-line-strong: #c4c4c4;
 
-  --enclave-accent: #faff69;
-  --enclave-accent-fg: #0a0a0a;
-  --enclave-accent-dim: #3a3a1f;
+  /* 蓝只有两个用处：要你点的那个按钮，和"正在运行 / 已选中 / 没问题"。 */
+  --enclave-accent: #0a3cff;
+  --enclave-accent-fg: #ffffff;
+  --enclave-accent-dim: #b8c5ff;
+  --enclave-accent-text: #0a3cff;
+  --enclave-accent-wash: #e8edff;
 
-  --enclave-ok: #22c55e;
-  --enclave-warn: #f59e0b;
-  --enclave-bad: #ef4444;
+  --enclave-ok: #0a3cff;
+  --enclave-warn: #9a5200;
+  --enclave-bad: #c40000;
 
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --quick: 150ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --enclave-canvas: #000000;
+    --enclave-soft: #0a0a0a;
+    --enclave-surface: #000000;
+    --enclave-surface-2: #121212;
+    --enclave-surface-3: #1e1e1e;
+    --enclave-ink: #ffffff;
+    --enclave-muted: #cfcfcf;
+    --enclave-subtle: #8c8c8c;
+    --enclave-faint: #5c5c5c;
+    --enclave-line: #262626;
+    --enclave-line-strong: #3d3d3d;
+    --enclave-accent: #1f4dff;
+    --enclave-accent-fg: #ffffff;
+    --enclave-accent-dim: #14235e;
+    --enclave-accent-text: #7d9bff;
+    --enclave-accent-wash: #0c1640;
+    --enclave-ok: #7d9bff;
+    --enclave-warn: #f0a53a;
+    --enclave-bad: #ff6b6b;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --enclave-canvas: #000000;
+  --enclave-soft: #0a0a0a;
+  --enclave-surface: #000000;
+  --enclave-surface-2: #121212;
+  --enclave-surface-3: #1e1e1e;
+  --enclave-ink: #ffffff;
+  --enclave-muted: #cfcfcf;
+  --enclave-subtle: #8c8c8c;
+  --enclave-faint: #5c5c5c;
+  --enclave-line: #262626;
+  --enclave-line-strong: #3d3d3d;
+  --enclave-accent: #1f4dff;
+  --enclave-accent-fg: #ffffff;
+  --enclave-accent-dim: #14235e;
+  --enclave-accent-text: #7d9bff;
+  --enclave-accent-wash: #0c1640;
+  --enclave-ok: #7d9bff;
+  --enclave-warn: #f0a53a;
+  --enclave-bad: #ff6b6b;
 }
 
 html,
@@ -93,14 +156,13 @@ body {
   :focus-visible {
     outline: 2px solid var(--enclave-accent);
     outline-offset: 2px;
-    border-radius: 4px;
   }
 
   h1,
   h2,
   h3 {
     color: var(--enclave-ink);
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
   }
 }
 
@@ -130,8 +192,8 @@ body {
   gap: 10px;
   min-height: 36px;
   padding: 0 12px;
-  border-radius: 8px;
-  color: var(--enclave-subtle);
+  border-radius: 3px;
+  color: var(--enclave-muted);
   font-size: 14px;
   font-weight: 500;
   transition:
@@ -141,16 +203,14 @@ body {
 
 .app-nav a:hover {
   color: var(--enclave-ink);
-  background: var(--enclave-surface);
-}
-
-.app-nav a[data-active="true"] {
-  color: var(--enclave-ink);
   background: var(--enclave-surface-2);
 }
 
-.app-nav a[data-active="true"] svg {
-  color: var(--enclave-accent);
+/* 当前页：黑底白字（暗色下是白底黑字）。整套界面里反差最大的一块，只给"你在哪"。 */
+.app-nav a[data-active="true"] {
+  color: var(--enclave-canvas);
+  background: var(--enclave-ink);
+  font-weight: 600;
 }
 
 .app-nav-foot {
@@ -164,27 +224,27 @@ body {
 .app-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .app-table thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--enclave-soft);
+  background: var(--enclave-canvas);
+  border-bottom: 1px solid var(--enclave-line);
   padding: 10px 16px;
   text-align: left;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--enclave-subtle);
   white-space: nowrap;
 }
 
 .app-table tbody td {
   padding: 12px 16px;
-  border-top: 1px solid var(--enclave-line);
+  border-bottom: 1px solid var(--enclave-line);
   color: var(--enclave-muted);
   vertical-align: middle;
   /* 中文在窄列里会被挤成一字一行；默认不折行，只有自由文本的格子自己放开。 */
@@ -197,12 +257,21 @@ body {
   min-width: 12rem;
 }
 
+.app-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .app-table tbody tr:hover td {
   background: var(--enclave-surface-2);
 }
 
+.app-table tbody tr[data-running="true"] td {
+  background: var(--enclave-accent-wash);
+}
+
 .app-mono {
   font-family: var(--font-mono);
+  font-size: 0.92em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -210,7 +279,9 @@ body {
 
 .enclave-dialog {
   color: var(--enclave-ink);
-  background: var(--enclave-surface);
+  background: var(--enclave-canvas);
+  border-color: var(--enclave-ink);
+  box-shadow: 0 24px 60px rgb(0 0 0 / 0.28);
 }
 
 /* ── 滚动条 ───────────────────────────────────────────── */

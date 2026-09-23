@@ -4,6 +4,7 @@ import {
   Box,
   Cpu,
   FlaskConical,
+  Workflow,
   Globe,
   KeyRound,
   Lock,
@@ -19,11 +20,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding";
 import { cn } from "@/lib/cn";
-import { configureApi, getKernelView, hostBaseUrl, submitKernelFeed } from "@/lib/kernel/host-api";
-import { currentAccount, fetchKernelFeed, refresh, vendorConfigured } from "@/lib/license/client";
-import { launchSpec, needsLockedSecret, stopEnv } from "@/lib/host";
+import {
+  configureApi,
+  getKernelView,
+  hostBaseUrl,
+  type ExitInfo,
+} from "@/lib/kernel/host-api";
+import { launchSpec, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
-import { useEnclave } from "@/lib/store";
+import { syncNow, useEnclave } from "@/lib/store";
 import { lockVault, resetVault, unlockVault } from "@/lib/vault";
 
 const NAV = [
@@ -31,13 +36,14 @@ const NAV = [
   { to: "/network", key: "navNet" as const, icon: Globe },
   { to: "/engines", key: "navEngines" as const, icon: SearchCode },
   { to: "/extensions", key: "navExt" as const, icon: Puzzle },
+  { to: "/automation", key: "navAutomation" as const, icon: Workflow },
   { to: "/lab", key: "navLab" as const, icon: FlaskConical },
   { to: "/kernels", key: "navKernels" as const, icon: Cpu },
   { to: "/security", key: "navSecurity" as const, icon: Shield },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
-  // 锁没锁只有一个事实来源：保险箱建了、但密钥不在内存里。重启后天然就是这个状态。
+  // 锁没锁只有一个事实来源：本机服务说开着应用锁、而且还没输过口令。
   const locked = useEnclave((s) => s.vault.exists && !s.vault.unlocked);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -59,9 +65,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       className="flex h-full min-h-full bg-canvas text-muted"
     >
       <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
-        <div className="flex h-16 items-center gap-2.5 px-5">
+        <div className="flex h-14 items-center gap-2.5 px-5">
           <Mark />
-          <span className="text-base font-bold tracking-tight text-ink">Enclave</span>
+          <span className="text-[17px] font-extrabold tracking-[-0.03em] text-ink">Enclave</span>
         </div>
         <nav className="app-nav min-h-0 flex-1 overflow-auto">
           {NAV.map((item) => (
@@ -87,7 +93,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-10 flex h-16 items-center gap-2 border-b border-line bg-canvas px-4">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-line bg-canvas px-4">
           <button
             className="grid size-9 place-items-center rounded-md text-subtle hover:bg-surface hover:text-ink md:hidden"
             onClick={() => setMobileNav((v) => !v)}
@@ -99,7 +105,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               onClick={() => setCmdOpen(true)}
               title={t("command")}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-line bg-surface px-3 text-[13px] text-subtle hover:bg-surface-2 hover:text-ink"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-[13px] text-subtle hover:border-ink hover:text-ink"
             >
               <Search className="size-3.5" />
               <kbd className="hidden font-mono text-[10px] md:inline">
@@ -118,8 +124,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                 to={item.to}
                 onClick={() => setMobileNav(false)}
                 className={cn(
-                  "inline-flex min-h-10 shrink-0 items-center rounded-full bg-surface px-4 text-[13px]",
-                  pathname === item.to ? "text-ink" : "text-subtle",
+                  "inline-flex min-h-10 shrink-0 items-center rounded-md px-4 text-[13px]",
+                  pathname === item.to ? "bg-ink font-semibold text-canvas" : "bg-surface-2 text-muted",
                 )}
               >
                 {t(item.key)}
@@ -135,9 +141,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       {locked ? <LockScreen /> : null}
       <Onboarding />
       <PlanNotice />
-      <AccountSync />
-      <KernelFeedSync />
+      <StoreError />
       <HostSync />
+      <CloudSync />
       <ApiSync />
     </div>
   );
@@ -145,31 +151,38 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function Mark() {
   return (
-    <span className="grid size-6 place-items-center rounded-md bg-accent">
-      <span className="size-2 rounded-[2px] bg-accent-fg" />
-    </span>
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" className="flex-none text-ink">
+      <rect width="24" height="24" fill="currentColor" />
+      <g fill="none" stroke="var(--enclave-canvas)" strokeWidth="1.7">
+        <path d="M6 17a6 6 0 0 1 12 0" />
+        <path d="M9 17a3 3 0 0 1 6 0" />
+        <path d="M4.5 12.5A8.5 8.5 0 0 1 12 7" />
+      </g>
+    </svg>
   );
 }
 
-/** 侧栏底部：当前是谁、什么档。没登录就直说没登录。 */
+/** 侧栏底部：当前是谁、什么档。 */
 function AccountChip() {
-  const account = useEnclave((s) => s.account);
+  const session = useEnclave((s) => s.session);
   return (
     <Link
       to="/account"
-      className="mx-2 mb-2 block rounded-md border border-line bg-surface px-3 py-2.5 hover:bg-surface-2"
+      className="mx-2 mb-2 block rounded-md border border-line px-3 py-2.5 hover:bg-surface-2"
     >
       <div className="truncate text-[13px] font-medium text-ink">
-        {account.signedIn ? account.email : "未登录"}
+        {session.email}
       </div>
-      <div className="mt-0.5 text-xs text-subtle">
-        {account.limits.label} · {account.limits.envLimit} 个环境
+      <div className={cn("mt-0.5 text-xs", session.online ? "text-subtle" : "text-warn")}>
+        {session.plan && session.usage
+          ? `${session.plan.label}，${session.usage.profiles} / ${session.plan.envLimit} 个环境`
+          : "无法连接服务器"}
       </div>
     </Link>
   );
 }
 
-/** 保险箱没建起来之前不显示锁按钮：那把锁是假的。 */
+/** 没开应用锁就不显示锁按钮：那把锁是假的。 */
 function LockButton() {
   const exists = useEnclave((s) => s.vault.exists);
   if (!exists) return null;
@@ -179,7 +192,7 @@ function LockButton() {
       size="icon"
       title={t("lockNow")}
       onClick={() => {
-        lockVault();
+        void lockVault();
       }}
     >
       <Lock className="size-3.5" />
@@ -187,53 +200,26 @@ function LockButton() {
   );
 }
 
-/** 启动时读一次本地许可证，然后按许可证里的 refreshAfter 去续签。 */
-function AccountSync() {
+/** 把用户选的外观写到 <html data-theme>。选"跟随系统"就什么都不写，交给 CSS 的媒体查询。 */
+export function ThemeSync() {
+  const theme = useEnclave((s) => s.settings.theme);
   useEffect(() => {
-    let alive = true;
-    const apply = (next: Awaited<ReturnType<typeof currentAccount>>) => {
-      if (alive) useEnclave.getState().setAccount(next);
-    };
-    void currentAccount().then(apply);
-    void refresh().then(apply);
-    const id = window.setInterval(() => void refresh().then(apply), 6 * 3600_000);
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
-  }, []);
+    const root = document.documentElement;
+    if (theme === "system") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", theme);
+  }, [theme]);
   return null;
 }
 
-/**
- * 厂商上架了新内核时，不用重装就能在内核管理页看到。
- * 清单是否可信由本机服务验签决定；被拒绝是件需要知道的事，记进审计。
- * 没配置厂商地址、或者暂时连不上，都不算错：本机服务会继续用上一次接受的清单。
- */
-function KernelFeedSync() {
-  useEffect(() => {
-    if (!vendorConfigured) return;
-    const sync = async () => {
-      let signed: string;
-      try {
-        signed = await fetchKernelFeed();
-      } catch {
-        return;
-      }
-      const res = await submitKernelFeed(signed);
-      if (!res.ok && res.message !== "连不上本机服务。") {
-        useEnclave.getState().addAudit({
-          action: "kernel_feed_rejected",
-          level: "bad",
-          detail: res.message ?? "内核清单被本机服务拒绝",
-        });
-      }
-    };
-    void sync();
-    const id = window.setInterval(() => void sync(), 6 * 3600_000);
-    return () => window.clearInterval(id);
-  }, []);
-  return null;
+/** 改动没存进本机服务：必须让用户知道，否则关掉工作台这些改动就没了。 */
+function StoreError() {
+  const message = useEnclave((s) => s.storeError);
+  if (!message) return null;
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-[60] border-t border-bad/40 bg-canvas px-6 py-3 text-[13px] text-bad">
+      {message}
+    </div>
+  );
 }
 
 function PlanNotice() {
@@ -264,29 +250,27 @@ function PlanNotice() {
 }
 
 /**
- * 本机 API 的配置跟着工作台的状态走：环境、代理、扩展、档位、保险箱任何一项变了，
- * 就把最新的一份推给 Host。代理密码在锁着的保险箱里的环境不推 —— 拿不到密码就不能
- * 让脚本启动它，否则它会用本机网络出网。
+ * 本机 API 的配置跟着工作台的状态走：环境、代理、扩展、档位任何一项变了，就把最新的一份推给 Host。
+ * 推过去的只有「用哪个代理」，没有密码：密码 Host 自己取，取不到（锁着、没存）它会拒启并说明原因。
  */
 function ApiSync() {
   const environments = useEnclave((s) => s.environments);
   const proxies = useEnclave((s) => s.proxies);
   const extensions = useEnclave((s) => s.extensions);
   const settings = useEnclave((s) => s.settings);
-  const limits = useEnclave((s) => s.account.limits);
+  const apiLevel = useEnclave((s) => s.session.plan?.api ?? "off");
   const vaultUnlocked = useEnclave((s) => s.vault.unlocked);
 
   useEffect(() => {
     const timer = window.setTimeout(async () => {
-      const enabled = settings.apiEnabled && limits.api !== "off";
+      // 档位允不允许由 Host 自己问服务器；这里只是档位不含 API 时不把环境清单推过去。
+      const enabled = settings.apiEnabled && apiLevel !== "off";
       const result = await configureApi({
         enabled,
-        level: limits.api,
-        concurrent: limits.concurrent,
         environments: enabled
           ? environments
-              .filter((e) => !e.deletedAt && !needsLockedSecret(e))
-              .map((e) => ({ id: e.id, name: e.name, group: e.group, spec: launchSpec(e) }))
+              .filter((e) => !e.deletedAt)
+              .map((e) => ({ id: e.id, name: e.name, folderId: e.folderId, spec: launchSpec(e) }))
           : [],
       });
       useEnclave.setState({
@@ -300,12 +284,26 @@ function ApiSync() {
       });
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [environments, proxies, extensions, settings, limits, vaultUnlocked]);
+  }, [environments, proxies, extensions, settings, apiLevel, vaultUnlocked]);
 
   return null;
 }
 
 /** 把 Host 里真实的运行态同步进界面。界面永远不自己编造 Running。 */
+/** 开着工作台时定时同步一轮；切回窗口时也来一次（另一台电脑刚改过的能早点看到）。 */
+function CloudSync() {
+  useEffect(() => {
+    const tick = () => void syncNow();
+    const id = window.setInterval(tick, 60_000);
+    window.addEventListener("focus", tick);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", tick);
+    };
+  }, []);
+  return null;
+}
+
 function HostSync() {
   useEffect(() => {
     let alive = true;
@@ -347,6 +345,7 @@ function runtimeRow(r: {
   port: number;
   startedAt: number;
   sha256: string;
+  exit?: ExitInfo | null;
 }) {
   return {
     envId: r.envId,
@@ -357,10 +356,11 @@ function runtimeRow(r: {
     startedAt: r.startedAt,
     hashOk: true,
     sha256: r.sha256,
+    exit: r.exit,
   };
 }
 
-/** 真锁：解锁 = 用主密码解开保险箱。密码不对就是不对。 */
+/** 真锁：解锁 = 本机服务用口令解开数据密钥。口令不对就是不对。 */
 function LockScreen() {
   const [value, setValue] = useState("");
   const [error, setError] = useState("");
@@ -389,7 +389,7 @@ function LockScreen() {
         }}
       >
         <div className="mb-1 flex items-center gap-2 text-ink">
-          <KeyRound className="size-4 text-accent" />
+          <KeyRound className="size-4 text-accent-text" />
           <h1 className="text-lg font-bold tracking-tight">{t("locked")}</h1>
         </div>
         <p className="mb-5 text-[13px] text-subtle">{t("masterPwHint")}</p>
@@ -418,15 +418,15 @@ function LockScreen() {
                 type="button"
                 variant="danger"
                 onClick={() => {
-                  resetVault();
+                  void resetVault();
                   useEnclave.getState().addAudit({
                     action: "vault_reset",
                     level: "warn",
-                    detail: "忘记主密码，保险箱已清空",
+                    detail: "已重置应用锁口令，此前保存的代理密码已清空",
                   });
                 }}
               >
-                清空保险箱
+                重置应用锁
               </Button>
             </div>
           </div>
@@ -477,7 +477,7 @@ function CommandPalette({
             </Command.Empty>
             <Command.Group
               heading={t("pages")}
-              className="px-1 text-xs font-semibold tracking-[1.5px] text-subtle uppercase"
+              className="px-1 text-[13px] text-subtle"
             >
               {pages.map((p) => (
                 <Command.Item
@@ -496,7 +496,7 @@ function CommandPalette({
             {envs.length ? (
               <Command.Group
                 heading={t("navEnv")}
-                className="mt-3 px-1 text-xs font-semibold tracking-[1.5px] text-subtle uppercase"
+                className="mt-3 px-1 text-[13px] text-subtle"
               >
                 {envs.map((env) => (
                   <Command.Item

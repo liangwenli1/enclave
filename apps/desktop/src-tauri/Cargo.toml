@@ -1,6 +1,6 @@
 [package]
 name = "enclave-desktop"
-version = "0.9.3"
+version = "0.10.0"
 description = "Enclave workbench shell. Unsigned preview, not 1.0."
 edition = "2021"
 
@@ -12,5 +12,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-shell = "2"
-tauri-plugin-single-instance = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+serde_json = "1"
 rand = "0.8"

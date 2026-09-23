@@ -12,7 +12,7 @@ import type {
 } from "react";
 import { cn } from "@/lib/cn";
 
-/* 组件规格见 DESIGN.md 第 4 节。主色 #faff69 只给主操作，一屏一个。 */
+/* 组件规格见 DESIGN.md。蓝色只给主操作（一屏一个）和"正在运行 / 已选中"。 */
 
 const buttonVariants = cva(
   "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold whitespace-nowrap select-none transition-colors duration-150 disabled:cursor-not-allowed",
@@ -20,9 +20,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-accent text-accent-fg hover:bg-[#e6eb52] disabled:bg-accent-dim disabled:text-subtle disabled:hover:bg-accent-dim",
+          "bg-accent text-accent-fg hover:brightness-110 disabled:bg-accent-dim disabled:text-accent-fg disabled:hover:brightness-100",
         secondary:
-          "bg-surface text-ink border border-line hover:bg-surface-2 disabled:text-faint disabled:hover:bg-surface",
+          "bg-canvas text-ink border border-line-strong hover:bg-surface-2 hover:border-ink disabled:text-faint disabled:border-line disabled:hover:bg-canvas",
         ghost:
           "text-muted hover:bg-surface hover:text-ink disabled:text-faint disabled:hover:bg-transparent disabled:hover:text-faint",
         danger:
@@ -48,8 +48,9 @@ export function Button({
 }
 
 const fieldBase =
-  "h-10 w-full rounded-md border border-line-strong bg-surface px-3.5 text-sm text-ink placeholder:text-faint " +
-  "focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
+  "h-10 w-full rounded-md border border-line-strong bg-canvas px-3.5 text-sm text-ink placeholder:text-faint " +
+  "focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 " +
+  "read-only:bg-surface-2 disabled:bg-surface-2 disabled:text-subtle";
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
@@ -91,12 +92,13 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-3 py-0.5 text-xs font-medium whitespace-nowrap",
+        "inline-flex items-center gap-1.5 text-[13px] font-medium whitespace-nowrap",
         tones[tone],
         className,
       )}
     >
-      <span className="size-1.5 rounded-full bg-current" />
+      {/* 出错是方点，其余是圆点：不只靠颜色区分。 */}
+      <span className={cn("size-2 flex-none bg-current", tone === "bad" ? "" : "rounded-full")} />
       {children}
     </span>
   );
@@ -136,7 +138,7 @@ export function PageHeader({
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-[32px] leading-tight font-bold tracking-tight">{title}</h1>
+        <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.03em]">{title}</h1>
         {status ? <div className="mt-2 text-[13px] text-subtle">{status}</div> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -178,16 +180,16 @@ export function CodeBlock({
 }) {
   const [done, setDone] = useState(false);
   return (
-    <div className={cn("relative rounded-lg border border-line bg-surface p-4 pr-24", className)}>
+    <div className={cn("relative rounded-md bg-surface-2 p-4 pr-24", className)}>
       {label ? (
-        <div className="mb-2 text-xs font-semibold tracking-[1.5px] text-subtle uppercase">{label}</div>
+        <div className="mb-1.5 text-[13px] text-subtle">{label}</div>
       ) : null}
       <code className="block font-mono text-[13px] leading-relaxed break-all text-muted">{value}</code>
       <button
         type="button"
         className={cn(
-          "absolute top-3 right-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-surface-2 px-3 text-xs font-semibold transition-colors",
-          done ? "text-ok" : "text-muted hover:bg-accent hover:text-accent-fg",
+          "absolute top-3 right-3 inline-flex h-8 items-center gap-1.5 rounded-md border border-line-strong bg-canvas px-3 text-xs font-semibold transition-colors",
+          done ? "text-ok" : "text-ink hover:border-ink",
         )}
         onClick={() => {
           void navigator.clipboard.writeText(value).then(() => {
@@ -217,7 +219,7 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
       <DialogPrimitive.Content
         className={cn(
           "enclave-dialog fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line p-6",
@@ -257,7 +259,7 @@ export function MenuContent({
       <DropdownMenuPrimitive.Content
         align={align}
         sideOffset={6}
-        className="z-50 min-w-44 rounded-lg border border-line bg-surface p-1"
+        className="z-50 min-w-44 rounded-lg border border-ink bg-canvas p-1 shadow-[0_12px_32px_rgb(0_0_0/0.18)]"
       >
         {children}
       </DropdownMenuPrimitive.Content>
@@ -292,7 +294,7 @@ export function MenuItem({
 
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <section className={cn("rounded-lg border border-line bg-surface", className)}>
+    <section className={cn("rounded-lg border border-line bg-canvas", className)}>
       {children}
     </section>
   );
@@ -325,5 +327,5 @@ export function StatusDot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" }) {
     bad: "bg-bad",
     idle: "bg-faint",
   }[tone];
-  return <span className={cn("inline-block size-1.5 flex-none rounded-full", color)} />;
+  return <span className={cn("inline-block size-2 flex-none", tone === "bad" ? "" : "rounded-full", color)} />;
 }

@@ -8,7 +8,7 @@ export function AppErrorComponent({ error }: ErrorComponentProps) {
     <main className="grid min-h-screen place-items-center bg-canvas px-6 text-center">
       <div className="grid max-w-md justify-items-center gap-3">
         <h1 className="text-xl font-bold tracking-tight text-ink">这个页面出错了</h1>
-        <p className="text-[13px] text-muted">重新加载通常能恢复。你的环境和设置都还在。</p>
+        <p className="text-[13px] text-muted">重新加载通常即可恢复，环境与设置不会丢失。</p>
         <p className="app-mono text-xs break-words text-subtle">{message}</p>
         <Button variant="primary" className="mt-2" onClick={() => window.location.reload()}>
           重新加载

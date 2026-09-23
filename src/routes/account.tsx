@@ -1,185 +1,115 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { Badge, Button, Field, Input, Panel, PanelHeader, PageHeader } from "@/components/ui";
+import { useState } from "react";
+import { Badge, Button, Panel, PanelHeader, PageHeader } from "@/components/ui";
+import { applySession, refreshSession } from "@/lib/host";
 import { t } from "@/lib/i18n";
-import {
-  currentAccount,
-  refresh,
-  signIn,
-  signOut,
-  vendorConfigured,
-  VendorError,
-} from "@/lib/license/client";
-import { VENDOR_URL } from "@/lib/license/vendor-url";
+import { getSession, logoutSession, openSite } from "@/lib/kernel/host-api";
 import { useEnclave } from "@/lib/store";
 
 export const Route = createFileRoute("/account")({ component: AccountPage });
 
-function fmtDate(ms: number | null | undefined): string {
+function fmtDate(ms: number | null): string {
   return ms ? new Date(ms).toLocaleString("zh-CN") : "不过期";
 }
 
+/** 账号页。这里的数字都是刚问来的：订阅、升级、解绑设备在官网做，这边下一次问到就是新的。 */
 function AccountPage() {
-  const account = useEnclave((s) => s.account);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const session = useEnclave((s) => s.session);
+  const running = useEnclave((s) => Object.values(s.runtimes).filter((r) => r.status === "running").length);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    void currentAccount().then((a) => useEnclave.getState().setAccount(a));
-  }, []);
-
-  const doSignIn = async () => {
-    setBusy(true);
-    setError("");
-    try {
-      const next = await signIn(email.trim().toLowerCase(), password);
-      useEnclave.getState().setAccount(next);
-      setPassword("");
-      useEnclave.getState().addAudit({
-        action: "sign_in",
-        target: next.email ?? "",
-        level: "info",
-        detail: next.limits.label,
-      });
-    } catch (err) {
-      setError(err instanceof VendorError ? err.message : "登录失败，请重试。");
-    }
-    setBusy(false);
-  };
+  const [confirming, setConfirming] = useState(false);
 
   const doSignOut = async () => {
     setBusy(true);
-    const next = await signOut();
-    useEnclave.getState().setAccount(next);
+    const email = session.email ?? "";
+    await logoutSession();
+    const store = useEnclave.getState();
+    for (const id of Object.keys(store.runtimes)) store.setRuntime(id, null);
+    store.addAudit({ action: "sign_out", target: email, level: "info", detail: "已退出登录" });
+    applySession(await getSession());
     setBusy(false);
   };
 
-  const doRefresh = async () => {
-    setBusy(true);
-    const next = await refresh(true);
-    useEnclave.getState().setAccount(next);
-    setBusy(false);
-  };
+  const { plan, usage } = session;
 
   return (
     <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
-      <PageHeader
-        title={t("navAccount")}
-        status={
-          account.signedIn
-            ? `${account.email} · ${account.limits.label}`
-            : "未登录 · Solo Free"
-        }
-      />
+      <PageHeader title={t("navAccount")} status={plan ? `${session.email}，${plan.label}` : (session.email ?? "")} />
 
-      {account.signedIn ? (
-        <div className="grid gap-4">
-          <Panel>
-            <PanelHeader
-              title="档位"
-              actions={
-                <Button onClick={() => void doRefresh()} disabled={busy}>
-                  同步
-                </Button>
-              }
-            />
-            <dl className="grid gap-px bg-line">
-              <Row label="账号" value={account.email ?? ""} />
-              <Row label="档位" value={account.limits.label} />
-              <Row
-                label="额度"
-                value={`${account.limits.envLimit} 个环境 · ${account.limits.concurrent} 个同时运行 · ${account.limits.deviceLimit} 台设备`}
-              />
-              <Row label="订阅到期" value={fmtDate(account.license?.expiresAt ?? null)} />
-              <Row
-                label="离线可用至"
-                value={
-                  account.license
-                    ? `${fmtDate(account.license.validUntil)}（断网后还能用 ${account.license.graceDays} 天）`
-                    : "—"
-                }
-              />
-              <Row label="上次同步" value={fmtDate(account.lastSyncAt)} />
-            </dl>
+      <div className="grid gap-4">
+        {session.online ? null : (
+          <Panel className="p-5">
+            <div className="flex items-start gap-3">
+              <Badge tone="warn">无法连接服务器</Badge>
+              <p className="text-[13px] leading-relaxed text-muted">
+                {session.error} 已经在运行的环境不受影响；新建和启动要等连上之后。
+              </p>
+            </div>
           </Panel>
+        )}
 
-          {account.reason !== "ok" ? (
-            <Panel className="p-5">
-              <div className="flex items-start gap-3">
-                <Badge tone="bad">许可证不可用</Badge>
-                <p className="text-[13px] leading-relaxed text-muted">
-                  {account.reason === "expired"
-                    ? "本机这张许可证已经过了离线宽限期，额度已回落到免费档。连上网点「同步」即可恢复。"
-                    : account.reason === "unsupported"
-                      ? "这个系统的浏览器内核不支持许可证验签，额度按免费档执行。升级系统后重试。"
-                      : "许可证验签没通过，已按免费档执行。点「同步」重新获取。"}
-                </p>
+        <Panel>
+          <PanelHeader
+            title="档位"
+            actions={
+              <Button onClick={() => void refreshSession()} disabled={busy}>
+                刷新
+              </Button>
+            }
+          />
+          <dl className="grid gap-px bg-line">
+            <Row label="账号" value={session.email ?? ""} />
+            <Row label="档位" value={plan?.label ?? "—"} />
+            {session.role === "owner" ? null : (
+              <Row label="团队角色" value={session.role === "admin" ? "管理员" : "操作员"} />
+            )}
+            <Row
+              label="环境"
+              value={plan && usage ? `${usage.profiles} / ${plan.envLimit}（账号下所有电脑合计）` : "—"}
+            />
+            <Row
+              label="同时运行"
+              value={plan && usage ? `${usage.running} / ${plan.concurrent}（账号下所有电脑合计）` : "—"}
+            />
+            <Row label="可登录设备" value={plan ? `${plan.deviceLimit} 台` : "—"} />
+            <Row label="订阅到期" value={plan ? fmtDate(session.expiresAt) : "—"} />
+          </dl>
+        </Panel>
+
+        <div className="flex flex-wrap gap-2">
+          <Button variant="primary" onClick={() => void openSite("pricing")}>
+            升级档位
+          </Button>
+          <Button onClick={() => void openSite("account")}>在官网管理订阅和设备</Button>
+        </div>
+        <p className="text-[13px] leading-relaxed text-subtle">
+          订阅、更换支付方式、取消订阅与解绑其他设备均在官网完成，将在浏览器中打开。新建和启动环境始终以服务器当前状态为准；本页数字最多延迟一分钟，点击「刷新」可立即更新。
+        </p>
+
+        <div className="mt-4">
+          {confirming ? (
+            <div className="grid gap-3">
+              <p className="text-[13px] leading-relaxed text-warn">
+                退出后要重新登录才能继续用。
+                {running ? `正在运行的 ${running} 个环境会被停掉。` : ""}
+                环境数据留在这台电脑上，不会删。
+              </p>
+              <div className="flex gap-2">
+                <Button variant="danger" disabled={busy} onClick={() => void doSignOut()}>
+                  {busy ? "退出中…" : "确认退出"}
+                </Button>
+                <Button disabled={busy} onClick={() => setConfirming(false)}>
+                  取消
+                </Button>
               </div>
-            </Panel>
-          ) : null}
-
-          <p className="text-[13px] text-subtle">升级在官网账号页申请，开通后点「同步」生效。</p>
-
-          <div>
-            <Button onClick={() => void doSignOut()} disabled={busy} variant="danger">
+            </div>
+          ) : (
+            <Button variant="danger" onClick={() => setConfirming(true)}>
               退出登录
             </Button>
-            <p className="mt-2 text-[13px] text-subtle">退出后额度回到免费档，本机环境不受影响。</p>
-          </div>
+          )}
         </div>
-      ) : (
-        <div className="grid gap-4">
-          <Panel className="max-w-md p-6">
-            <h2 className="text-lg font-bold text-ink">登录</h2>
-            <div className="mb-5" />
-            {vendorConfigured ? (
-              <form
-                className="grid gap-4"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void doSignIn();
-                }}
-              >
-                <Field label="邮箱">
-                  <Input
-                    type="email"
-                    required
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
-                  />
-                </Field>
-                <Field label="密码" error={error}>
-                  <Input
-                    type="password"
-                    required
-                    autoComplete="current-password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                  />
-                </Field>
-                <Button variant="primary" size="md" type="submit" disabled={busy}>
-                  {busy ? "登录中…" : "登录"}
-                </Button>
-              </form>
-            ) : (
-              <p className="text-[13px] leading-relaxed text-warn">
-                这个版本没有配置账号服务地址，暂时不能登录。工作台按免费档正常使用。
-              </p>
-            )}
-          </Panel>
-
-          {vendorConfigured ? (
-            <p className="text-[13px] text-subtle">
-              没有账号？在 <span className="app-mono text-muted select-all">{VENDOR_URL}</span> 注册。
-            </p>
-          ) : null}
-        </div>
-      )}
-
+      </div>
     </div>
   );
 }

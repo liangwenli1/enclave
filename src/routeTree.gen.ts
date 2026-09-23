@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AccountRouteImport } from './routes/account'
+import { Route as AutomationRouteImport } from './routes/automation'
 import { Route as EnginesRouteImport } from './routes/engines'
 import { Route as ExtensionsRouteImport } from './routes/extensions'
 import { Route as KernelsRouteImport } from './routes/kernels'
@@ -28,6 +29,11 @@ const IndexRoute = IndexRouteImport.update({
 const AccountRoute = AccountRouteImport.update({
   id: '/account',
   path: '/account',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AutomationRoute = AutomationRouteImport.update({
+  id: '/automation',
+  path: '/automation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EnginesRoute = EnginesRouteImport.update({
@@ -74,6 +80,7 @@ const EnvironmentsIdRoute = EnvironmentsIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/automation': typeof AutomationRoute
   '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
@@ -86,6 +93,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/automation': typeof AutomationRoute
   '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
@@ -99,6 +107,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
+  '/automation': typeof AutomationRoute
   '/engines': typeof EnginesRoute
   '/extensions': typeof ExtensionsRoute
   '/kernels': typeof KernelsRoute
@@ -113,6 +122,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/account'
+    | '/automation'
     | '/engines'
     | '/extensions'
     | '/kernels'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/account'
+    | '/automation'
     | '/engines'
     | '/extensions'
     | '/kernels'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/account'
+    | '/automation'
     | '/engines'
     | '/extensions'
     | '/kernels'
@@ -150,6 +162,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
+  AutomationRoute: typeof AutomationRoute
   EnginesRoute: typeof EnginesRoute
   ExtensionsRoute: typeof ExtensionsRoute
   KernelsRoute: typeof KernelsRoute
@@ -174,6 +187,13 @@ declare module '@tanstack/react-router' {
       path: '/account'
       fullPath: '/account'
       preLoaderRoute: typeof AccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/automation': {
+      id: '/automation'
+      path: '/automation'
+      fullPath: '/automation'
+      preLoaderRoute: typeof AutomationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/engines': {
@@ -238,6 +258,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
+  AutomationRoute: AutomationRoute,
   EnginesRoute: EnginesRoute,
   ExtensionsRoute: ExtensionsRoute,
   KernelsRoute: KernelsRoute,

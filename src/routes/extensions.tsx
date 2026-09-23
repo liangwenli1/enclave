@@ -42,8 +42,8 @@ function ExtensionsPage() {
         {extensions.length === 0 ? (
           <Empty
             icon={<Puzzle className="size-8" />}
-            title="还没有扩展"
-            body="添加后在环境详情里勾选。"
+            title="暂无扩展"
+            body="添加后可在环境详情中启用。"
             action={
               <Button variant="primary" onClick={() => setOpen(true)}>
                 {t("addExt")}
@@ -126,11 +126,11 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
   const save = () => {
     const clean = path.trim();
     if (!clean) {
-      setError("填一个解压好的扩展文件夹路径。");
+      setError("请填写已解压的扩展文件夹路径。");
       return;
     }
     if (clean.toLowerCase().endsWith(".crx")) {
-      setError("只能加载解压后的文件夹，先把 .crx 解压。");
+      setError("仅支持加载已解压的文件夹，请先解压 .crx 文件。");
       return;
     }
     const permissions = perms.split(/[,\s]+/).filter(Boolean);
@@ -149,12 +149,12 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={t("addExt")}>
         <div className="grid gap-4">
-          <Field label={t("name")} hint="留空就用文件夹名">
+          <Field label={t("name")} hint="留空则使用文件夹名称">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <Field
             label="扩展文件夹"
-            hint="manifest.json 所在的那个文件夹"
+            hint="manifest.json 所在的文件夹"
             error={error}
           >
             <Input
@@ -163,7 +163,7 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
               placeholder="C:\\ext\\my-extension"
             />
           </Field>
-          <Field label="权限" hint="从扩展的 manifest.json 里抄过来，用空格分隔">
+          <Field label="权限" hint="填写扩展 manifest.json 中声明的权限，以空格分隔">
             <Input value={perms} onChange={(e) => setPerms(e.target.value)} />
           </Field>
         </div>

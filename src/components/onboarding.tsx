@@ -2,8 +2,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
 import { admitKernel, getKernelView, kernelEntry } from "@/lib/kernel/host-api";
+import { registerEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { newEnvironment, profileFromSeed, randomSeed } from "@/lib/schema";
+import { thisPlatform } from "@/lib/os";
 import { useEnclave } from "@/lib/store";
 
 /**
@@ -28,8 +30,9 @@ export function Onboarding() {
   useEffect(() => {
     if (onboarded) return;
     void getKernelView().then((view) => {
-      const kernel = kernelEntry(view, view.defaultVersion);
-      setVersion(view.defaultVersion);
+      // 引导走 Chromium 类：包小、稳定通道。另一类在内核页自己选。
+      const kernel = kernelEntry(view, view.defaultVersions.chromium);
+      setVersion(view.defaultVersions.chromium);
       setPreviewChannel(Boolean(kernel && kernel.record.channel !== "stable"));
       if (kernel?.status.state === "admitted") setAdmitted(true);
     });
@@ -46,7 +49,7 @@ export function Onboarding() {
     setBusy(true);
     setError(null);
     if (!version) {
-      setError("连不上本机服务，重启工作台再试。");
+      setError("无法连接本机服务，请重启工作台。");
       setBusy(false);
       return;
     }
@@ -65,7 +68,7 @@ export function Onboarding() {
         break;
       }
       if (!status || status.state === "hash_mismatch" || status.state === "error") {
-        setError(status?.error ?? "内核准入失败，去内核页看看详情。");
+        setError(status?.error ?? "内核准入失败，详情请查看内核管理页。");
         break;
       }
       await new Promise((r) => setTimeout(r, 1000));
@@ -76,8 +79,8 @@ export function Onboarding() {
   return (
     <div className="fixed inset-0 z-40 grid place-items-center bg-canvas p-4">
       <Panel className="w-full max-w-lg p-6">
-        <div className="text-xs font-semibold tracking-[1.5px] text-subtle uppercase">
-          {t("onboard")} · {step + 1}/3
+        <div className="text-[13px] text-subtle">
+          {t("onboard")}，第 {step + 1} 步，共 3 步
         </div>
         <h2 className="mt-2 text-2xl font-bold tracking-tight text-ink">
           {t("onboardTitle")}
@@ -86,12 +89,12 @@ export function Onboarding() {
         {step === 0 ? (
           <div className="mt-5 grid gap-3 text-[13px] leading-relaxed text-muted">
             <p>
-              Enclave 在<span className="text-ink">你这台电脑上</span>启动独立的浏览器内核。
-              每个环境有自己的 Cookie、指纹和出口，互不串数据。
+              Enclave 在<span className="text-ink">本机</span>启动独立的浏览器内核。
+              每个环境拥有自己的 Cookie、指纹与出口，互不串用数据。
             </p>
             <p>
-              内核不在安装包里：下一步会按清单下载并校验哈希，大约 190 MB，只下一次。
-              之后每次启动环境，都会重新核对磁盘上那个要执行的文件。
+              内核不包含在安装包中：下一步将按清单下载并校验哈希，约 190 MB，仅需下载一次。
+              之后每次启动环境，都会重新核对磁盘上实际执行的文件。
             </p>
           </div>
         ) : null}
@@ -125,7 +128,7 @@ export function Onboarding() {
               <Button
                 variant="primary"
                 disabled={busy || admitted || needsConsent}
-                title={needsConsent ? "先勾选上面的同意项" : undefined}
+                title={needsConsent ? "请先勾选上方的同意项" : undefined}
                 onClick={() => void admit()}
               >
                 {busy ? "下载并校验中…" : admitted ? "已完成" : t("download")}
@@ -137,20 +140,27 @@ export function Onboarding() {
         {step === 2 ? (
           <div className="mt-5 grid gap-4">
             <p className="text-[13px] leading-relaxed text-muted">{t("onboardSample")}</p>
+            {error ? <p className="text-[13px] text-bad">{error}</p> : null}
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="primary"
-                onClick={() => {
+                onClick={async () => {
                   const store = useEnclave.getState();
                   if (store.environments.filter((e) => !e.deletedAt).length === 0) {
                     const env = newEnvironment({
                       name: "第一个环境",
-                      group: "default",
-                      profile: profileFromSeed(randomSeed(), "windows", {
+                      folderId: "default",
+                      profile: profileFromSeed(randomSeed(), thisPlatform(), {
                         brandVersion: version ?? undefined,
                       }),
                       kernelVersion: version ?? undefined,
                     });
+                    // 名额由服务器数。没登记上（满了、连不上）就不建，原因留在这一步让用户看到。
+                    const registered = await registerEnv(env);
+                    if (!registered.ok) {
+                      setError(registered.message);
+                      return;
+                    }
                     store.upsertEnv(env);
                     store.addAudit({
                       action: "create_env",

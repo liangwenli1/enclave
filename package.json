@@ -1,6 +1,6 @@
 {
   "name": "enclave-workbench",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "description": "Enclave 工作台。纯前端 SPA，装进 Tauri 壳发行。",

@@ -20,11 +20,11 @@ function EnginesPage() {
 
   const add = () => {
     const found: typeof errors = {};
-    if (!name.trim()) found.name = "填一个名字。";
-    if (!keyword.trim()) found.keyword = "填关键字，比如 google.com。";
-    else if (catalog.some((e) => e.keyword === keyword.trim())) found.keyword = "这个关键字已经有了。";
+    if (!name.trim()) found.name = "请填写名称。";
+    if (!keyword.trim()) found.keyword = "请填写关键字，例如 google.com。";
+    else if (catalog.some((e) => e.keyword === keyword.trim())) found.keyword = "该关键字已存在。";
     if (!/^https?:\/\/\S+$/.test(url.trim())) found.url = "要以 http:// 或 https:// 开头。";
-    else if (!url.includes("{searchTerms}")) found.url = "地址里要有 {searchTerms}，它会被替换成搜索词。";
+    else if (!url.includes("{searchTerms}")) found.url = "地址中需包含 {searchTerms}，它将被替换为搜索词。";
     setErrors(found);
     if (Object.keys(found).length) return;
     const engine: CatalogEngine = {

@@ -11,14 +11,14 @@ on:
 permissions:
   contents: write
 
-# 许可证服务地址（仓库 Settings → Secrets and variables → Actions → Variables）。
-# 不设也能打包：包里的账号登录不可用，额度停在免费档，其余功能照常。
+# 服务器地址：仓库 Settings → Secrets and variables → Actions → Variables 里的 ENCLAVE_CLOUD_URL，
+# 写成 https://你的官网域名。它在编译本机服务时写进去。工作台必须登录才能用，所以没有它就不出包。
 
 jobs:
   windows-msi:
     runs-on: windows-latest
     env:
-      VITE_ENCLAVE_VENDOR_URL: ${{ vars.VITE_ENCLAVE_VENDOR_URL }}
+      ENCLAVE_CLOUD_URL: ${{ vars.ENCLAVE_CLOUD_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,7 +78,7 @@ jobs:
     # macos-latest 是 Apple Silicon。只出 arm64 的包。
     runs-on: macos-latest
     env:
-      VITE_ENCLAVE_VENDOR_URL: ${{ vars.VITE_ENCLAVE_VENDOR_URL }}
+      ENCLAVE_CLOUD_URL: ${{ vars.ENCLAVE_CLOUD_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -94,7 +94,11 @@ jobs:
 
       # 没人有 Mac，这台 runner 就是那台 Mac：用真实的内核走一遍准入、启动、握手、停止。
       # 这一步不过就不出包。
+      # 冒烟用的这一份指向替身服务器（scripts/smoke-cloud.py），只在这一步用。
+      # 后面打包时会用正式地址重新编译，并核对安装包里的那一份指向的是正式地址。
       - name: 真机冒烟
+        env:
+          ENCLAVE_CLOUD_URL: http://127.0.0.1:17956
         run: |
           cargo build --release -p enclave-host
           ./scripts/smoke-host.sh target/release/enclave-host

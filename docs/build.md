@@ -26,9 +26,10 @@ win-x64 目前是预览通道，需要先到安全中心勾选"允许使用预�
 
 ### 3a. 不用 Windows 机器：让 GitHub 打
 
-1. （有域名之后再做）仓库 Settings → Secrets and variables → Actions → **Variables**，新建
-   `VITE_ENCLAVE_VENDOR_URL` = `https://你的官网域名`。这是许可证服务的地址，构建时写进前端。
-   **不设也能打包**：包里的账号页不能登录、额度停在免费档，其余功能照常。和签名没有关系。
+1. 仓库 Settings → Secrets and variables → Actions → **Variables**，新建
+   `ENCLAVE_CLOUD_URL` = `https://你的官网域名`（不带路径、不带结尾的斜杠）。它在编译本机服务时写进去。
+   **必须设**：工作台要登录后才能用，没有服务器地址的安装包装上之后只有一屏"这个安装包不能登录"。
+   还没有域名的话，先用 Cloudflare Tunnel 给官网一个 https 地址。和代码签名没有关系。
 2. 版本号在三处，要一致：`package.json`、`apps/desktop/src-tauri/Cargo.toml`、
    `apps/desktop/src-tauri/tauri.conf.json`。
 3. 打 tag 并推上去：
@@ -53,7 +54,7 @@ win-x64 目前是预览通道，需要先到安全中心勾选"允许使用预�
 如果最后 `light.exe` 报错，到「设置 → 可选功能」里启用 **VBSCRIPT**（Win11 24H2 默认没开）。
 
 ```powershell
-$env:VITE_ENCLAVE_VENDOR_URL = "https://你的官网域名"
+$env:ENCLAVE_CLOUD_URL = "https://你的官网域名"
 powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1
 ```
 

@@ -38,6 +38,8 @@
       screenH: screen.height,
       colorDepth: screen.colorDepth,
       dpr: window.devicePixelRatio,
+      outerW: window.outerWidth,
+      outerH: window.outerHeight,
     },
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     locale: Intl.DateTimeFormat().resolvedOptions().locale,

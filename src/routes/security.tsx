@@ -24,7 +24,7 @@ function SecurityPage() {
   // 已经下载的版本里有预览通道的，或者一个都没下、而默认版本是预览通道。
   const inUse = admitted
     ? kernels.filter((k) => k.status.state === "admitted")
-    : kernels.filter((k) => k.record.version === view?.defaultVersion);
+    : kernels.filter((k) => k.record.version === view?.defaultVersions.chromium);
   const previewChannel = inUse.some((k) => k.record.channel !== "stable");
 
   return (
@@ -38,7 +38,7 @@ function SecurityPage() {
             <Check
               ok={online}
               label="本机接口"
-              detail={online ? "仅 127.0.0.1 · 需要令牌 · 限工作台来源" : "连不上本机服务，重启工作台再试"}
+              detail={online ? "仅 127.0.0.1，需令牌，限工作台来源" : "无法连接本机服务，请重启工作台"}
             />
             <Check
               ok={admitted}
@@ -49,21 +49,21 @@ function SecurityPage() {
                   ? "未知"
                   : admitted
                     ? "每次启动前核对可执行文件哈希"
-                    : "还没有下载任何内核，环境无法启动"
+                    : "尚未下载任何内核，环境无法启动"
               }
             />
             <Check
               ok={!settings.allowNoSandboxHost}
               label="内核沙箱"
               detail={
-settings.allowNoSandboxHost ? "你已允许关闭沙箱" : "开启"
+settings.allowNoSandboxHost ? "已允许关闭沙箱" : "开启"
               }
             />
             <Check
               ok={hasVault}
               label="保险箱"
               detail={
-hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会被保存"
+hasVault ? "代理密码以密文保存" : "未设置主密码，代理密码将不会保存"
               }
             />
             <Check
@@ -75,22 +75,22 @@ hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会
                   ? "未知"
                   : previewChannel
                   ? settings.allowPreviewKernel
-                    ? "预览通道，你已同意使用"
-                    : "预览通道，需要你同意后才能用"
+                    ? "预览通道，已同意使用"
+                    : "预览通道，需确认同意后方可使用"
                   : "稳定通道"
               }
             />
-            <Check ok={false} neutral label="安装包签名" detail="未签名，请用下载页的 SHA256 核对" />
+            <Check ok={false} neutral label="安装包签名" detail="未签名，请使用下载页公示的 SHA256 核对" />
           </ul>
         </Panel>
 
         <Panel>
-          <PanelHeader title="你可以自己关掉的保护" />
+          <PanelHeader title="可自行关闭的保护" />
           <div className="grid gap-4 p-5">
             <Consent
               checked={settings.allowNoSandboxHost}
               title="允许在启动时关闭内核沙箱"
-              body="关掉后，网页里的漏洞更容易影响到你的系统。"
+              body="关闭后将降低浏览器的隔离强度，系统面临的风险随之上升。"
               onChange={(checked) => {
                 useEnclave.getState().patchSettings({ allowNoSandboxHost: checked });
                 useEnclave.getState().addAudit({
@@ -103,7 +103,7 @@ hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会
             <Consent
               checked={settings.allowPreviewKernel}
               title="允许使用预览通道的内核"
-              body="哈希已核对，但还没在这个平台上做过完整行为测试。"
+              body="哈希已核对，但尚未在当前平台完成完整的行为测试。"
               onChange={(checked) => {
                 useEnclave.getState().patchSettings({ allowPreviewKernel: checked });
                 useEnclave.getState().addAudit({
@@ -119,7 +119,7 @@ hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会
         <Panel>
           <PanelHeader
             title="诊断包"
-            hint="不含 Cookie、密码和网址"
+            hint="不包含 Cookie、密码与访问记录"
             actions={
               <Button
                 onClick={() => {
@@ -129,7 +129,7 @@ hasVault ? "代理密码以密文保存" : "没设主密码，代理密码不会
                         {
                           exportedAt: new Date().toISOString(),
                           contains: ["本机运行条件", "内核状态", "最近 50 条审计"],
-                          excludes: ["Cookie", "密码", "访问过的网址", "环境内容"],
+                          excludes: ["Cookie", "密码", "访问记录", "环境内容"],
                           capabilities: view?.capabilities ?? null,
                           kernels: kernels.map((k) => ({
                             version: k.record.version,
@@ -214,7 +214,7 @@ function Check({
         <p className="mt-1 max-w-[62ch] text-[13px] leading-relaxed text-subtle">{detail}</p>
       </div>
       <Badge tone={neutral ? "neutral" : ok ? "ok" : "warn"}>
-        {neutral ? (unknown ? "未知" : "未提供") : ok ? "正常" : "需要注意"}
+        {neutral ? (unknown ? "未知" : "未提供") : ok ? "正常" : "需关注"}
       </Badge>
     </li>
   );

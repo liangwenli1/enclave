@@ -12,12 +12,12 @@
 src/                      React 工作台（纯前端 SPA，没有服务端）
 crates/host/              Rust 本机服务：哈希准入、spawn、CDP，只绑 127.0.0.1
 apps/desktop/src-tauri/   Tauri 壳：生成令牌、拉起本机服务、注入令牌给工作台
-apps/vendor/              许可证服务：账号、档位、设备绑定、Ed25519 签名许可证
 kernels.manifest.json     内核清单（url / bytes / sha256 / 通道）
 docs/  security/          交付合同、内核准入、威胁模型
 ```
 
-官网在另一个仓库 `enclave-www`，它同时负责把 `apps/vendor` 跑起来。
+官网和云端 API（注册登录、订阅、环境名额与启动授权、内核上架）在另一个仓库 `enclave-www`，两边构建互不依赖。
+这个仓库只有桌面客户端。
 
 ## 三个进程，一条链路
 
@@ -28,9 +28,13 @@ Enclave.exe (Tauri)
  └─ 把同一个令牌注入 WebView
 
 工作台 (WebView)  ──令牌──>  enclave-host (127.0.0.1:17891)  ──spawn──>  fingerprint-chromium
-      │
-      └──HTTPS──> 许可证服务（只做登录和续签，不碰环境数据）
+                                   │
+                                   └──HTTPS──> 云端 API（登录、额度、环境名额、运行租约、内核清单）
 ```
+
+工作台要登录后才能用，订阅状态以服务器为准：新建和启动环境前，本机服务都会现问服务器。
+和服务器说话的只有本机服务——设备令牌在系统钥匙串里，页面碰不到，也不直接连外网。
+指纹、代理、Cookie 不上传，服务器只知道环境的名字。
 
 本机接口三道门：Host 头必须回环、Origin 必须是工作台自己、Bearer 令牌必须匹配。
 **没有跳过鉴权的开关。**
@@ -52,7 +56,7 @@ npm run dev          # 自动构建并拉起 enclave-host，然后起 vite dev
 
 ```bash
 npm run build        # 产物在 dist/，Tauri 直接打包这个目录
-npm test             # 许可证验签等
+npm test             # 深链接解析、会话状态
 npm run typecheck
 cargo test -p enclave-host
 ```
@@ -64,7 +68,7 @@ cargo test -p enclave-host
 在有桌面会话的 Windows 上：
 
 ```powershell
-$env:VITE_ENCLAVE_VENDOR_URL = "https://你的官网域名"
+$env:ENCLAVE_CLOUD_URL = "https://你的官网域名"   # 必填：工作台要登录才能用
 powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1
 ```
 
@@ -76,4 +80,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows-msi.ps1
 - 内核二进制、`data/`、构建产物进 Git。
 - 没有 sha256 的内核进 `stable` 通道。
 - 界面上出现没接通的按钮、占位区块、内部术语。
-- 向第三方发任何请求（工作台只连本机服务和自己的许可证服务）。
+- 向第三方发任何请求（页面只连本机服务；本机服务只连自己的云端 API 和内核的上游下载地址）。

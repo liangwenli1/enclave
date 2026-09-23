@@ -11,6 +11,7 @@
     "jsx": "react-jsx",
     "strict": true,
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "skipLibCheck": true,
     "noEmit": true,
     "types": [

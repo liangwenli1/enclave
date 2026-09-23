@@ -1,4 +1,5 @@
 use crate::api::StartSpec;
+use crate::bridge::{self, Bridge, ExitInfo, Upstream};
 use crate::flags::{classify, FlagClass};
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -14,7 +15,10 @@ use tokio::time::{sleep, Duration};
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KernelRecord {
+    /// 具体是哪个构建：`fingerprint-chromium` 或 `camoufox`。由内核的类决定，不能乱配。
     pub id: String,
+    /// 内核分两类，每一类有自己的一串版本。
+    pub engine: Engine,
     pub version: String,
     pub platform: String,
     pub channel: String,
@@ -27,6 +31,38 @@ pub struct KernelRecord {
     pub upstream: String,
     pub license: String,
     pub notes: String,
+}
+
+/// 内核的类。两类的启动方式、指纹的给法、调试协议都不一样，但下载、校验、准入走的是同一条路。
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Engine {
+    /// fingerprint-chromium：指纹经启动参数给，调试协议是 CDP。
+    Chromium,
+    /// Camoufox：指纹经环境变量里的一份 JSON 给，调试协议是 WebDriver BiDi。
+    Firefox,
+}
+
+impl Engine {
+    pub const ALL: [Engine; 2] = [Engine::Chromium, Engine::Firefox];
+
+    /// 这一类用的构建。清单里的 `id` 必须是它。
+    pub fn build_id(self) -> &'static str {
+        match self {
+            Engine::Chromium => "fingerprint-chromium",
+            Engine::Firefox => "camoufox",
+        }
+    }
+
+    /// 只从上游项目的 GitHub Release 下载。
+    pub fn upstream_prefix(self) -> &'static str {
+        match self {
+            Engine::Chromium => {
+                "https://github.com/adryfish/fingerprint-chromium/releases/download/"
+            }
+            Engine::Firefox => "https://github.com/daijro/camoufox/releases/download/",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -71,6 +107,14 @@ pub struct RuntimeRow {
     /// 这个环境跑的是哪个内核版本。正在用的版本不许删。
     #[serde(default)]
     pub kernel_version: String,
+    /// 哪一类内核。采集、探活用的协议按它选。
+    pub engine: Engine,
+    /// 经代理出去之后外面看到的 IP 和位置。没配代理、或者没探到，就是空。
+    #[serde(default)]
+    pub exit: Option<ExitInfo>,
+    /// 这个环境的流量走本进程里的代理桥。Host 一旦重启桥就没了，这样的浏览器接管回来也上不了网。
+    #[serde(default)]
+    pub bridged: bool,
     pub pid: u32,
     pub port: u16,
     pub debug_address: String,
@@ -91,17 +135,87 @@ pub struct FingerprintProfile {
     pub locale: String,
     pub languages: Vec<String>,
     pub timezone: String,
-    pub screen: Screen,
+    /// 浏览器窗口的大小。不是屏幕分辨率：实测内核 148 改不了 screen.width/height，
+    /// 网页看到的始终是这台电脑真实的显示器。
+    pub window: WindowSize,
+    /// 下面三项只有 Firefox 类用得上：那一类的内核能按环境给屏幕、缩放和显卡字符串。
+    /// Chromium 类给了也没用（内核改不了），工作台不会给。
+    #[serde(default)]
+    pub screen: Option<ScreenSpec>,
+    #[serde(default)]
+    pub device_pixel_ratio: Option<f64>,
+    #[serde(default)]
+    pub webgl: Option<WebglSpec>,
     pub webrtc: Webrtc,
+    /// 定位怎么给。默认跟着代理出口走——时区和语言都跟了，定位不跟就是个矛盾。
+    #[serde(default)]
+    pub geolocation: Geolocation,
     #[serde(default)]
     pub disable_spoofing: Vec<String>,
 }
 
+/// 网页问"我在哪"的时候给什么。
+#[derive(Clone, Debug, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase", tag = "mode")]
+pub enum Geolocation {
+    /// 跟着代理出口走。没绑代理、或者查不到出口坐标，就什么都不做。
+    #[default]
+    #[serde(rename = "exit")]
+    FollowExit,
+    /// 用户自己填的经纬度。
+    #[serde(rename = "custom")]
+    Custom { latitude: f64, longitude: f64 },
+    /// 不动它：网页问到的是这台电脑真实的定位。
+    #[serde(rename = "real")]
+    Real,
+    /// 禁用：网页根本要不到位置，和用户点了"拒绝"一样。
+    #[serde(rename = "blocked")]
+    Blocked,
+    /// 旧名字，等同于"用真实位置"。留着是因为它进过一次界面。
+    #[serde(rename = "off")]
+    Off,
+}
+
+impl Geolocation {
+    /// 这个环境最终要报的坐标。`exit` 是查出口得到的那一对。
+    pub fn resolve(&self, exit: Option<(f64, f64)>) -> Option<(f64, f64)> {
+        match self {
+            Geolocation::FollowExit => exit,
+            Geolocation::Custom {
+                latitude,
+                longitude,
+            } => Some((*latitude, *longitude)),
+            Geolocation::Real | Geolocation::Off | Geolocation::Blocked => None,
+        }
+    }
+
+    /// 要不要把定位功能整个关掉。关掉之后网页拿到的是"用户拒绝了"。
+    pub fn blocked(&self) -> bool {
+        matches!(self, Geolocation::Blocked)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Screen {
+pub struct WindowSize {
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScreenSpec {
+    pub width: u32,
+    pub height: u32,
+    pub avail_width: u32,
+    pub avail_height: u32,
+    pub color_depth: u32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct WebglSpec {
+    pub vendor: String,
+    pub renderer: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -183,18 +297,29 @@ pub fn this_platform() -> &'static str {
     }
 }
 
-/// 版本号会被拼进本机路径（解压目录、准入记录），只许数字和点。
+/// 版本号会被拼进本机路径（解压目录、准入记录）。
+/// 形状是"数字和点"，后面可以带一段预发布标记：`148.0.7778.215`、`152.0.4-beta.30`。
+/// 不许出现路径分隔符、连续的点，也不许以点或连字符开头结尾。
 pub fn valid_version(version: &str) -> bool {
+    let (core, pre) = match version.split_once('-') {
+        Some((core, pre)) => (core, Some(pre)),
+        None => (version, None),
+    };
+    let dotted =
+        |s: &str, ok: fn(u8) -> bool| s.split('.').all(|p| !p.is_empty() && p.bytes().all(ok));
     !version.is_empty()
         && version.len() <= 32
-        && version
-            .split('.')
-            .all(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+        && dotted(core, |b| b.is_ascii_digit())
+        && pre.is_none_or(|p| dotted(p, |b| b.is_ascii_alphanumeric()))
 }
 
-/// "148.0.7778.215" → [148, 0, 7778, 215]，用来比较新旧。
+/// "148.0.7778.215" → [148, 0, 7778, 215]；"152.0.4-beta.30" → [152, 0, 4, 30]。用来比较新旧。
 pub fn version_key(version: &str) -> Vec<u64> {
-    version.split('.').map(|p| p.parse().unwrap_or(0)).collect()
+    version
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|p| !p.is_empty())
+        .map(|p| p.parse().unwrap_or(0))
+        .collect()
 }
 
 /// 清单里这个系统能用的全部内核，新的在前。同一个版本只留一条。
@@ -210,12 +335,13 @@ pub fn kernels_for_this_os(manifest: &ManifestFile) -> Vec<KernelRecord> {
     list
 }
 
-/// 新建环境默认用哪个：最新的稳定版；没有稳定版就用最新的。
-pub fn default_version(kernels: &[KernelRecord]) -> Option<String> {
-    kernels
-        .iter()
+/// 这一类内核新建环境默认用哪个版本：最新的稳定版；没有稳定版就用最新的。`kernels` 是新的在前。
+pub fn default_version(kernels: &[KernelRecord], engine: Engine) -> Option<String> {
+    let mut of_class = kernels.iter().filter(|k| k.engine == engine);
+    let newest = of_class.clone().next();
+    of_class
         .find(|k| k.channel == "stable")
-        .or(kernels.first())
+        .or(newest)
         .map(|k| k.version.clone())
 }
 
@@ -315,17 +441,40 @@ pub fn sha256_str(input: &str) -> String {
     hex::encode(hasher.finalize())
 }
 
+/// 解压目录里真正被执行的那个文件叫什么。各平台的包都实际看过目录：
+/// Chromium 类：Linux `chrome`，Windows `chrome.exe`，macOS `Chromium.app/Contents/MacOS/Chromium`；
+/// Firefox 类：Linux `camoufox-bin`，Windows `camoufox.exe`，macOS `Camoufox.app/Contents/MacOS/camoufox`。
+fn executable_names(engine: Engine) -> &'static [&'static str] {
+    match engine {
+        // 不含 chrome-wrapper：那是个壳脚本，准入时记下的哈希必须是真正执行的那个文件。
+        Engine::Chromium => &[
+            "chrome",
+            "chromium",
+            "ungoogled-chromium",
+            "chrome.exe",
+            "chromium.exe",
+            "ungoogled-chromium.exe",
+        ],
+        // 不含 Linux 包里的 `camoufox`：那是启动器，真正的浏览器是 camoufox-bin。
+        Engine::Firefox => &["camoufox-bin", "camoufox.exe"],
+    }
+}
+
 /// macOS 的内核是一个 .app 包，真正执行的文件在 Contents/MacOS/ 里。
 /// 包里别处还有 Helper 之类的可执行文件，不能按名字满树去撞。
 #[cfg(target_os = "macos")]
-fn find_chrome(dir: &Path) -> Option<PathBuf> {
+fn find_executable(dir: &Path, engine: Engine) -> Option<PathBuf> {
+    let inner = match engine {
+        Engine::Chromium => "Chromium",
+        Engine::Firefox => "camoufox",
+    };
     let rd = std::fs::read_dir(dir).ok()?;
     for ent in rd.flatten() {
         let app = ent.path();
         if app.extension().and_then(|e| e.to_str()) != Some("app") {
             continue;
         }
-        let exe = app.join("Contents").join("MacOS").join("Chromium");
+        let exe = app.join("Contents").join("MacOS").join(inner);
         if exe.is_file() {
             return Some(exe);
         }
@@ -334,9 +483,8 @@ fn find_chrome(dir: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn find_chrome(dir: &Path) -> Option<PathBuf> {
-    // 不含 chrome-wrapper：那是个壳脚本，准入时记下的哈希必须是真正执行的那个文件。
-    let names = ["chrome", "chromium", "ungoogled-chromium"];
+fn find_executable(dir: &Path, engine: Engine) -> Option<PathBuf> {
+    let names = executable_names(engine);
     let mut stack = vec![dir.to_path_buf()];
     while let Some(cur) = stack.pop() {
         let Ok(rd) = std::fs::read_dir(&cur) else {
@@ -351,11 +499,7 @@ fn find_chrome(dir: &Path) -> Option<PathBuf> {
                 if name != "resources" && name != "locales" {
                     stack.push(p);
                 }
-            } else if names.iter().any(|n| *n == name)
-                || lower == "chrome.exe"
-                || lower == "chromium.exe"
-                || lower == "ungoogled-chromium.exe"
-            {
+            } else if names.iter().any(|n| *n == name || *n == lower) {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
@@ -445,7 +589,21 @@ async fn extract_archive(archive: &Path, dest: &Path) -> Result<()> {
             }
             return Ok(());
         }
-        #[cfg(not(windows))]
+        // macOS 上的 zip 里是一个 .app：用 ditto 解，保留签名和扩展属性（unzip 会丢）。
+        #[cfg(target_os = "macos")]
+        {
+            let out = Command::new("ditto")
+                .args(["-x", "-k"])
+                .arg(archive)
+                .arg(dest)
+                .output()
+                .await?;
+            if !out.status.success() {
+                bail!("ditto: {}", String::from_utf8_lossy(&out.stderr));
+            }
+            return Ok(());
+        }
+        #[cfg(all(not(windows), not(target_os = "macos")))]
         {
             let out = Command::new("unzip")
                 .args([
@@ -537,7 +695,7 @@ async fn copy_app_bundle(mount: &Path, dest: &Path) -> Result<()> {
 }
 
 pub fn resolve_executable(paths: &HostPaths, k: &KernelRecord) -> Option<PathBuf> {
-    find_chrome(&extract_dir(paths, k))
+    find_executable(&extract_dir(paths, k), k.engine)
 }
 
 async fn apply_search_engine(
@@ -1043,12 +1201,28 @@ async fn pick_port() -> Result<u16> {
     Ok(port)
 }
 
+/// 每个带代理的环境一座桥，键是环境 id。桥和环境同生共死。
+pub type Bridges = std::sync::Arc<tokio::sync::Mutex<HashMap<String, Bridge>>>;
+
 pub struct Spawned {
     pub pid: u32,
     pub port: u16,
+    pub exit: Option<ExitInfo>,
+    /// 实际用来启动的时区和语言：可能已经按出口改过。
+    pub timezone: String,
+    pub locale: String,
+    pub languages: Vec<String>,
     pub sha256: String,
     pub user_data_dir: PathBuf,
     pub warned: Vec<String>,
+}
+
+/// 这一次启动特有的两样东西，由调用方备好。
+pub struct Launch<'a> {
+    /// 本进程第一次用这个内核：把可执行文件完整算一遍哈希。
+    pub full_verify: bool,
+    /// 这个环境的代理地址（带账号密码）。从 Host 自己的存储里解出来，用完即弃。
+    pub proxy_url: Option<&'a str>,
 }
 
 pub async fn start_environment(
@@ -1057,17 +1231,26 @@ pub async fn start_environment(
     env_id: &str,
     spec: &StartSpec,
     runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
-    full_verify: bool,
+    bridges: &Bridges,
+    launch: Launch<'_>,
 ) -> Result<Spawned, (String, String)> {
+    let Launch {
+        full_verify,
+        proxy_url,
+    } = launch;
     let profile = &spec.profile;
     let allow_no_sandbox = spec.allow_no_sandbox;
     {
         let map = runtimes.lock().await;
         if let Some(rt) = map.get(env_id) {
-            if pid_alive(rt.pid) && wait_for_cdp(rt.port, 1500).await {
+            if pid_alive(rt.pid) && wait_ready(k.engine, rt.port, 1500).await {
                 return Ok(Spawned {
                     pid: rt.pid,
                     port: rt.port,
+                    exit: rt.exit.clone(),
+                    timezone: profile.timezone.clone(),
+                    locale: profile.locale.clone(),
+                    languages: profile.languages.clone(),
                     sha256: rt.sha256.clone(),
                     user_data_dir: PathBuf::from(&rt.user_data_dir),
                     warned: vec![],
@@ -1078,6 +1261,43 @@ pub async fn start_environment(
     // 启动前核对真正要执行的文件。第一次启动做全量 sha256，之后比对大小与修改时间。
     let recorded = read_status_fast(paths, k).await;
     let (exe, exe_sha) = verify_executable(paths, k, &recorded, full_verify).await?;
+    // 有代理就先架桥、先探路。不通就别开窗口：开出来也只是一个打不开网页的浏览器。
+    let mut bridge = None;
+    let mut exit = None;
+    if let Some(url) = proxy_url {
+        let upstream =
+            Upstream::parse(url).map_err(|e| ("PROXY_INVALID".to_string(), format!("{e:#}")))?;
+        let b = Bridge::start(upstream)
+            .await
+            .map_err(|e| ("SPAWN_FAILED".to_string(), e.to_string()))?;
+        match bridge::probe(b.port).await {
+            Ok(info) => exit = Some(info),
+            Err(_) => {
+                // 桥自己记下了连上游失败的原因，那才是要告诉用户的；
+                // 上游是通的、只是查 IP 的服务都不通，就照常启动，只是不对齐时区。
+                if let Some(f) = b.last_failure().await {
+                    return Err((f.code.to_string(), f.message));
+                }
+            }
+        }
+        bridge = Some(b);
+    }
+    let timezone = exit
+        .as_ref()
+        .filter(|_| spec.follow_exit)
+        .and_then(|e| e.timezone.clone())
+        .unwrap_or_else(|| profile.timezone.clone());
+    // 语言和时区成对走：出口在东京，时区改成了东京，语言还留着 en-US，是最常被看的不一致之一。
+    let region = exit
+        .as_ref()
+        .filter(|_| spec.follow_exit)
+        .and_then(|e| e.country.as_deref())
+        .and_then(crate::region::of_country);
+    let (locale, languages) = match region {
+        Some(r) => (r.locale.clone(), r.languages.clone()),
+        None => (profile.locale.clone(), profile.languages.clone()),
+    };
+
     let port = pick_port()
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
@@ -1088,119 +1308,191 @@ pub async fn start_environment(
     tokio::fs::create_dir_all(&user_data_dir)
         .await
         .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
-    let search_ext = apply_search_engine(
-        &user_data_dir,
-        spec.search_engine.as_deref(),
-        spec.search_provider.as_ref(),
-    )
-    .await
-    .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
+    // 两类内核从这里分开：指纹的给法、代理的给法、调试协议都不一样。
+    let (args, extra_env, warned): (Vec<String>, Vec<(String, String)>, Vec<String>) = match k
+        .engine
+    {
+        Engine::Chromium => {
+            let search_ext = apply_search_engine(
+                &user_data_dir,
+                spec.search_engine.as_deref(),
+                spec.search_provider.as_ref(),
+            )
+            .await
+            .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
 
-    let mut args = vec![
-        format!("--user-data-dir={}", user_data_dir.display()),
-        format!("--fingerprint={}", profile.seed),
-        format!("--fingerprint-platform={}", profile.platform),
-        format!(
-            "--fingerprint-platform-version={}",
-            profile.platform_version
-        ),
-        format!("--fingerprint-brand={}", profile.brand),
-        format!("--fingerprint-brand-version={}", profile.brand_version),
-        format!(
-            "--fingerprint-hardware-concurrency={}",
-            profile.hardware_concurrency
-        ),
-        format!("--lang={}", profile.locale),
-        format!("--accept-lang={}", profile.languages.join(",")),
-        format!("--timezone={}", profile.timezone),
-        format!(
-            "--window-size={},{}",
-            profile.screen.width, profile.screen.height
-        ),
-        format!("--remote-debugging-port={port}"),
-        "--remote-debugging-address=127.0.0.1".into(),
-        "--remote-allow-origins=http://127.0.0.1".into(),
-        "--disable-non-proxied-udp".into(),
-        "--no-first-run".into(),
-        "--no-default-browser-check".into(),
-        "--disable-sync".into(),
-        "--mute-audio".into(),
-    ];
-    if force_headless() {
-        args.push("--headless=new".into());
-        args.push("--disable-gpu".into());
-    }
-    if profile.webrtc.mode == "disable" {
-        args.push("--disable-webrtc".into());
-    } else {
-        args.push("--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into());
-    }
-    if !profile.disable_spoofing.is_empty() {
-        args.push(format!(
-            "--disable-spoofing={}",
-            profile.disable_spoofing.join(",")
-        ));
-    }
-    if let Some(p) = spec.proxy_server.as_deref() {
-        args.push(format!("--proxy-server={p}"));
-        args.push("--proxy-bypass-list=<-loopback>".into());
-        args.push("--disable-quic".into());
-        args.push("--dns-over-https-mode=off".into());
-        args.push("--disable-features=UseDnsHttpsSvcb".into());
-        args.push("--enable-features=SetIpv6ProbeFalse".into());
-    }
-    if allow_no_sandbox {
-        args.push("--no-sandbox".into());
-        args.push("--disable-gpu-sandbox".into());
-    }
-    let mut extra: Vec<String> = spec
-        .extra_flags
-        .iter()
-        .map(|f| {
-            if f.starts_with("--") {
-                f.clone()
+            let mut args = vec![
+                format!("--user-data-dir={}", user_data_dir.display()),
+                format!("--fingerprint={}", profile.seed),
+                format!("--fingerprint-platform={}", profile.platform),
+                format!(
+                    "--fingerprint-platform-version={}",
+                    profile.platform_version
+                ),
+                format!("--fingerprint-brand={}", profile.brand),
+                format!("--fingerprint-brand-version={}", profile.brand_version),
+                format!(
+                    "--fingerprint-hardware-concurrency={}",
+                    profile.hardware_concurrency
+                ),
+                format!("--lang={locale}"),
+                format!("--accept-lang={}", languages.join(",")),
+                format!("--timezone={timezone}"),
+                format!(
+                    "--window-size={},{}",
+                    profile.window.width, profile.window.height
+                ),
+                format!("--remote-debugging-port={port}"),
+                "--remote-debugging-address=127.0.0.1".into(),
+                "--remote-allow-origins=http://127.0.0.1".into(),
+                "--disable-non-proxied-udp".into(),
+                "--no-first-run".into(),
+                "--no-default-browser-check".into(),
+                "--disable-sync".into(),
+                "--mute-audio".into(),
+            ];
+            if force_headless() {
+                args.push("--headless=new".into());
+                args.push("--disable-gpu".into());
+            }
+            if profile.webrtc.mode == "disable" {
+                args.push("--disable-webrtc".into());
             } else {
-                format!("--{f}")
+                args.push("--force-webrtc-ip-handling-policy=disable_non_proxied_udp".into());
             }
-        })
-        .collect();
-    // 同名开关 Chromium 只认最后一个：搜索引擎扩展和用户的扩展必须并进同一个 --load-extension。
-    if let Some(ext) = search_ext {
-        let ours = ext.display().to_string();
-        match extra
-            .iter_mut()
-            .find(|f| f.starts_with("--load-extension="))
-        {
-            Some(flag) => {
-                flag.push(',');
-                flag.push_str(&ours);
+            // 关掉某一项伪装，让它露出这台电脑的真实值。实测 canvas 生效：关掉后和不带 --fingerprint 时一样。
+            // 名字只许小写字母：它们会拼进同一个参数里。
+            let real: Vec<&str> = profile
+                .disable_spoofing
+                .iter()
+                .map(String::as_str)
+                .filter(|s| !s.is_empty() && s.bytes().all(|b| b.is_ascii_lowercase()))
+                .collect();
+            if !real.is_empty() {
+                args.push(format!("--disable-spoofing={}", real.join(",")));
             }
-            None => extra.push(format!("--load-extension={ours}")),
+            if let Some(b) = &bridge {
+                // 浏览器只认识本机这座桥；账号密码和上游地址都不出现在它的命令行里。
+                args.push(format!("--proxy-server=socks5://127.0.0.1:{}", b.port));
+                // 本机一律不做 DNS 查询（预解析也不行），域名全部交给代理出口去解析。
+                args.push("--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1".into());
+                args.push("--proxy-bypass-list=<-loopback>".into());
+                args.push("--disable-quic".into());
+                args.push("--dns-over-https-mode=off".into());
+                args.push("--disable-features=UseDnsHttpsSvcb".into());
+                args.push("--enable-features=SetIpv6ProbeFalse".into());
+            }
+            if allow_no_sandbox {
+                args.push("--no-sandbox".into());
+                args.push("--disable-gpu-sandbox".into());
+            }
+            let mut extra: Vec<String> = spec
+                .extra_flags
+                .iter()
+                .map(|f| {
+                    if f.starts_with("--") {
+                        f.clone()
+                    } else {
+                        format!("--{f}")
+                    }
+                })
+                .collect();
+            // 同名开关 Chromium 只认最后一个：搜索引擎扩展和用户的扩展必须并进同一个 --load-extension。
+            if let Some(ext) = search_ext {
+                let ours = ext.display().to_string();
+                match extra
+                    .iter_mut()
+                    .find(|f| f.starts_with("--load-extension="))
+                {
+                    Some(flag) => {
+                        flag.push(',');
+                        flag.push_str(&ours);
+                    }
+                    None => extra.push(format!("--load-extension={ours}")),
+                }
+            }
+            let classified: Vec<_> = extra.iter().map(|f| classify(f)).collect();
+            let rejected: Vec<String> = classified
+                .iter()
+                .filter(|c| c.class == FlagClass::Reject)
+                .map(|c| c.raw.clone())
+                .collect();
+            let warned: Vec<String> = classified
+                .iter()
+                .filter(|c| c.class == FlagClass::Warn)
+                .map(|c| c.raw.clone())
+                .collect();
+            if !rejected.is_empty() {
+                return Err((
+                    "SANDBOX_DISABLED_BLOCKED".into(),
+                    format!(
+                        "这些启动参数不允许：{}。到环境的「启动参数」页删掉。",
+                        rejected.join("、")
+                    ),
+                ));
+            }
+            args.extend(
+                classified
+                    .into_iter()
+                    .filter(|c| c.class != FlagClass::Reject)
+                    .map(|c| c.raw),
+            );
+            let mut env = vec![("TZ".to_string(), timezone.clone())];
+            // Linux 上 Chromium 的界面语言（也就是 Intl 的默认区域）只看环境变量，不看 --lang。
+            // 实测：只传 --lang=de 时 navigator.language 是 de-DE，Intl 却还是 en-US——两边对不上。
+            // Windows 上 --lang 就够了。
+            if cfg!(target_os = "linux") {
+                env.push(("LANGUAGE".to_string(), locale.replace('-', "_")));
+            }
+            // macOS 上取的是系统语言。Cocoa 程序认命令行里的 `-AppleLanguages (xx-YY)`，
+            // 它会盖掉系统设置——**没有 Mac 真机，这一条没验过**；实验室的一致性检查会指出来。
+            if cfg!(target_os = "macos") {
+                args.push("-AppleLanguages".to_string());
+                args.push(format!("({locale})"));
+            }
+            (args, env, warned)
         }
-    }
-    let classified: Vec<_> = extra.iter().map(|f| classify(f)).collect();
-    let rejected: Vec<String> = classified
-        .iter()
-        .filter(|c| c.class == FlagClass::Reject)
-        .map(|c| c.raw.clone())
-        .collect();
-    let warned: Vec<String> = classified
-        .iter()
-        .filter(|c| c.class == FlagClass::Warn)
-        .map(|c| c.raw.clone())
-        .collect();
-    if !rejected.is_empty() {
-        return Err((
-            "SANDBOX_DISABLED_BLOCKED".into(),
-            format!("Rejected flags: {}", rejected.join(", ")),
-        ));
-    }
-    args.extend(
-        classified
-            .into_iter()
-            .filter(|c| c.class != FlagClass::Reject)
-            .map(|c| c.raw),
-    );
+        Engine::Firefox => {
+            // 这一类不接受额外启动参数，也不装 Chromium 的扩展：两样都是 Chromium 的东西。
+            if !spec.extra_flags.is_empty() {
+                return Err((
+                    "FLAGS_UNSUPPORTED".into(),
+                    "Firefox 类内核不接受额外的启动参数，也不能加载 Chromium 扩展。到环境的「启动参数」页和扩展设置里清掉。".into(),
+                ));
+            }
+            let plan = crate::firefox::Plan {
+                kernel_version: &k.version,
+                profile,
+                timezone: &timezone,
+                locale: &locale,
+                languages: &languages,
+                bridge_port: bridge.as_ref().map(|b| b.port),
+                exit_ip: exit.as_ref().map(|e| e.ip.as_str()),
+                exit_coords: profile.geolocation.resolve(exit.as_ref().and_then(|e| e.coords)),
+                geo_blocked: profile.geolocation.blocked(),
+            };
+            tokio::fs::write(
+                user_data_dir.join("user.js"),
+                crate::firefox::user_js(&plan),
+            )
+            .await
+            .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
+            let mut env = crate::firefox::env_chunks(&crate::firefox::config(&plan), cfg!(windows));
+            env.push(("TZ".to_string(), timezone.clone()));
+            if cfg!(target_os = "linux") {
+                if let Some(dir) = crate::firefox::fontconfig_path(&exe, &profile.platform) {
+                    env.push(("FONTCONFIG_PATH".to_string(), dir.display().to_string()));
+                }
+            }
+            let args = crate::firefox::args(
+                &user_data_dir,
+                port,
+                (profile.window.width, profile.window.height),
+                force_headless(),
+            );
+            (args, env, Vec::new())
+        }
+    };
 
     let mut cmd = Command::new(&exe);
     cmd.args(&args)
@@ -1208,7 +1500,7 @@ pub async fn start_environment(
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .kill_on_drop(false)
-        .env("TZ", &profile.timezone);
+        .envs(extra_env);
     #[cfg(unix)]
     {
         cmd.process_group(0);
@@ -1241,17 +1533,30 @@ pub async fn start_environment(
         // 用户直接关掉浏览器窗口是最常见的结束方式。进程一退就把这一行拿掉，
         // 否则它永远显示"运行中"、占着并发名额，之后点停止还会去杀一个早已易主的 pid。
         let (paths, runtimes, env_id) = (paths.clone(), runtimes.clone(), env_id.to_string());
+        let bridges = bridges.clone();
         tokio::spawn(async move {
             let _ = child.wait().await;
             let mut map = runtimes.lock().await;
             if map.get(&env_id).map(|r| r.pid) == Some(pid) {
                 map.remove(&env_id);
+                bridges.lock().await.remove(&env_id);
                 let rows: Vec<_> = map.values().cloned().collect();
                 let _ = persist_runtimes(&paths, &rows).await;
             }
         });
     }
-    if !wait_for_cdp(port, 12000).await {
+    // Firefox 类第一次用一个新 profile 启动要建一堆文件，给它多一点时间。
+    if !wait_ready(
+        k.engine,
+        port,
+        if k.engine == Engine::Firefox {
+            30000
+        } else {
+            12000
+        },
+    )
+    .await
+    {
         kill_pid(pid).await;
         let stderr = stderr_buf.lock().await.clone();
         let sandbox_hint = !allow_no_sandbox
@@ -1288,6 +1593,9 @@ pub async fn start_environment(
     let row = RuntimeRow {
         env_id: env_id.into(),
         kernel_version: k.version.clone(),
+        engine: k.engine,
+        exit: exit.clone(),
+        bridged: bridge.is_some(),
         pid,
         port,
         debug_address: "127.0.0.1".into(),
@@ -1297,13 +1605,24 @@ pub async fn start_environment(
     };
     {
         let mut map = runtimes.lock().await;
+        // 刚握完手就退出的浏览器，退出通知已经来过了，不会再来第二次；这时再登记就永远清不掉。
+        if !pid_alive(pid) {
+            return Err(("SPAWN_FAILED".into(), "浏览器刚启动就退出了。".into()));
+        }
         map.insert(env_id.into(), row.clone());
+        if let Some(b) = bridge {
+            bridges.lock().await.insert(env_id.into(), b);
+        }
         let rows: Vec<_> = map.values().cloned().collect();
         let _ = persist_runtimes(paths, &rows).await;
     }
     Ok(Spawned {
         pid,
         port,
+        exit,
+        timezone,
+        locale,
+        languages,
         sha256: sha,
         user_data_dir,
         warned,
@@ -1342,6 +1661,48 @@ pub fn pid_alive(pid: u32) -> bool {
             Ok(p) if p > 1 => unsafe { kill(p, 0) == 0 },
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod geolocation_tests {
+    use super::*;
+
+    /// 用户选什么就给什么。默认跟着出口——时区和语言都跟了，定位不跟就是个矛盾；
+    /// 但明确关掉的时候，一个坐标都不许编。
+    #[test]
+    fn the_user_picks_what_the_page_is_told() {
+        let berlin = Some((52.52, 13.405));
+
+        assert_eq!(Geolocation::default(), Geolocation::FollowExit);
+        assert_eq!(Geolocation::FollowExit.resolve(berlin), berlin);
+        // 没绑代理就没有出口：跟随模式下什么都不做，用真实位置，不瞎编一个。
+        assert_eq!(Geolocation::FollowExit.resolve(None), None);
+
+        let tokyo = Geolocation::Custom {
+            latitude: 35.68,
+            longitude: 139.69,
+        };
+        // 自己填的优先于出口：用户说了算。
+        assert_eq!(tokyo.resolve(berlin), Some((35.68, 139.69)));
+        assert_eq!(tokyo.resolve(None), Some((35.68, 139.69)));
+
+        // 关掉就是关掉，哪怕查到了出口坐标也不动。
+        assert_eq!(Geolocation::Off.resolve(berlin), None);
+        assert_eq!(Geolocation::Off.resolve(None), None);
+    }
+
+    /// 老的环境里没有这一项：要当成"跟随出口"，不能因为少个字段就启动不了。
+    #[test]
+    fn an_environment_without_the_field_follows_the_exit() {
+        let profile: FingerprintProfile = serde_json::from_value(serde_json::json!({
+            "seed": "1", "platform": "windows", "platformVersion": "19.0.0",
+            "brand": "Chrome", "brandVersion": "148", "hardwareConcurrency": 8,
+            "locale": "en-US", "languages": ["en-US"], "timezone": "UTC",
+            "window": {"width": 1280, "height": 800}, "webrtc": {"mode": "replace"}
+        }))
+        .unwrap();
+        assert_eq!(profile.geolocation, Geolocation::FollowExit);
     }
 }
 
@@ -1422,6 +1783,27 @@ mod signal_tests {
     }
 }
 
+/// 浏览器起来了没有。Chromium 类看 CDP 的 /json/version；Firefox 类看 BiDi 的端口通没通
+/// （它在浏览器启动完成之后才开始监听）。
+pub async fn wait_ready(engine: Engine, port: u16, timeout_ms: u64) -> bool {
+    match engine {
+        Engine::Chromium => wait_for_cdp(port, timeout_ms).await,
+        Engine::Firefox => {
+            let start = std::time::Instant::now();
+            while (start.elapsed().as_millis() as u64) < timeout_ms {
+                if tokio::net::TcpStream::connect(("127.0.0.1", port))
+                    .await
+                    .is_ok()
+                {
+                    return true;
+                }
+                sleep(Duration::from_millis(250)).await;
+            }
+            false
+        }
+    }
+}
+
 pub async fn wait_for_cdp(port: u16, timeout_ms: u64) -> bool {
     let url = format!("http://127.0.0.1:{port}/json/version");
     let Ok(client) = reqwest::Client::builder()
@@ -1446,8 +1828,10 @@ pub async fn stop_environment(
     paths: &HostPaths,
     env_id: &str,
     runtimes: &std::sync::Arc<tokio::sync::Mutex<HashMap<String, RuntimeRow>>>,
+    bridges: &Bridges,
 ) -> Result<()> {
     let rt = { runtimes.lock().await.remove(env_id) };
+    bridges.lock().await.remove(env_id);
     if let Some(rt) = rt {
         #[cfg(windows)]
         {
@@ -1476,7 +1860,15 @@ pub async fn restore_runtimes(
         return;
     };
     for row in rows {
-        if pid_alive(row.pid) && wait_for_cdp(row.port, 1500).await {
+        if !pid_alive(row.pid) {
+            continue;
+        }
+        if row.bridged {
+            // 它的代理桥随上一个 Host 进程没了，留着也上不了网（不会漏：它只认那个已经关掉的本机端口）。
+            kill_pid(row.pid).await;
+            continue;
+        }
+        if wait_ready(row.engine, row.port, 1500).await {
             runtimes.lock().await.insert(row.env_id.clone(), row);
         }
     }
@@ -1523,6 +1915,7 @@ mod version_tests {
     fn record(version: &str, channel: &str, platform: &str) -> KernelRecord {
         KernelRecord {
             id: "fingerprint-chromium".into(),
+            engine: Engine::Chromium,
             version: version.into(),
             platform: platform.into(),
             channel: channel.into(),
@@ -1565,14 +1958,67 @@ mod version_tests {
     }
 
     #[test]
+    fn versions_may_carry_a_prerelease_tag_but_never_a_path() {
+        for ok in ["148.0.7778.215", "152.0.4-beta.30", "150.0.1.2", "1"] {
+            assert!(valid_version(ok), "{ok}");
+        }
+        // 版本号会拼进本机路径。
+        for bad in [
+            "",
+            "../150",
+            "150/..",
+            "150..1",
+            ".150",
+            "150.",
+            "-beta",
+            "150-",
+            "150-beta..1",
+            "150-beta/1",
+            "150 1",
+            "152.0.4-beta.30-x",
+            "v152",
+        ] {
+            assert!(!valid_version(bad), "{bad}");
+        }
+        assert!(version_key("152.0.4-beta.30") > version_key("152.0.4-beta.29"));
+        assert!(version_key("152.0.4-beta.30") > version_key("148.0.7778.215"));
+    }
+
+    #[test]
+    fn the_bundled_manifest_has_both_engine_classes_for_every_platform() {
+        let manifest: ManifestFile =
+            serde_json::from_str(include_str!("../../../kernels.manifest.json")).unwrap();
+        for platform in ["linux-x64", "win-x64", "mac-arm64"] {
+            for engine in Engine::ALL {
+                let found = manifest
+                    .kernels
+                    .iter()
+                    .find(|k| k.platform == platform && k.engine == engine)
+                    .unwrap_or_else(|| panic!("{platform} 上没有 {engine:?} 类的内核"));
+                assert_eq!(found.id, engine.build_id());
+                assert!(
+                    found.url.starts_with(engine.upstream_prefix()),
+                    "{}",
+                    found.url
+                );
+                assert!(valid_version(&found.version));
+                assert_eq!(found.sha256.len(), 64);
+            }
+        }
+    }
+
+    #[test]
     fn default_prefers_newest_stable_over_newer_preview() {
         let here = this_platform();
         let list = vec![
             record("150.0.1.2", "candidate", here),
             record("148.0.7778.215", "stable", here),
         ];
-        assert_eq!(default_version(&list).as_deref(), Some("148.0.7778.215"));
-        assert_eq!(default_version(&list[..1]).as_deref(), Some("150.0.1.2"));
-        assert_eq!(default_version(&[]), None);
+        let c = Engine::Chromium;
+        assert_eq!(default_version(&list, c).as_deref(), Some("148.0.7778.215"));
+        assert_eq!(default_version(&list[..1], c).as_deref(), Some("150.0.1.2"));
+        assert_eq!(default_version(&[], c), None);
+        // 两类各算各的：Chromium 的版本再新，也不会成为 Firefox 类的默认。
+        assert_eq!(default_version(&list, Engine::Firefox), None);
     }
 }

@@ -13,18 +13,35 @@ name = "enclave-host"
 path = "src/main.rs"
 
 [dependencies]
+aes-gcm = "0.10"
 anyhow = "1"
+argon2 = "0.5"
 axum = "0.7"
 base64 = "0.22"
 ed25519-dalek = "2"
+flate2 = "1"
 futures-util = "0.3"
+gethostname = "0.5"
 hex = "0.4"
+hkdf = "0.12"
+open = "5"
+pbkdf2 = { version = "0.12", features = ["hmac"] }
+percent-encoding = "2"
 rand = "0.8"
-reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream", "socks"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio = { version = "1", features = ["full"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+tokio-socks = "0.5"
 tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect"] }
+webpki-roots = "1"
+x25519-dalek = { version = "2", features = ["getrandom", "static_secrets"] }
 tower-http = { version = "0.5", features = ["cors"] }
+
+# 设备令牌放系统钥匙串：Windows 凭据管理器、macOS 钥匙串。其余系统只用于开发，见 cloud.rs。
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+keyring = { version = "3", features = ["apple-native", "windows-native"] }

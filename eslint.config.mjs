@@ -11,7 +11,11 @@ export default tseslint.config(
     ignores: [
       "dist/**",
       "node_modules/**",
-      "apps/vendor/**",
+      // Rust 的构建产物和本机缓存里有别人的 .js，不是这个项目的代码
+      "target/**",
+      ".cargo-docker/**",
+      "apps/desktop/src-tauri/target/**",
+      "apps/desktop/src-tauri/gen/**",
       "src/routeTree.gen.ts",
     ],
   },

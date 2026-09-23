@@ -3,7 +3,9 @@ import { useMemo, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
 import { collectEnvCdp } from "@/lib/host";
 import { t } from "@/lib/i18n";
-import { collectPageFingerprint, diffSnaps, snapshotChecks, staticConsistency } from "@/lib/lab";
+import { diffSnaps, snapshotChecks, staticConsistency } from "@/lib/consistency";
+import { collectPageFingerprint } from "@/lib/lab";
+import { windowBoundsOf } from "@/lib/schema";
 import { useEnclave } from "@/lib/store";
 
 type LabSearch = { env?: string };
@@ -30,9 +32,11 @@ function LabPage() {
   const [error, setError] = useState("");
   const env = environments.find((e) => e.id === envId);
   const proxy = proxies.find((p) => p.id === env?.proxyId);
-  const staticChecks = env ? staticConsistency(env, proxy) : [];
+  const staticChecks = env
+    ? staticConsistency(env, proxy, { exitCountry: runtimes[env.id]?.exit?.country, screen: windowBoundsOf(env) })
+    : [];
   const envSnap = envId ? lab.lastByEnv[envId] : undefined;
-  const liveChecks = env && envSnap ? snapshotChecks(env.profile, envSnap) : [];
+  const liveChecks = env && envSnap ? snapshotChecks(env.profile, envSnap, env.engine) : [];
   const rows = diffSnaps(lab.control, envSnap);
 
   return (
@@ -74,9 +78,9 @@ function LabPage() {
           variant="primary"
           title={
             !env
-              ? "先选一个环境"
+              ? "请先选择一个环境"
               : runtimes[envId]?.status !== "running"
-                ? "这个环境还没运行，先在环境页启动它"
+                ? "该环境未在运行，请先在环境页启动"
                 : undefined
           }
           disabled={!env || runtimes[envId]?.status !== "running" || busy}
@@ -183,7 +187,7 @@ function Meta({ snap }: { snap: { userAgent: string; timezone: string; canvasHas
       </div>
       <div className="flex justify-between">
         <span className="text-subtle">webdriver 标记</span>
-        <span>{snap.webdriver === true ? "暴露了" : "未暴露"}</span>
+        <span>{snap.webdriver === true ? "已暴露" : "未暴露"}</span>
       </div>
       <div className="truncate text-subtle">{snap.webglRenderer}</div>
     </dl>

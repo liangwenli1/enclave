@@ -2,7 +2,8 @@
 
 //! Enclave 桌面壳。
 //!
-//! 它做三件事：生成本机令牌、带着令牌启动 Host、把同一个令牌注入给工作台页面。
+//! 它做四件事：生成本机令牌、带着令牌启动 Host、把同一个令牌注入给工作台页面、
+//! 把官网登录后跳回来的 `enclave://auth?code=…` 转给登录页。
 //! 工作台和 Host 因此共享一个只存在于这次运行的密钥，**没有"跳过鉴权"的开关**。
 //!
 //! 令牌每次启动都换，所以同一时刻只能有一个壳、一个 Host：
@@ -10,6 +11,7 @@
 
 use rand::RngCore;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_shell::ShellExt;
 
 const HOST_PORT: u16 = 17891;
@@ -18,6 +20,26 @@ fn new_token() -> String {
     let mut bytes = [0u8; 32];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// 官网登录后跳回来的链接。任何网页都能让浏览器打开 `enclave://…`，所以这里只放行登录用的那一种，
+/// 并且只是把它原样交给登录页：授权码有没有用，要看 Host 手里有没有对应的 verifier。
+fn forward_deep_link(app: &tauri::AppHandle, url: &str) {
+    if !url.starts_with("enclave://auth?") || url.len() > 512 {
+        return;
+    }
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let _ = window.unminimize();
+    let _ = window.set_focus();
+    // serde_json 把它编成一个带引号的字符串字面量，链接里不管有什么都进不了脚本。
+    let Ok(literal) = serde_json::to_string(url) else {
+        return;
+    };
+    let _ = window.eval(format!(
+        "window.dispatchEvent(new CustomEvent('enclave:deeplink', {{ detail: {literal} }}));"
+    ));
 }
 
 fn main() {
@@ -29,8 +51,17 @@ fn main() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            // Windows 上点链接会起第二个实例，单实例插件把它的参数转到这里；macOS 直接走这里。
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    forward_deep_link(&handle, url.as_str());
+                }
+            });
+
             let data = app.path().app_data_dir().expect("app data dir");
             std::fs::create_dir_all(&data)?;
             seed_manifest(app.handle(), &data);

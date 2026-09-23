@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Globe } from "lucide-react";
 import { useState } from "react";
 import {
@@ -15,6 +15,7 @@ import {
 import { PageHeader } from "@/components/ui";
 import { t } from "@/lib/i18n";
 import { makeId, type ProxyItem } from "@/lib/schema";
+import { canEdit } from "@/lib/session";
 import { useEnclave } from "@/lib/store";
 import { putSecret, removeSecret } from "@/lib/vault";
 
@@ -25,6 +26,8 @@ function NetworkPage() {
   const environments = useEnclave((s) => s.environments);
   const [open, setOpen] = useState(false);
   const vault = useEnclave((s) => s.vault);
+  // 操作员：代理是团队配好的，他只管用。改不了，也看不到密码存没存。
+  const mayEdit = canEdit(useEnclave((s) => s.session.role));
   const [filling, setFilling] = useState<ProxyItem | null>(null);
   const [removing, setRemoving] = useState<{ id: string; name: string; used: number } | null>(null);
 
@@ -42,7 +45,7 @@ function NetworkPage() {
         title={t("netTitle")}
         status={`${proxies.length} 个代理`}
         actions={
-          proxies.length > 0 ? (
+          proxies.length > 0 && mayEdit ? (
             <Button variant="primary" onClick={() => setOpen(true)}>
               {t("addProxy")}
             </Button>
@@ -54,12 +57,18 @@ function NetworkPage() {
         {proxies.length === 0 ? (
           <Empty
             icon={<Globe className="size-8" />}
-            title="还没有代理"
-            body="不绑代理的环境走本机网络出网。"
+            title="暂无代理"
+            body={
+              mayEdit
+                ? "未绑定代理的环境将使用本机网络出网。"
+                : "代理由团队所有者配置，配置完成后将同步至此。"
+            }
             action={
-              <Button variant="primary" onClick={() => setOpen(true)}>
-                {t("addProxy")}
-              </Button>
+              mayEdit ? (
+                <Button variant="primary" onClick={() => setOpen(true)}>
+                  {t("addProxy")}
+                </Button>
+              ) : undefined
             }
           />
         ) : (
@@ -87,37 +96,41 @@ function NetworkPage() {
                         {p.protocol}://{p.host}:{p.port}
                       </td>
                       <td>
-                        {p.auth?.username ? (
+                        {!p.auth?.username ? (
+                          <span className="text-subtle">不需要</span>
+                        ) : mayEdit ? (
                           <Badge tone={p.auth.hasPassword ? "ok" : "warn"}>
                             <span className="max-w-[18ch] truncate" title={p.auth.username}>
                               {p.auth.username}
                             </span>
-                            <span>· {p.auth.hasPassword ? "密码已保存" : "没有密码"}</span>
+                            <span>· {p.auth.hasPassword ? "密码已保存" : "无密码"}</span>
                           </Badge>
                         ) : (
-                          <span className="text-subtle">不需要</span>
+                          <span className="text-subtle">团队统一配置</span>
                         )}
                       </td>
                       <td className="text-subtle">{used ? `${used} 个环境` : "未使用"}</td>
                       <td>
                         <div className="flex justify-end gap-1.5">
-                          {p.auth?.username && !p.auth.hasPassword ? (
+                          {!mayEdit ? null : p.auth?.username && !p.auth.hasPassword ? (
                             <Button
                               disabled={!vault.unlocked}
-                              title={vault.unlocked ? undefined : "先在设置页设主密码"}
+                              title={vault.unlocked ? undefined : "应用锁已锁定，请先解锁"}
                               onClick={() => setFilling(p)}
                             >
                               填密码
                             </Button>
                           ) : null}
-                          <Button
-                            variant="danger"
-                            onClick={() =>
-                              used ? setRemoving({ id: p.id, name: p.name, used }) : remove(p.id)
-                            }
-                          >
-                            {t("delete")}
-                          </Button>
+                          {mayEdit ? (
+                            <Button
+                              variant="danger"
+                              onClick={() =>
+                                used ? setRemoving({ id: p.id, name: p.name, used }) : remove(p.id)
+                              }
+                            >
+                              {t("delete")}
+                            </Button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -159,7 +172,7 @@ function PasswordDialog({ proxy, onClose }: { proxy: ProxyItem; onClose: () => v
 
   const save = async () => {
     if (!password) {
-      setError("填这个代理的密码。");
+      setError("请填写该代理的密码。");
       return;
     }
     try {
@@ -183,7 +196,7 @@ function PasswordDialog({ proxy, onClose }: { proxy: ProxyItem; onClose: () => v
             void save();
           }}
         >
-          <Field label={`用户名 ${proxy.auth?.username ?? ""}`} error={error} hint="存进保险箱，只以密文落盘">
+          <Field label={`用户名 ${proxy.auth?.username ?? ""}`} error={error} hint="仅以密文保存在本机，保存后页面无法读回明文">
             <Input
               type="password"
               autoFocus
@@ -218,20 +231,21 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
   const [errors, setErrors] = useState<{ host?: string; port?: string; username?: string; password?: string }>({});
   const vault = useEnclave((s) => s.vault);
 
-  const canStorePassword = vault.exists && vault.unlocked;
+  // 平时不用任何口令就能存；只有开着应用锁又没解锁时存不了。
+  const canStorePassword = vault.unlocked;
 
   const save = async () => {
     const host = draft.host.trim();
     const port = Number(draft.port);
     const username = draft.username.trim();
     const found: typeof errors = {};
-    if (!host) found.host = "填代理的域名或 IP。";
+    if (!host) found.host = "请填写代理的域名或 IP。";
     else if (/[\s/:@]/.test(host) && !/^\[[0-9a-fA-F:]+\]$/.test(host))
-      found.host = "只填域名或 IP，不带协议、端口和路径。";
-    if (!/^\d+$/.test(draft.port.trim()) || port < 1 || port > 65535) found.port = "1–65535 的整数。";
-    if (draft.password && !username) found.username = "填了密码就要填用户名。";
+      found.host = "仅填写域名或 IP，不含协议、端口与路径。";
+    if (!/^\d+$/.test(draft.port.trim()) || port < 1 || port > 65535) found.port = "请填写 1–65535 之间的整数。";
+    if (draft.password && !username) found.username = "填写密码时需同时填写用户名。";
     if (draft.password && !canStorePassword)
-      found.password = vault.exists ? "保险箱锁着，先解锁。" : "先在设置页设主密码。";
+      found.password = "应用锁已锁定，请先解锁。";
     setErrors(found);
     if (Object.keys(found).length) return;
     const id = makeId("prx");
@@ -249,7 +263,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
       action: "proxy_add",
       target: id,
       level: "info",
-      detail: `${draft.protocol}://${host}:${port}${draft.password ? " · 密码存入保险箱" : ""}`,
+      detail: `${draft.protocol}://${host}:${port}${draft.password ? "，密码已存入保险箱" : ""}`,
     });
     onClose();
   };
@@ -262,7 +276,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
             <Input
               value={draft.name}
               onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              placeholder="留空就用地址"
+              placeholder="留空则使用地址"
             />
           </Field>
           <div className="grid grid-cols-[1fr_2fr_1fr] gap-3">
@@ -293,7 +307,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               />
             </Field>
           </div>
-          <Field label={t("username")} hint="不需要认证就留空" error={errors.username}>
+          <Field label={t("username")} hint="无需认证时留空" error={errors.username}>
             <Input
               value={draft.username}
               onChange={(e) => setDraft({ ...draft, username: e.target.value })}
@@ -304,10 +318,8 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
             error={errors.password}
             hint={
               canStorePassword
-                ? "存进保险箱，只以密文落盘"
-                : vault.exists
-                  ? "保险箱锁着，解锁后才能保存密码"
-                  : "需要先在设置页设主密码"
+                ? "仅以密文保存在本机，保存后页面无法读回明文；启动环境时由本机服务直接取用"
+                : "应用锁已锁定，解锁后方可保存密码"
             }
           >
             <Input
@@ -317,11 +329,6 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               disabled={!canStorePassword}
             />
           </Field>
-          {!vault.exists ? (
-            <Link to="/settings" className="text-[13px] font-medium text-accent underline">
-              去设置主密码
-            </Link>
-          ) : null}
           <Field label={t("country")}>
             <Input
               value={draft.country}

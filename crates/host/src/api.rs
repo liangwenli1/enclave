@@ -4,8 +4,7 @@
 //!   - 工作台令牌 → `/v1/*`，什么都能做。
 //!   - API 令牌   → `/api/v1/*`，能做什么由档位决定。
 //!
-//! 档位是工作台验过许可证签名之后告诉 Host 的；Host 自己不验签。
-//! 这和"额度在客户端强制"是同一个信任模型，没有额外放宽。
+//! 档位是 Host 自己问服务器得来的（cloud.rs），不听工作台页面的。
 use crate::kernel::{FingerprintProfile, SearchProvider};
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +20,17 @@ pub enum ApiLevel {
     Full,
 }
 
+impl ApiLevel {
+    /// 服务器回答里的 `plan.api`。认不出来的一律当 off。
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "discover" => Self::Discover,
+            "full" => Self::Full,
+            _ => Self::Off,
+        }
+    }
+}
+
 /// 启动一个环境需要的全部参数。工作台启动和脚本启动用的是同一份结构。
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,7 +44,11 @@ pub struct StartSpec {
     pub allow_no_sandbox: bool,
     #[serde(default)]
     pub allow_preview_channel: bool,
-    pub proxy_server: Option<String>,
+    /// 绑定的代理的 id。地址和账号密码由 Host 自己从存储里取，页面不经手密码。
+    pub proxy_id: Option<String>,
+    /// 时区和语言跟着代理出口走。探不到出口、或者出口国家不在地区表里时，退回画像里写的。
+    #[serde(default)]
+    pub follow_exit: bool,
     pub search_engine: Option<String>,
     pub search_provider: Option<SearchProvider>,
 }
@@ -46,8 +60,9 @@ pub struct StartSpec {
 pub struct EnvEntry {
     pub id: String,
     pub name: String,
-    #[serde(default)]
-    pub group: String,
+    /// 环境属于哪个文件夹。授权就是按它算的。
+    #[serde(default, rename = "folderId")]
+    pub folder_id: String,
     pub spec: StartSpec,
 }
 
@@ -120,18 +135,11 @@ mod tests {
     }
 
     #[test]
-    fn level_parses_from_licence_strings() {
-        assert_eq!(
-            serde_json::from_str::<ApiLevel>("\"off\"").unwrap(),
-            ApiLevel::Off
-        );
-        assert_eq!(
-            serde_json::from_str::<ApiLevel>("\"discover\"").unwrap(),
-            ApiLevel::Discover
-        );
-        assert_eq!(
-            serde_json::from_str::<ApiLevel>("\"full\"").unwrap(),
-            ApiLevel::Full
-        );
+    fn level_parses_from_the_servers_answer() {
+        assert_eq!(ApiLevel::parse("off"), ApiLevel::Off);
+        assert_eq!(ApiLevel::parse("discover"), ApiLevel::Discover);
+        assert_eq!(ApiLevel::parse("full"), ApiLevel::Full);
+        assert_eq!(ApiLevel::parse("FULL"), ApiLevel::Off);
+        assert_eq!(ApiLevel::parse(""), ApiLevel::Off);
     }
 }

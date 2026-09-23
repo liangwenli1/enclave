@@ -5,6 +5,7 @@
   "kernels": [
     {
       "id": "fingerprint-chromium",
+      "engine": "chromium",
       "version": "148.0.7778.215",
       "platform": "linux-x64",
       "channel": "stable",
@@ -20,6 +21,7 @@
     },
     {
       "id": "fingerprint-chromium",
+      "engine": "chromium",
       "version": "148.0.7778.215",
       "platform": "win-x64",
       "channel": "candidate",
@@ -35,6 +37,7 @@
     },
     {
       "id": "fingerprint-chromium",
+      "engine": "chromium",
       "version": "148.0.7778.215",
       "platform": "mac-arm64",
       "channel": "candidate",
@@ -47,6 +50,54 @@
       "upstream": "Ungoogled Chromium",
       "license": "BSD-3-Clause",
       "notes": "Hash from GitHub Release digest. DMG is labeled macos, arch not split in upstream name. Not stable until spawn+sandbox baseline on Apple Silicon."
+    },
+    {
+      "id": "camoufox",
+      "engine": "firefox",
+      "version": "152.0.4-beta.30",
+      "platform": "linux-x64",
+      "channel": "candidate",
+      "url": "https://github.com/daijro/camoufox/releases/download/v152.0.4-beta.30/camoufox-152.0.4-beta.30-lin.x86_64.zip",
+      "filename": "camoufox-152.0.4-beta.30-lin.x86_64.zip",
+      "sha256": "5720d45b894ce1770543de024c6f10d514b38be560fa2dc3226b3d8586caf672",
+      "bytes": 663467670,
+      "publisher": "daijro",
+      "releasedAt": "2026-09-01T01:09:00Z",
+      "upstream": "Mozilla Firefox",
+      "license": "MPL-2.0",
+      "notes": "Official GitHub Release. SHA256 is the digest GitHub publishes for the asset; the Linux package was downloaded and verified against it."
+    },
+    {
+      "id": "camoufox",
+      "engine": "firefox",
+      "version": "152.0.4-beta.30",
+      "platform": "mac-arm64",
+      "channel": "candidate",
+      "url": "https://github.com/daijro/camoufox/releases/download/v152.0.4-beta.30/camoufox-152.0.4-beta.30-mac.arm64.zip",
+      "filename": "camoufox-152.0.4-beta.30-mac.arm64.zip",
+      "sha256": "3b43e766574f286a6a63296cf58b660b7a3120952086c869b4df4c9a71604bc3",
+      "bytes": 312665777,
+      "publisher": "daijro",
+      "releasedAt": "2026-09-01T01:09:00Z",
+      "upstream": "Mozilla Firefox",
+      "license": "MPL-2.0",
+      "notes": "Official GitHub Release. SHA256 is the digest GitHub publishes for the asset; the Linux package was downloaded and verified against it."
+    },
+    {
+      "id": "camoufox",
+      "engine": "firefox",
+      "version": "152.0.4-beta.30",
+      "platform": "win-x64",
+      "channel": "candidate",
+      "url": "https://github.com/daijro/camoufox/releases/download/v152.0.4-beta.30/camoufox-152.0.4-beta.30-win.x86_64.zip",
+      "filename": "camoufox-152.0.4-beta.30-win.x86_64.zip",
+      "sha256": "ea52a02fb1cfb1813ef6a326bea03fb2b650c9774143d953a94a27bfc8f10072",
+      "bytes": 493141328,
+      "publisher": "daijro",
+      "releasedAt": "2026-09-01T01:09:00Z",
+      "upstream": "Mozilla Firefox",
+      "license": "MPL-2.0",
+      "notes": "Official GitHub Release. SHA256 is the digest GitHub publishes for the asset; the Linux package was downloaded and verified against it."
     }
   ]
 }

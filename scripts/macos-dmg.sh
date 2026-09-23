@@ -12,15 +12,22 @@ done
 triple="$(rustc -vV | sed -n 's/^host: //p')"
 [ "$triple" = "aarch64-apple-darwin" ] || { echo "只支持 Apple Silicon，当前是 $triple"; exit 1; }
 
+# 服务器地址在编译 Host 时写进去。工作台要登录后才能用，没有它的安装包装上之后什么都做不了。
+cloud="${ENCLAVE_CLOUD_URL:-}"
+[ -n "$cloud" ] || { echo "没有设置 ENCLAVE_CLOUD_URL（https://你的官网域名）。工作台必须登录才能用，没有服务器地址的包没法用。"; exit 1; }
+[[ "$cloud" =~ ^https://[^/@?#]+$ ]] || { echo "ENCLAVE_CLOUD_URL 要写成 https://域名，后面不带路径和斜杠。现在是：$cloud"; exit 1; }
+
 # 1. 本机 Host（作为 sidecar 打进 app）
 npm ci
 cargo build --release -p enclave-host
+# 核对写进去的就是这个地址：同一个 target 目录里刚编译过指向冒烟替身服务器的版本。
+grep -a -q -F "$cloud" target/release/enclave-host || { echo "enclave-host 里没有找到 $cloud，不能打包。"; exit 1; }
+if grep -a -q -F "http://127.0.0.1:17956" target/release/enclave-host; then echo "enclave-host 指向的是冒烟测试的替身服务器，不能打包。"; exit 1; fi
 cargo test -p enclave-host
 mkdir -p apps/desktop/src-tauri/binaries
 cp target/release/enclave-host "apps/desktop/src-tauri/binaries/enclave-host-$triple"
 
-# 2. 工作台。VITE_ENCLAVE_VENDOR_URL 不设也能打，只是包里不能登录账号、额度停在免费档。
-[ -n "${VITE_ENCLAVE_VENDOR_URL:-}" ] || echo "注意：没有设置 VITE_ENCLAVE_VENDOR_URL，这个包里的账号登录不可用。"
+# 2. 工作台。页面只和本机 Host 说话，不需要知道服务器在哪。
 npm run build
 [ -f dist/index.html ] || { echo "dist/index.html 不存在"; exit 1; }
 
