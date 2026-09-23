@@ -68,9 +68,13 @@ mod imp {
     }
 }
 
-/// 名字只许小写字母和连字符：它在非桌面系统上会变成文件名。
+/// 名字只许小写字母、数字和连字符：它在非桌面系统上会变成文件名。
 fn ok(name: &str) -> bool {
-    !name.is_empty() && name.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
+    !name.is_empty()
+        && !name.starts_with('-')
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
 pub fn save(dir: &Path, name: &str, value: &str) -> Result<(), String> {

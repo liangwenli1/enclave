@@ -17,7 +17,23 @@ use rand::RngCore;
 use sha2::{Digest, Sha256};
 use x25519_dalek::{EphemeralSecret, PublicKey, StaticSecret};
 
+#[cfg(not(test))]
 const KEYCHAIN_ITEM: &str = "sync-device-key";
+
+/// Windows / macOS 的钥匙串不看数据目录，全机共用一个名字。
+/// 测试会同时造两台“设备”，必须按目录分开，否则两把钥匙是同一把，断言必失败。
+fn device_item(dir: &std::path::Path) -> String {
+    #[cfg(test)]
+    {
+        let tag = hex::encode(Sha256::digest(dir.to_string_lossy().as_bytes()));
+        format!("sync-device-key-{}", &tag[..12])
+    }
+    #[cfg(not(test))]
+    {
+        let _ = dir;
+        KEYCHAIN_ITEM.to_string()
+    }
+}
 /// 恢复码的派生参数。故意比应用锁轻一点：恢复码本身有 128 位随机，不怕被猜。
 const RECOVERY_PARAMS: (u32, u32, u32) = (64 * 1024, 2, 1);
 
@@ -34,7 +50,7 @@ pub struct DeviceKey {
 
 impl DeviceKey {
     pub fn load(dir: &std::path::Path) -> Result<Self> {
-        if let Some(text) = crate::keychain::load(dir, KEYCHAIN_ITEM) {
+        if let Some(text) = crate::keychain::load(dir, &device_item(dir)) {
             let bytes: [u8; 32] = B64
                 .decode(text)
                 .ok()
@@ -45,7 +61,7 @@ impl DeviceKey {
             });
         }
         let secret = StaticSecret::from(random::<32>());
-        crate::keychain::save(dir, KEYCHAIN_ITEM, &B64.encode(secret.to_bytes()))
+        crate::keychain::save(dir, &device_item(dir), &B64.encode(secret.to_bytes()))
             .map_err(|e| anyhow!("设备密钥存不进系统钥匙串：{e}"))?;
         Ok(Self { secret })
     }
@@ -285,7 +301,7 @@ mod tests {
         assert_eq!(DeviceKey::load(&b).unwrap().public_b64(), new.public_b64());
 
         for dir in [&a, &b] {
-            crate::keychain::clear(dir, KEYCHAIN_ITEM);
+            crate::keychain::clear(dir, &device_item(dir));
             let _ = std::fs::remove_dir_all(dir);
         }
     }
@@ -308,7 +324,7 @@ mod tests {
             )
         );
         for dir in [&a, &b] {
-            crate::keychain::clear(dir, KEYCHAIN_ITEM);
+            crate::keychain::clear(dir, &device_item(dir));
             let _ = std::fs::remove_dir_all(dir);
         }
     }
