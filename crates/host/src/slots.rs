@@ -126,10 +126,8 @@ mod tests {
 
     /// 每个测试一个独立目录：设备私钥在非 Win/mac 上回落成目录里的一个文件。
     fn dev() -> (std::path::PathBuf, DeviceKey) {
-        let dir = std::env::temp_dir().join(format!(
-            "enclave-slots-{}",
-            hex::encode(sync::new_key_id())
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("enclave-slots-{}", hex::encode(sync::new_key_id())));
         std::fs::create_dir_all(&dir).unwrap();
         let key = DeviceKey::load(&dir).unwrap();
         (dir, key)
@@ -189,7 +187,9 @@ mod tests {
             "holdsTeamKey": true,
             "slots": [{ "slot": "env:shop", "keyId": "0000000000000000", "boxTeam": boxed, "stale": true }],
         });
-        assert!(Keyring::build(&view, Some(&dk), &device).env("shop").is_none());
+        assert!(Keyring::build(&view, Some(&dk), &device)
+            .env("shop")
+            .is_none());
         let _ = std::fs::remove_dir_all(dir);
     }
 }

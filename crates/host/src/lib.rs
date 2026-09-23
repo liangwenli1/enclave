@@ -1,6 +1,5 @@
 pub mod api;
 pub mod batch;
-pub mod workflow;
 pub mod bidi;
 pub mod bridge;
 pub mod cdp;
@@ -16,3 +15,4 @@ pub mod slots;
 pub mod store;
 pub mod sync;
 pub mod vault;
+pub mod workflow;

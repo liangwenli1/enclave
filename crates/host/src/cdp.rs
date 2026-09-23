@@ -304,7 +304,6 @@ pub(crate) async fn cdp_rpc(
     bail!("cdp timeout {method}")
 }
 
-
 /// 让当前标签页打开一个网址。
 pub async fn open_url(port: u16, url: &str) -> Result<()> {
     let ws_url = page_websocket(port).await?;
@@ -359,13 +358,13 @@ pub async fn block_geolocation(port: u16) -> Result<()> {
 }
 
 /* ── 新标签页的定位：在它跑第一行 JS 之前就设好 ──────────────────────────
-   `Emulation.setGeolocationOverride` 是按页面生效的域，所以用户新开的标签页不会继承。
-   这里保持一条连接，让内核把每个新页面**暂停**着交给我们（`waitForDebuggerOnStart`），
-   设完坐标再放行——页面的第一行 JS 之前定位就已经是对的，没有时间差。
+`Emulation.setGeolocationOverride` 是按页面生效的域，所以用户新开的标签页不会继承。
+这里保持一条连接，让内核把每个新页面**暂停**着交给我们（`waitForDebuggerOnStart`），
+设完坐标再放行——页面的第一行 JS 之前定位就已经是对的，没有时间差。
 
-   这件事有个必须守住的底线：**不管中间出什么错，都要放行**。
-   漏放一次，用户的那个标签页就永远卡在那里。所以下面每条路径的结尾都是 `run_if_waiting`；
-   连接整个断掉也没事——内核会自动放掉所有等着的页面。 */
+这件事有个必须守住的底线：**不管中间出什么错，都要放行**。
+漏放一次，用户的那个标签页就永远卡在那里。所以下面每条路径的结尾都是 `run_if_waiting`；
+连接整个断掉也没事——内核会自动放掉所有等着的页面。 */
 
 /// 新页面挂上来之后要做的事。
 #[derive(Clone, Copy)]

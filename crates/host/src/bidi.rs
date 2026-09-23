@@ -140,7 +140,6 @@ pub async fn collect(port: u16) -> Result<LabSnapshot> {
     result
 }
 
-
 /// 让第一个标签页打开一个网址。
 pub async fn open_url(port: u16, url: &str) -> Result<()> {
     with_session(port, async |ws| {

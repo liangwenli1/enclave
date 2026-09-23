@@ -152,9 +152,9 @@ impl Runs {
 }
 
 /* ── 同一个出口别扎堆 ──────────────────────────────────────────
-   同一个代理（同一个出口 IP）上同时冒出十个登录，风控立刻就来了。
-   所以批量启动时，同一个代理最多几个在手上、两次之间至少隔多久。
-   不绑代理的环境走本机网络，各自独立，不受这条限制。 */
+同一个代理（同一个出口 IP）上同时冒出十个登录，风控立刻就来了。
+所以批量启动时，同一个代理最多几个在手上、两次之间至少隔多久。
+不绑代理的环境走本机网络，各自独立，不受这条限制。 */
 
 /// 一个出口同时最多几个。
 pub const PER_PROXY_LIMIT: usize = 2;
@@ -261,12 +261,21 @@ mod tests {
         let t = |sec: u64| 1_000_000 + sec * 1000;
 
         assert!(gate.admit(Some("p"), t(0)).is_ok(), "第一个直接放行");
-        assert!(gate.admit(Some("p"), t(10)).is_err(), "才过 10 秒，间隔不够");
-        assert!(gate.admit(Some("p"), t(30)).is_ok(), "隔够 30 秒，第二个放行");
+        assert!(
+            gate.admit(Some("p"), t(10)).is_err(),
+            "才过 10 秒，间隔不够"
+        );
+        assert!(
+            gate.admit(Some("p"), t(30)).is_ok(),
+            "隔够 30 秒，第二个放行"
+        );
         assert!(gate.admit(Some("p"), t(90)).is_err(), "手上已经两个了");
 
         gate.release(Some("p"));
-        assert!(gate.admit(Some("p"), t(35)).is_err(), "位子有了，但离上次才 5 秒");
+        assert!(
+            gate.admit(Some("p"), t(35)).is_err(),
+            "位子有了，但离上次才 5 秒"
+        );
         assert!(gate.admit(Some("p"), t(60)).is_ok(), "位子有了、间隔也够");
 
         // 别的代理各算各的。
@@ -289,9 +298,15 @@ mod tests {
             tries: 2,
         };
         let json = serde_json::to_string(&item).unwrap();
-        assert!(json.contains("\"envId\":\"env_1\""), "界面读的是 envId：{json}");
+        assert!(
+            json.contains("\"envId\":\"env_1\""),
+            "界面读的是 envId：{json}"
+        );
         assert!(!json.contains("env_id"), "别再发 env_id：{json}");
-        assert!(json.contains("\"state\":\"failed\""), "状态是小写的：{json}");
+        assert!(
+            json.contains("\"state\":\"failed\""),
+            "状态是小写的：{json}"
+        );
     }
 
     #[test]

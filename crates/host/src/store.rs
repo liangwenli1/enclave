@@ -326,8 +326,8 @@ impl Store {
     }
 
     /* ── 服务器说过的话 ─────────────────────────────────────
-       角色要落盘：操作员拔掉网线再来导出，本机也得照样拒绝。
-       登录必然经过服务器，所以登录过的机器上这一条一定是有的。 */
+    角色要落盘：操作员拔掉网线再来导出，本机也得照样拒绝。
+    登录必然经过服务器，所以登录过的机器上这一条一定是有的。 */
 
     pub fn set_meta(&self, key: &str, value: &str) -> Result<()> {
         self.conn.lock().unwrap().execute(
@@ -349,10 +349,10 @@ impl Store {
     }
 
     pub fn unpin_device(&self, device_id: &str) -> Result<()> {
-        self.conn
-            .lock()
-            .unwrap()
-            .execute("DELETE FROM known_devices WHERE device_id = ?1", [device_id])?;
+        self.conn.lock().unwrap().execute(
+            "DELETE FROM known_devices WHERE device_id = ?1",
+            [device_id],
+        )?;
         Ok(())
     }
 
@@ -418,7 +418,13 @@ impl Store {
     }
 
     /// 从云端收到的一条密码：版本号是服务器给的，不自己加，也不标成"等着上传"。
-    pub fn put_secret_remote(&self, key: &DataKey, id: &str, value: &str, version: i64) -> Result<()> {
+    pub fn put_secret_remote(
+        &self,
+        key: &DataKey,
+        id: &str,
+        value: &str,
+        version: i64,
+    ) -> Result<()> {
         self.put_secret(key, id, value)?;
         self.conn.lock().unwrap().execute(
             "UPDATE doc_versions SET version = ?2, deleted = 0, synced = 1 WHERE kind = ?1 AND id = ?3",
@@ -435,7 +441,11 @@ impl Store {
         )?;
         let rows = stmt
             .query_map([SECRET_KIND], |r| {
-                Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)? == 1))
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)? == 1,
+                ))
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(rows)

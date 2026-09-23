@@ -25,11 +25,20 @@ use tokio_tungstenite::connect_async;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum Step {
-    Open { url: String },
-    Click { selector: String },
-    Type { selector: String, text: String },
+    Open {
+        url: String,
+    },
+    Click {
+        selector: String,
+    },
+    Type {
+        selector: String,
+        text: String,
+    },
     /// Enter / Tab / Escape。
-    Press { key: String },
+    Press {
+        key: String,
+    },
     /// 有选择器就滚到那个元素，没有就按像素滚页面。
     Scroll {
         #[serde(default)]
@@ -42,8 +51,13 @@ pub enum Step {
         #[serde(default = "default_timeout")]
         timeout_ms: u64,
     },
-    Sleep { ms: u64 },
-    Extract { selector: String, var: String },
+    Sleep {
+        ms: u64,
+    },
+    Extract {
+        selector: String,
+        var: String,
+    },
     /// 条件成立就跳到第 `goto` 步（从 1 数）；`goto` 为 0 表示结束。
     If {
         var: String,
@@ -54,7 +68,11 @@ pub enum Step {
     },
     /// 把第 `from` 到第 `to` 步（从 1 数，含两端）重复 `times` 次。
     /// 循环节点放在循环体**之后**：走到它时回头再跑一遍，范围必须整个在它前面。
-    Loop { from: usize, to: usize, times: u32 },
+    Loop {
+        from: usize,
+        to: usize,
+        times: u32,
+    },
 }
 
 fn default_timeout() -> u64 {
@@ -73,7 +91,9 @@ pub enum Cond {
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "mode", rename_all = "camelCase")]
 pub enum OnFail {
-    Retry { times: u32 },
+    Retry {
+        times: u32,
+    },
     Skip,
     #[default]
     Stop,
@@ -150,7 +170,10 @@ async fn execute<D: Driver>(d: &mut D, step: &Step, vars: &HashMap<String, Strin
         Step::Type { selector, text } => d.type_text(selector, &substitute(text, vars)).await,
         Step::Press { key } => d.press(key).await,
         Step::Scroll { selector, dy } => d.scroll(selector, *dy).await,
-        Step::WaitFor { selector, timeout_ms } => {
+        Step::WaitFor {
+            selector,
+            timeout_ms,
+        } => {
             let deadline = tokio::time::Instant::now() + Duration::from_millis(*timeout_ms);
             loop {
                 if d.visible(selector).await? {
@@ -194,26 +217,62 @@ pub async fn run_with<D: Driver>(
 
     while pc < wf.steps.len() {
         if cancelled() {
-            log.push(StepLog { index: pc + 1, ok: false, message: "已取消".into() });
-            return Outcome { ok: false, failed_at: Some(pc + 1), vars, log };
+            log.push(StepLog {
+                index: pc + 1,
+                ok: false,
+                message: "已取消".into(),
+            });
+            return Outcome {
+                ok: false,
+                failed_at: Some(pc + 1),
+                vars,
+                log,
+            };
         }
         executed += 1;
         if executed > MAX_STEPS {
-            log.push(StepLog { index: pc + 1, ok: false, message: format!("超过 {MAX_STEPS} 步，像是死循环，已停止") });
-            return Outcome { ok: false, failed_at: Some(pc + 1), vars, log };
+            log.push(StepLog {
+                index: pc + 1,
+                ok: false,
+                message: format!("超过 {MAX_STEPS} 步，像是死循环，已停止"),
+            });
+            return Outcome {
+                ok: false,
+                failed_at: Some(pc + 1),
+                vars,
+                log,
+            };
         }
         let def = &wf.steps[pc];
         let index = pc + 1;
 
         // 控制流自己走，不经过驱动、也不谈失败策略。
         match &def.step {
-            Step::If { var, op, value, goto } => {
+            Step::If {
+                var,
+                op,
+                value,
+                goto,
+            } => {
                 let actual = vars.get(var).cloned().unwrap_or_default();
                 let yes = holds(*op, &actual, &substitute(value, &vars));
-                log.push(StepLog { index, ok: true, message: if yes { format!("条件成立，跳到第 {goto} 步") } else { "条件不成立，继续".into() } });
+                log.push(StepLog {
+                    index,
+                    ok: true,
+                    message: if yes {
+                        format!("条件成立，跳到第 {goto} 步")
+                    } else {
+                        "条件不成立，继续".into()
+                    },
+                });
                 if yes {
                     if *goto == 0 || *goto > wf.steps.len() {
-                        return Outcome { ok: true, failed_at: None, vars, log };
+                        return Outcome {
+                            ok: true,
+                            failed_at: None,
+                            vars,
+                            log,
+                        };
                     }
                     pc = goto - 1;
                 } else {
@@ -226,11 +285,19 @@ pub async fn run_with<D: Driver>(
                 if *left == 0 || *from == 0 || *to < *from || *to > pc {
                     // 次数用完，或者范围不合法（范围要整个在 Loop 前面，不然跳过去就回不来了），走下一步。
                     loops.remove(&pc);
-                    log.push(StepLog { index, ok: true, message: "循环结束".into() });
+                    log.push(StepLog {
+                        index,
+                        ok: true,
+                        message: "循环结束".into(),
+                    });
                     pc += 1;
                 } else {
                     *left -= 1;
-                    log.push(StepLog { index, ok: true, message: format!("循环，还剩 {left} 次") });
+                    log.push(StepLog {
+                        index,
+                        ok: true,
+                        message: format!("循环，还剩 {left} 次"),
+                    });
                     pc = from - 1;
                 }
                 continue;
@@ -262,29 +329,60 @@ pub async fn run_with<D: Driver>(
         };
         match result {
             Ok(()) => {
-                log.push(StepLog { index, ok: true, message: if tries > 0 { format!("重试 {tries} 次后成功") } else { String::new() } });
+                log.push(StepLog {
+                    index,
+                    ok: true,
+                    message: if tries > 0 {
+                        format!("重试 {tries} 次后成功")
+                    } else {
+                        String::new()
+                    },
+                });
                 pc += 1;
             }
             Err(e) => {
                 let why = format!("{e:#}");
                 match def.on_fail {
                     OnFail::Skip => {
-                        log.push(StepLog { index, ok: false, message: format!("失败，已跳过：{why}") });
+                        log.push(StepLog {
+                            index,
+                            ok: false,
+                            message: format!("失败，已跳过：{why}"),
+                        });
                         pc += 1;
                     }
                     _ => {
-                        log.push(StepLog { index, ok: false, message: why });
-                        return Outcome { ok: false, failed_at: Some(index), vars, log };
+                        log.push(StepLog {
+                            index,
+                            ok: false,
+                            message: why,
+                        });
+                        return Outcome {
+                            ok: false,
+                            failed_at: Some(index),
+                            vars,
+                            log,
+                        };
                     }
                 }
             }
         }
     }
-    Outcome { ok: true, failed_at: None, vars, log }
+    Outcome {
+        ok: true,
+        failed_at: None,
+        vars,
+        log,
+    }
 }
 
 /// 按内核类挑驱动，跑一个流程。
-pub async fn run(engine: Engine, port: u16, wf: &Workflow, cancelled: impl Fn() -> bool) -> Outcome {
+pub async fn run(
+    engine: Engine,
+    port: u16,
+    wf: &Workflow,
+    cancelled: impl Fn() -> bool,
+) -> Outcome {
     match engine {
         Engine::Chromium => match Cdp::connect(port).await {
             Ok(mut d) => run_with(&mut d, wf, cancelled).await,
@@ -306,13 +404,18 @@ fn connect_failed(e: anyhow::Error) -> Outcome {
         ok: false,
         failed_at: Some(1),
         vars: HashMap::new(),
-        log: vec![StepLog { index: 1, ok: false, message: format!("连不上内核：{e:#}") }],
+        log: vec![StepLog {
+            index: 1,
+            ok: false,
+            message: format!("连不上内核：{e:#}"),
+        }],
     }
 }
 
 /* ── Chromium 类：DOM + Input 域 ─────────────────────────── */
 
-type WsStream = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+type WsStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
 pub struct Cdp {
     ws: WsStream,
@@ -336,7 +439,10 @@ impl Cdp {
         let root = self.call("DOM.getDocument", json!({ "depth": 0 })).await?;
         let root = root["root"]["nodeId"].as_i64().context("拿不到文档")?;
         let found = self
-            .call("DOM.querySelector", json!({ "nodeId": root, "selector": selector }))
+            .call(
+                "DOM.querySelector",
+                json!({ "nodeId": root, "selector": selector }),
+            )
             .await?;
         match found["nodeId"].as_i64() {
             Some(id) if id != 0 => Ok(id),
@@ -345,8 +451,12 @@ impl Cdp {
     }
 
     async fn center(&mut self, node: i64) -> Result<(f64, f64)> {
-        let _ = self.call("DOM.scrollIntoViewIfNeeded", json!({ "nodeId": node })).await;
-        let model = self.call("DOM.getBoxModel", json!({ "nodeId": node })).await?;
+        let _ = self
+            .call("DOM.scrollIntoViewIfNeeded", json!({ "nodeId": node }))
+            .await;
+        let model = self
+            .call("DOM.getBoxModel", json!({ "nodeId": node }))
+            .await?;
         let q = model["model"]["content"].as_array().context("元素不可见")?;
         let f = |i: usize| q.get(i).and_then(Value::as_f64).unwrap_or(0.0);
         Ok(((f(0) + f(2)) / 2.0, (f(1) + f(5)) / 2.0))
@@ -359,9 +469,15 @@ impl Driver for Cdp {
         // 等到文档就绪；单次 evaluate，不开 Runtime.enable。
         for _ in 0..100 {
             let r = self
-                .call("Runtime.evaluate", json!({ "expression": "document.readyState", "returnByValue": true }))
+                .call(
+                    "Runtime.evaluate",
+                    json!({ "expression": "document.readyState", "returnByValue": true }),
+                )
                 .await?;
-            if matches!(r["result"]["value"].as_str(), Some("interactive") | Some("complete")) {
+            if matches!(
+                r["result"]["value"].as_str(),
+                Some("interactive") | Some("complete")
+            ) {
                 return Ok(());
             }
             tokio::time::sleep(Duration::from_millis(200)).await;
@@ -385,7 +501,8 @@ impl Driver for Cdp {
     async fn type_text(&mut self, selector: &str, text: &str) -> Result<()> {
         let node = self.node(selector).await?;
         self.call("DOM.focus", json!({ "nodeId": node })).await?;
-        self.call("Input.insertText", json!({ "text": text })).await?;
+        self.call("Input.insertText", json!({ "text": text }))
+            .await?;
         Ok(())
     }
 
@@ -409,7 +526,8 @@ impl Driver for Cdp {
     async fn scroll(&mut self, selector: &str, dy: i64) -> Result<()> {
         if !selector.is_empty() {
             let node = self.node(selector).await?;
-            self.call("DOM.scrollIntoViewIfNeeded", json!({ "nodeId": node })).await?;
+            self.call("DOM.scrollIntoViewIfNeeded", json!({ "nodeId": node }))
+                .await?;
             return Ok(());
         }
         self.call(
@@ -424,7 +542,10 @@ impl Driver for Cdp {
         let Ok(node) = self.node(selector).await else {
             return Ok(false);
         };
-        Ok(self.call("DOM.getBoxModel", json!({ "nodeId": node })).await.is_ok_and(|m| m["model"].is_object()))
+        Ok(self
+            .call("DOM.getBoxModel", json!({ "nodeId": node }))
+            .await
+            .is_ok_and(|m| m["model"].is_object()))
     }
 
     async fn extract(&mut self, selector: &str) -> Result<String> {
@@ -433,7 +554,10 @@ impl Driver for Cdp {
             serde_json::to_string(selector)?
         );
         let r = self
-            .call("Runtime.evaluate", json!({ "expression": expr, "returnByValue": true }))
+            .call(
+                "Runtime.evaluate",
+                json!({ "expression": expr, "returnByValue": true }),
+            )
             .await?;
         match r["result"]["value"].as_str() {
             Some(text) => Ok(text.to_string()),
@@ -460,7 +584,11 @@ impl Bidi {
         crate::bidi::call(&mut ws, 1, "session.new", json!({ "capabilities": {} })).await?;
         let tree = crate::bidi::call(&mut ws, 2, "browsingContext.getTree", json!({})).await?;
         let context = crate::bidi::pick_context(&tree).context("内核里没有打开的标签")?;
-        Ok(Self { ws, context, next: 100 })
+        Ok(Self {
+            ws,
+            context,
+            next: 100,
+        })
     }
 
     async fn call(&mut self, method: &str, params: Value) -> Result<Value> {
@@ -522,7 +650,11 @@ impl Bidi {
 impl Driver for Bidi {
     async fn navigate(&mut self, url: &str) -> Result<()> {
         let ctx = self.context.clone();
-        self.call("browsingContext.navigate", json!({ "context": ctx, "url": url, "wait": "interactive" })).await?;
+        self.call(
+            "browsingContext.navigate",
+            json!({ "context": ctx, "url": url, "wait": "interactive" }),
+        )
+        .await?;
         Ok(())
     }
 
@@ -538,7 +670,10 @@ impl Driver for Bidi {
             .chars()
             .flat_map(|c| {
                 let s = c.to_string();
-                [json!({ "type": "keyDown", "value": s }), json!({ "type": "keyUp", "value": s })]
+                [
+                    json!({ "type": "keyDown", "value": s }),
+                    json!({ "type": "keyUp", "value": s }),
+                ]
             })
             .collect();
         let ctx = self.context.clone();
@@ -654,15 +789,25 @@ mod tests {
             Ok(self.text.contains_key(s))
         }
         async fn extract(&mut self, s: &str) -> Result<String> {
-            self.text.get(s).cloned().with_context(|| format!("没有 {s}"))
+            self.text
+                .get(s)
+                .cloned()
+                .with_context(|| format!("没有 {s}"))
         }
     }
 
     fn wf(steps: Vec<StepDef>) -> Workflow {
-        Workflow { id: "w".into(), name: "测试".into(), steps }
+        Workflow {
+            id: "w".into(),
+            name: "测试".into(),
+            steps,
+        }
     }
     fn s(step: Step) -> StepDef {
-        StepDef { step, on_fail: OnFail::Stop }
+        StepDef {
+            step,
+            on_fail: OnFail::Stop,
+        }
     }
 
     #[tokio::test]
@@ -672,9 +817,17 @@ mod tests {
         let out = run_with(
             &mut d,
             &wf(vec![
-                s(Step::Extract { selector: "#code".into(), var: "code".into() }),
-                s(Step::Type { selector: "#in".into(), text: "码是{{code}}".into() }),
-                s(Step::Open { url: "https://x/{{code}}".into() }),
+                s(Step::Extract {
+                    selector: "#code".into(),
+                    var: "code".into(),
+                }),
+                s(Step::Type {
+                    selector: "#in".into(),
+                    text: "码是{{code}}".into(),
+                }),
+                s(Step::Open {
+                    url: "https://x/{{code}}".into(),
+                }),
             ]),
             || false,
         )
@@ -688,19 +841,47 @@ mod tests {
     #[tokio::test]
     async fn a_failing_step_stops_by_default_skips_when_told_and_retries_when_told() {
         // 默认：停在那一步
-        let mut d = Fake { fail_on: vec!["#no".into()], ..Default::default() };
-        let out = run_with(&mut d, &wf(vec![s(Step::Click { selector: "#no".into() }), s(Step::Press { key: "Enter".into() })]), || false).await;
-        assert!(!out.ok);
-        assert_eq!(out.failed_at, Some(1));
-        assert!(!d.did.iter().any(|x| x == "press Enter"), "停了就不该再往下");
-
-        // 跳过：继续
-        let mut d = Fake { fail_on: vec!["#no".into()], ..Default::default() };
+        let mut d = Fake {
+            fail_on: vec!["#no".into()],
+            ..Default::default()
+        };
         let out = run_with(
             &mut d,
             &wf(vec![
-                StepDef { step: Step::Click { selector: "#no".into() }, on_fail: OnFail::Skip },
-                s(Step::Press { key: "Enter".into() }),
+                s(Step::Click {
+                    selector: "#no".into(),
+                }),
+                s(Step::Press {
+                    key: "Enter".into(),
+                }),
+            ]),
+            || false,
+        )
+        .await;
+        assert!(!out.ok);
+        assert_eq!(out.failed_at, Some(1));
+        assert!(
+            !d.did.iter().any(|x| x == "press Enter"),
+            "停了就不该再往下"
+        );
+
+        // 跳过：继续
+        let mut d = Fake {
+            fail_on: vec!["#no".into()],
+            ..Default::default()
+        };
+        let out = run_with(
+            &mut d,
+            &wf(vec![
+                StepDef {
+                    step: Step::Click {
+                        selector: "#no".into(),
+                    },
+                    on_fail: OnFail::Skip,
+                },
+                s(Step::Press {
+                    key: "Enter".into(),
+                }),
             ]),
             || false,
         )
@@ -710,10 +891,19 @@ mod tests {
         assert!(d.did.iter().any(|x| x == "press Enter"));
 
         // 重试：第二次就好了
-        let mut d = Fake { fail_on: vec!["#flaky".into()], flaky_until: 1, ..Default::default() };
+        let mut d = Fake {
+            fail_on: vec!["#flaky".into()],
+            flaky_until: 1,
+            ..Default::default()
+        };
         let out = run_with(
             &mut d,
-            &wf(vec![StepDef { step: Step::Click { selector: "#flaky".into() }, on_fail: OnFail::Retry { times: 3 } }]),
+            &wf(vec![StepDef {
+                step: Step::Click {
+                    selector: "#flaky".into(),
+                },
+                on_fail: OnFail::Retry { times: 3 },
+            }]),
             || false,
         )
         .await;
@@ -730,17 +920,34 @@ mod tests {
         let out = run_with(
             &mut d,
             &wf(vec![
-                s(Step::Extract { selector: "#status".into(), var: "st".into() }),
-                s(Step::If { var: "st".into(), op: Cond::Contains, value: "已登录".into(), goto: 4 }),
-                s(Step::Click { selector: "#login".into() }),
+                s(Step::Extract {
+                    selector: "#status".into(),
+                    var: "st".into(),
+                }),
+                s(Step::If {
+                    var: "st".into(),
+                    op: Cond::Contains,
+                    value: "已登录".into(),
+                    goto: 4,
+                }),
+                s(Step::Click {
+                    selector: "#login".into(),
+                }),
                 s(Step::Press { key: "Tab".into() }),
-                s(Step::Loop { from: 4, to: 4, times: 2 }),
+                s(Step::Loop {
+                    from: 4,
+                    to: 4,
+                    times: 2,
+                }),
             ]),
             || false,
         )
         .await;
         assert!(out.ok, "{:?}", out.log);
-        assert!(!d.did.iter().any(|x| x == "click #login"), "条件成立就该跳过登录");
+        assert!(
+            !d.did.iter().any(|x| x == "click #login"),
+            "条件成立就该跳过登录"
+        );
         // 第 4 步自然跑一次，Loop 再让它跑两次 → 一共 3 次
         assert_eq!(d.did.iter().filter(|x| *x == "press Tab").count(), 3);
 
@@ -748,12 +955,23 @@ mod tests {
         let mut d = Fake::default();
         let out = run_with(
             &mut d,
-            &wf(vec![s(Step::Loop { from: 2, to: 2, times: 5 }), s(Step::Press { key: "Tab".into() })]),
+            &wf(vec![
+                s(Step::Loop {
+                    from: 2,
+                    to: 2,
+                    times: 5,
+                }),
+                s(Step::Press { key: "Tab".into() }),
+            ]),
             || false,
         )
         .await;
         assert!(out.ok);
-        assert_eq!(d.did.iter().filter(|x| *x == "press Tab").count(), 1, "范围在后面就当没有循环");
+        assert_eq!(
+            d.did.iter().filter(|x| *x == "press Tab").count(),
+            1,
+            "范围在后面就当没有循环"
+        );
     }
 
     #[tokio::test]
@@ -764,8 +982,16 @@ mod tests {
         let out = run_with(
             &mut d,
             &wf(vec![
-                s(Step::Extract { selector: "#x".into(), var: "v".into() }),
-                s(Step::If { var: "v".into(), op: Cond::NotEmpty, value: String::new(), goto: 1 }),
+                s(Step::Extract {
+                    selector: "#x".into(),
+                    var: "v".into(),
+                }),
+                s(Step::If {
+                    var: "v".into(),
+                    op: Cond::NotEmpty,
+                    value: String::new(),
+                    goto: 1,
+                }),
             ]),
             || false,
         )
@@ -780,7 +1006,11 @@ mod tests {
         let calls = std::cell::Cell::new(0);
         let out = run_with(
             &mut d,
-            &wf(vec![s(Step::Press { key: "Tab".into() }), s(Step::Press { key: "Tab".into() }), s(Step::Press { key: "Tab".into() })]),
+            &wf(vec![
+                s(Step::Press { key: "Tab".into() }),
+                s(Step::Press { key: "Tab".into() }),
+                s(Step::Press { key: "Tab".into() }),
+            ]),
             || {
                 calls.set(calls.get() + 1);
                 calls.get() > 2
@@ -805,6 +1035,15 @@ mod tests {
         assert_eq!(wf.steps.len(), 5);
         assert_eq!(wf.steps[1].on_fail, OnFail::Retry { times: 2 });
         assert_eq!(wf.steps[0].on_fail, OnFail::Stop, "不写就是停");
-        assert!(matches!(wf.steps[2].step, Step::WaitFor { timeout_ms: 10_000, .. }), "默认等 10 秒");
+        assert!(
+            matches!(
+                wf.steps[2].step,
+                Step::WaitFor {
+                    timeout_ms: 10_000,
+                    ..
+                }
+            ),
+            "默认等 10 秒"
+        );
     }
 }

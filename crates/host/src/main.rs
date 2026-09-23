@@ -16,8 +16,6 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use enclave_host::api::{allows, ApiLevel, EnvEntry, StartSpec};
 use enclave_host::cloud::{Cloud, HEARTBEAT};
-use enclave_host::slots::Keyring;
-use enclave_host::sync::DeviceKey;
 use enclave_host::feed;
 use enclave_host::kernel::{
     admit, capabilities, default_version, ensure_dirs, kernels_for_this_os, list_search_engines,
@@ -26,7 +24,9 @@ use enclave_host::kernel::{
     valid_env_id, version_key, Bridges, Engine, HostPaths, KernelRecord, KernelStatus, Launch,
     RuntimeRow,
 };
+use enclave_host::slots::Keyring;
 use enclave_host::store::{self, Kind, Store};
+use enclave_host::sync::DeviceKey;
 use enclave_host::vault::{self, Vault};
 use rand::RngCore;
 use serde::Deserialize;
@@ -282,7 +282,10 @@ async fn main() {
             put(env_put).delete(env_delete),
         )
         .route("/v1/store/proxies/:id", put(proxy_put).delete(proxy_delete))
-        .route("/v1/store/workflows/:id", put(workflow_put).delete(workflow_delete))
+        .route(
+            "/v1/store/workflows/:id",
+            put(workflow_put).delete(workflow_delete),
+        )
         .route("/v1/secrets/:id", put(secret_put).delete(secret_delete))
         .route("/v1/secrets/export", post(secrets_export))
         .route("/v1/secrets/import", post(secrets_import))
@@ -1317,7 +1320,11 @@ async fn tend_slots(
 
     // 1 + 2：该建的建，该换的换。
     let mut want: Vec<String> = vec![enclave_host::sync::SHARED_SLOT.to_string()];
-    for env in state.store.list(Kind::Environment).map_err(|e| e.to_string())? {
+    for env in state
+        .store
+        .list(Kind::Environment)
+        .map_err(|e| e.to_string())?
+    {
         if let Some(id) = env["id"].as_str() {
             want.push(enclave_host::sync::env_slot(id));
         }
@@ -1450,7 +1457,11 @@ async fn sync_secrets(state: &App, ring: &Keyring) -> Result<(usize, usize), Str
         {
             let stale: Vec<String> = res["stale"]
                 .as_array()
-                .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
             for (id, version, _) in &pending {
                 if !stale.contains(&format!("{KIND}/{id}")) {
@@ -1887,7 +1898,7 @@ async fn profile_put(
 }
 
 /* 文件夹：授权的单位。规则完全在服务器那边，本机只转发——
-   在这里复制一份"谁能改文件夹"的判断，就是第二份真相。 */
+在这里复制一份"谁能改文件夹"的判断，就是第二份真相。 */
 
 async fn folders_list(State(state): State<Arc<App>>) -> Json<Value> {
     Json(
@@ -1975,8 +1986,8 @@ struct StartBody {
 }
 
 /* ── 批量执行 ────────────────────────────────────────────────────
-   选一批环境，一次做同一件事。排队的规矩由服务器定：额度满了就等一会儿再来，
-   这正是队列该有的行为；真正的错（内核对不上、代理连不上）不重试。 */
+选一批环境，一次做同一件事。排队的规矩由服务器定：额度满了就等一会儿再来，
+这正是队列该有的行为；真正的错（内核对不上、代理连不上）不重试。 */
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -2040,9 +2051,12 @@ async fn batch_run(State(state): State<Arc<App>>, Json(body): Json<BatchBody>) -
     }
     let run_id = enclave_host::sync::new_key_id();
     let env_ids: Vec<String> = body.items.iter().map(|i| i.env_id.clone()).collect();
-    state
-        .batch
-        .start(&run_id, &body.action, &env_ids, enclave_host::kernel::now_ms());
+    state.batch.start(
+        &run_id,
+        &body.action,
+        &env_ids,
+        enclave_host::kernel::now_ms(),
+    );
 
     let app = state.clone();
     let id = run_id.clone();
@@ -2055,7 +2069,10 @@ async fn run_batch(state: Arc<App>, run_id: String, body: BatchBody) {
     use enclave_host::batch::{worth_retrying, State as ItemState};
     let limit = body.concurrency.clamp(1, 8);
     let retries = body.retries.min(10);
-    let mut queue = body.items.into_iter().collect::<std::collections::VecDeque<_>>();
+    let mut queue = body
+        .items
+        .into_iter()
+        .collect::<std::collections::VecDeque<_>>();
     let mut running = tokio::task::JoinSet::new();
 
     loop {
@@ -2070,7 +2087,8 @@ async fn run_batch(state: Arc<App>, run_id: String, body: BatchBody) {
             let open = body.open_url.clone();
             let workflow_id = body.workflow_id.clone();
             let stop_after = body.stop_after;
-            app.batch.update(&id, &item.env_id, |i| i.state = ItemState::Running);
+            app.batch
+                .update(&id, &item.env_id, |i| i.state = ItemState::Running);
             running.spawn(async move {
                 let mut tries = 0u32;
                 let proxy = item.spec.as_ref().and_then(|s| s.proxy_id.clone());
@@ -2208,7 +2226,10 @@ async fn run_batch(state: Arc<App>, run_id: String, body: BatchBody) {
 
 /// 把这个环境在账号下登记一次。名字、分组、内核版本都在本机存储里，页面不用参与。
 async fn register_env(state: &App, env_id: &str) -> bool {
-    let Ok(Some(doc)) = state.store.get(enclave_host::store::Kind::Environment, env_id) else {
+    let Ok(Some(doc)) = state
+        .store
+        .get(enclave_host::store::Kind::Environment, env_id)
+    else {
         return false;
     };
     let body = json!({

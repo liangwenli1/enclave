@@ -492,12 +492,23 @@ mod tests {
         assert_eq!(got.country.as_deref(), Some("US"));
 
         // 三家给经纬度的写法不一样，三种都要认出来——认不出来定位就跟不上出口。
-        let with_loc = serde_json::json!({"ip":"104.28.1.2","loc":"52.520,13.405","timezone":"Europe/Berlin"});
-        assert_eq!(parse_exit(&with_loc).unwrap().coords, Some((52.520, 13.405)));
-        let with_latlon = serde_json::json!({"query":"85.214.1.2","lat":48.8566,"lon":2.3522,"status":"success"});
-        assert_eq!(parse_exit(&with_latlon).unwrap().coords, Some((48.8566, 2.3522)));
+        let with_loc =
+            serde_json::json!({"ip":"104.28.1.2","loc":"52.520,13.405","timezone":"Europe/Berlin"});
+        assert_eq!(
+            parse_exit(&with_loc).unwrap().coords,
+            Some((52.520, 13.405))
+        );
+        let with_latlon =
+            serde_json::json!({"query":"85.214.1.2","lat":48.8566,"lon":2.3522,"status":"success"});
+        assert_eq!(
+            parse_exit(&with_latlon).unwrap().coords,
+            Some((48.8566, 2.3522))
+        );
         let spelled_out = serde_json::json!({"ip":"1.2.3.4","latitude":35.68,"longitude":139.69});
-        assert_eq!(parse_exit(&spelled_out).unwrap().coords, Some((35.68, 139.69)));
+        assert_eq!(
+            parse_exit(&spelled_out).unwrap().coords,
+            Some((35.68, 139.69))
+        );
         // 离谱的坐标不要：宁可不设，也不要给一个地球上没有的地方。
         let bogus = serde_json::json!({"ip":"1.2.3.4","latitude":999.0,"longitude":0.0});
         assert_eq!(parse_exit(&bogus).unwrap().coords, None);

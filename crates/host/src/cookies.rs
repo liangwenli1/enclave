@@ -138,7 +138,6 @@ pub fn count_check(jar: &Jar) -> Result<()> {
     Ok(())
 }
 
-
 /// 在已经起来的环境里打开一个网址。批量执行时用：起来之后直接到目标页面。
 pub async fn open_url(engine: Engine, port: u16, url: &str) -> Result<()> {
     match engine {

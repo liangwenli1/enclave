@@ -233,7 +233,10 @@ impl Cloud {
         };
         if signed && err.revoked() {
             // 静默登出最难查：留一行，写清楚是服务器说的哪一句。
-            eprintln!("这台设备的登录被服务器判为失效（{}：{}）", err.code, err.message);
+            eprintln!(
+                "这台设备的登录被服务器判为失效（{}：{}）",
+                err.code, err.message
+            );
             self.forget().await;
             return Err(CloudError::new(
                 "DEVICE_REVOKED",
@@ -470,7 +473,8 @@ impl Cloud {
     }
 
     pub async fn sync_put(&self, path: &str, body: Value) -> Result<Value, CloudError> {
-        self.call(reqwest::Method::PUT, path, Some(body), true).await
+        self.call(reqwest::Method::PUT, path, Some(body), true)
+            .await
     }
 
     pub async fn sync_post(&self, path: &str, body: Value) -> Result<Value, CloudError> {

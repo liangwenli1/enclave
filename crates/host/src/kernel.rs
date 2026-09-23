@@ -1468,7 +1468,9 @@ pub async fn start_environment(
                 languages: &languages,
                 bridge_port: bridge.as_ref().map(|b| b.port),
                 exit_ip: exit.as_ref().map(|e| e.ip.as_str()),
-                exit_coords: profile.geolocation.resolve(exit.as_ref().and_then(|e| e.coords)),
+                exit_coords: profile
+                    .geolocation
+                    .resolve(exit.as_ref().and_then(|e| e.coords)),
                 geo_blocked: profile.geolocation.blocked(),
             };
             tokio::fs::write(
