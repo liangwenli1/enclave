@@ -20,8 +20,9 @@ Start-Sleep -Seconds 1
 # 服务器地址在编译 Host 时写进去。没设也能出包：登录不可用，其余本机功能照常。
 # 正式对外前在仓库变量 ENCLAVE_CLOUD_URL 写成 https://域名（不带路径、不带结尾斜杠）。
 $cloud = $env:ENCLAVE_CLOUD_URL
-if ($cloud -and $cloud -notmatch '^https://[^/@?#]+$') {
-  throw "ENCLAVE_CLOUD_URL 要写成 https://域名，后面不带路径和斜杠。现在是：$cloud"
+# 正式包写 https://域名；自测包可以写 http://127.0.0.1:端口（装在跑服务器的那台机器上），和 Host 的地址校验一致。
+if ($cloud -and $cloud -notmatch '^https://[^/@?#]+$' -and $cloud -notmatch '^http://(127\.0\.0\.1|localhost)(:\d+)?$') {
+  throw "ENCLAVE_CLOUD_URL 要写成 https://域名（后面不带路径和斜杠），或自测用的 http://127.0.0.1:端口。现在是：$cloud"
 }
 if (-not $cloud) {
   Write-Warning "没有 ENCLAVE_CLOUD_URL。这个包不能登录云端，新建和启动环境会被拦住。"

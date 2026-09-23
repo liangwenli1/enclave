@@ -26,18 +26,26 @@ if [ -n "${SMOKE_KERNEL_CACHE:-}" ]; then
 fi
 python3 "$root/scripts/smoke-cloud.py" "$cloud_port" > "$work/cloud.log" &
 cloud_pid=$!
+# 先等替身真的在听。这个脚本原来只等 Host 就绪、从不等替身：Rust 的 Host 几十毫秒就起来了，
+# python 在慢一点的机器（macOS runner）上要慢一拍，登录请求就砸在一个还没人听的端口上——
+# 报出来的正是 CLOUD_UNREACHABLE，和地址错、和网络坏一个样子，查不出来。
+for _ in $(seq 1 40); do curl -s --noproxy '*' -o /dev/null "http://127.0.0.1:$cloud_port/" && break; sleep 0.25; done
+curl -s --noproxy '*' -o /dev/null "http://127.0.0.1:$cloud_port/" || { echo "替身服务器 10 秒内没起来（端口 $cloud_port）"; exit 1; }
 # 调试版的 Host 认这个环境变量；发布版不认，只认编译时写进去的地址。两种都传，脚本就不用关心拿到的是哪种。
 ENCLAVE_CLOUD_URL="http://127.0.0.1:$cloud_port" ENCLAVE_HOST_TOKEN="$token" ENCLAVE_HOST_PORT="$port" ENCLAVE_HEADLESS=1 "$host_bin" &
 host_pid=$!
-trap 'kill "$host_pid" "$cloud_pid" 2>/dev/null || true; rm -rf "$work"' EXIT
+# 失败时把替身收到的请求打出来：CI 日志里只有 Host 的一句"连不上"，看不出替身有没有收到请求。
+trap 'rc=$?; if [ "$rc" -ne 0 ]; then echo "== 替身服务器收到的请求（cloud.log）"; cat "$work/cloud.log" 2>/dev/null || echo "(空)"; fi; kill "$host_pid" "$cloud_pid" 2>/dev/null || true; rm -rf "$work"; exit "$rc"' EXIT
 
 call() { curl -sS --noproxy '*' -H "Authorization: Bearer $token" -H "content-type: application/json" "$@"; }
 field() { python3 -c "import sys,json; d=json.load(sys.stdin); print(eval(sys.argv[1], {'d': d}))" "$1"; }
 
 for _ in $(seq 1 40); do curl -s --noproxy '*' "$base/v1/health" >/dev/null && break; sleep 0.5; done
 
-site="$(call "$base/v1/session" | field '(d["configured"], d["signedIn"])')"
-[ "$site" = "(True, False)" ] || { echo "这个 enclave-host 不是指向冒烟替身服务器编译的：$site"; exit 1; }
+# 核对的是确切地址，不是"有没有地址"：发布版只认编译时写进去的那个，
+# 要是缓存里躺着一份指向正式域名的 Host，"有地址"照样过、登录却连不上——那就查不出原因了。
+site="$(call "$base/v1/session" | field '(d["siteUrl"], d["signedIn"])')"
+[ "$site" = "('http://127.0.0.1:$cloud_port', False)" ] || { echo "这个 enclave-host 不是指向冒烟替身服务器（http://127.0.0.1:$cloud_port）编译的：$site"; exit 1; }
 
 echo "== 登录（设备令牌进系统钥匙串）"
 call -X POST -d '{}' "$base/v1/session/login" >/dev/null

@@ -15,7 +15,8 @@ triple="$(rustc -vV | sed -n 's/^host: //p')"
 # 服务器地址在编译 Host 时写进去。没设也能出包：登录不可用，其余本机功能照常。
 cloud="${ENCLAVE_CLOUD_URL:-}"
 if [ -n "$cloud" ]; then
-  [[ "$cloud" =~ ^https://[^/@?#]+$ ]] || { echo "ENCLAVE_CLOUD_URL 要写成 https://域名，后面不带路径和斜杠。现在是：$cloud"; exit 1; }
+  # 正式包写 https://域名；自测包可以写 http://127.0.0.1:端口（装在跑服务器的那台机器上），和 Host 的地址校验一致。
+  [[ "$cloud" =~ ^https://[^/@?#]+$ || "$cloud" =~ ^http://(127\.0\.0\.1|localhost)(:[0-9]+)?$ ]] || { echo "ENCLAVE_CLOUD_URL 要写成 https://域名（后面不带路径和斜杠），或自测用的 http://127.0.0.1:端口。现在是：$cloud"; exit 1; }
 else
   echo "注意：没有 ENCLAVE_CLOUD_URL。这个包不能登录云端，新建和启动环境会被拦住。"
 fi
