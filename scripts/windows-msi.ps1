@@ -17,20 +17,27 @@ rustup default stable
 Get-Process enclave-host, enclave-desktop, Enclave -ErrorAction SilentlyContinue | Stop-Process -Force
 Start-Sleep -Seconds 1
 
-# 服务器地址在编译 Host 时写进去。工作台要登录后才能用，没有它的安装包装上之后什么都做不了。
+# 服务器地址在编译 Host 时写进去。没设也能出包：登录不可用，其余本机功能照常。
+# 正式对外前在仓库变量 ENCLAVE_CLOUD_URL 写成 https://域名（不带路径、不带结尾斜杠）。
 $cloud = $env:ENCLAVE_CLOUD_URL
-if (-not $cloud) { throw "没有设置 ENCLAVE_CLOUD_URL（https://你的官网域名）。工作台必须登录才能用，没有服务器地址的包没法用。" }
-if ($cloud -notmatch '^https://[^/@?#]+$') { throw "ENCLAVE_CLOUD_URL 要写成 https://域名，后面不带路径和斜杠。现在是：$cloud" }
+if ($cloud -and $cloud -notmatch '^https://[^/@?#]+$') {
+  throw "ENCLAVE_CLOUD_URL 要写成 https://域名，后面不带路径和斜杠。现在是：$cloud"
+}
+if (-not $cloud) {
+  Write-Warning "没有 ENCLAVE_CLOUD_URL。这个包不能登录云端，新建和启动环境会被拦住。"
+}
 
 # 1. 本机 Host（会作为 sidecar 打进安装包）
 npm ci
 cargo build --release -p enclave-host
 if (-not $?) { throw "host 构建失败" }
 # 核对写进去的就是这个地址：同一个 target 目录里可能刚编译过指向别处的版本（比如冒烟测试用的）。
-$hostBytes = [System.IO.File]::ReadAllBytes((Join-Path $PWD "target\release\enclave-host.exe"))
-$hostText = [System.Text.Encoding]::ASCII.GetString($hostBytes)
-if (-not $hostText.Contains($cloud)) { throw "enclave-host.exe 里没有找到 $cloud，不能打包。" }
-if ($hostText.Contains("http://127.0.0.1:17956")) { throw "enclave-host.exe 指向的是冒烟测试的替身服务器，不能打包。" }
+if ($cloud) {
+  $hostBytes = [System.IO.File]::ReadAllBytes((Join-Path $PWD "target\release\enclave-host.exe"))
+  $hostText = [System.Text.Encoding]::ASCII.GetString($hostBytes)
+  if (-not $hostText.Contains($cloud)) { throw "enclave-host.exe 里没有找到 $cloud，不能打包。" }
+  if ($hostText.Contains("http://127.0.0.1:17956")) { throw "enclave-host.exe 指向的是冒烟测试的替身服务器，不能打包。" }
+}
 cargo test -p enclave-host
 if (-not $?) { throw "host 测试没过" }
 

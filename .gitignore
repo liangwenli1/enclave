@@ -4,8 +4,9 @@ node_modules/
 .env.local
 *.log
 
-# 运行时数据：内核在这里下载和校验，永远不进 Git
-data/
+# 运行时数据：内核在这里下载和校验，永远不进 Git。只忽略仓库根的 data/，
+# crates/host/data 里的字体清单要进 Git。
+/data/
 logs/
 
 # 构建产物

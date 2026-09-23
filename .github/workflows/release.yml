@@ -11,8 +11,8 @@ on:
 permissions:
   contents: write
 
-# 服务器地址：仓库 Settings → Secrets and variables → Actions → Variables 里的 ENCLAVE_CLOUD_URL，
-# 写成 https://你的官网域名。它在编译本机服务时写进去。工作台必须登录才能用，所以没有它就不出包。
+# 服务器地址可选：仓库变量 ENCLAVE_CLOUD_URL = https://域名。
+# 不设也能出包，只是包里不能登录。冒烟测试自己用本机替身服务器，不走这个变量。
 
 jobs:
   windows-msi:

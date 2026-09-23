@@ -1,6 +1,6 @@
 [package]
 name = "enclave-desktop"
-version = "0.10.0"
+version = "0.10.1"
 description = "Enclave workbench shell. Unsigned preview, not 1.0."
 edition = "2021"
 
