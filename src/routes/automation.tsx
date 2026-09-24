@@ -365,12 +365,21 @@ function StepForm({
           >
             <option value="stop">终止流程</option>
             <option value="skip">跳过这一步</option>
-            <option value="retry:1">重试 1 次</option>
-            <option value="retry:3">重试 3 次</option>
-            <option value="retry:5">重试 5 次</option>
+            {retryChoices(step.onFail).map((n) => (
+              <option key={n} value={`retry:${n}`}>
+                重试 {n} 次
+              </option>
+            ))}
           </Select>
         </Field>
       ) : null}
     </div>
   );
+}
+
+/** 失败重试的选项。流程可能来自别的电脑或接口，次数不在常用几档里时也要原样显示，不能落到第一项上。 */
+function retryChoices(onFail: OnFail): number[] {
+  const common = [1, 2, 3, 5];
+  if (onFail.mode !== "retry" || common.includes(onFail.times)) return common;
+  return [...common, onFail.times].sort((a, b) => a - b);
 }
