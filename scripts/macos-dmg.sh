@@ -29,6 +29,18 @@ if [ -n "$cloud" ]; then
   grep -a -q -F "$cloud" target/release/enclave-host || { echo "enclave-host 里没有找到 $cloud，不能打包。"; exit 1; }
   if grep -a -q -F "http://127.0.0.1:17956" target/release/enclave-host; then echo "enclave-host 指向的是冒烟测试的替身服务器，不能打包。"; exit 1; fi
 fi
+# 冒烟那一步用的是另一份二进制，已经往登录钥匙串写过设备令牌。
+# 测试程序再去读，macOS 会弹出授权框。GitHub 上没有人点，这一步会挂满 6 小时被取消。
+# CI 上改用一把空密码的临时钥匙串，测的还是系统钥匙串，只是不碰冒烟留下的那几项。
+if [ -n "${GITHUB_ACTIONS:-}" ]; then
+  kc="${RUNNER_TEMP:-/tmp}/enclave-test.keychain-db"
+  security delete-keychain "$kc" >/dev/null 2>&1 || true
+  security create-keychain -p "" "$kc"
+  security set-keychain-settings -lut 21600 "$kc"
+  security unlock-keychain -p "" "$kc"
+  security list-keychains -d user -s "$kc"
+  security default-keychain -s "$kc"
+fi
 cargo test -p enclave-host
 mkdir -p apps/desktop/src-tauri/binaries
 cp target/release/enclave-host "apps/desktop/src-tauri/binaries/enclave-host-$triple"

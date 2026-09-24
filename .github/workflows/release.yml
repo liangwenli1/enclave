@@ -105,6 +105,7 @@ jobs:
           ./scripts/smoke-host.sh target/release/enclave-host
 
       - name: 打 dmg
+        timeout-minutes: 40
         run: ./scripts/macos-dmg.sh
 
       - name: 算哈希
