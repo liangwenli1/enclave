@@ -17,6 +17,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding";
 import { cn } from "@/lib/cn";
@@ -66,8 +67,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     >
       <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
         <div className="flex h-14 items-center gap-2.5 px-5">
-          <Mark />
-          <span className="text-[17px] font-extrabold tracking-[-0.03em] text-ink">Enclave</span>
+          <BrandMark />
+          <span className="text-[17px] font-bold tracking-[-0.03em] text-ink">Enclave</span>
         </div>
         <nav className="app-nav min-h-0 flex-1 overflow-auto">
           {NAV.map((item) => (
@@ -146,19 +147,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       <CloudSync />
       <ApiSync />
     </div>
-  );
-}
-
-function Mark() {
-  return (
-    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" className="flex-none text-ink">
-      <rect width="24" height="24" fill="currentColor" />
-      <g fill="none" stroke="var(--enclave-canvas)" strokeWidth="1.7">
-        <path d="M6 17a6 6 0 0 1 12 0" />
-        <path d="M9 17a3 3 0 0 1 6 0" />
-        <path d="M4.5 12.5A8.5 8.5 0 0 1 12 7" />
-      </g>
-    </svg>
   );
 }
 

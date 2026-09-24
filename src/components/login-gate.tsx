@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import { Button, CodeBlock, Field, Input } from "@/components/ui";
 import { applySession, refreshSession } from "@/lib/host";
 import { beginLogin, completeLogin } from "@/lib/kernel/host-api";
@@ -45,15 +46,8 @@ export function LoginGate({ children }: { children: ReactNode }) {
     <div className="flex h-full min-h-full items-center justify-center bg-canvas px-6 text-muted">
       <div className="w-full max-w-[420px]">
         <div className="mb-8 flex items-center gap-2.5">
-          <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true" className="flex-none text-ink">
-            <rect width="24" height="24" fill="currentColor" />
-            <g fill="none" stroke="var(--enclave-canvas)" strokeWidth="1.7">
-              <path d="M6 17a6 6 0 0 1 12 0" />
-              <path d="M9 17a3 3 0 0 1 6 0" />
-              <path d="M4.5 12.5A8.5 8.5 0 0 1 12 7" />
-            </g>
-          </svg>
-          <span className="text-[19px] font-extrabold tracking-[-0.03em] text-ink">Enclave</span>
+          <BrandMark size={28} />
+          <span className="text-[19px] font-bold tracking-[-0.03em] text-ink">Enclave</span>
         </div>
         {session.state === "loading" ? <p className="text-sm text-subtle">正在读取账号状态…</p> : null}
         {signedIn && !storeError ? <p className="text-sm text-subtle">正在读取这台电脑上的环境…</p> : null}
@@ -86,7 +80,7 @@ export function LoginGate({ children }: { children: ReactNode }) {
 function Notice({ title, body, action }: { title: string; body: string; action?: ReactNode }) {
   return (
     <div className="grid gap-3">
-      <h1 className="text-2xl font-extrabold tracking-[-0.03em] text-ink">{title}</h1>
+      <h1 className="text-2xl font-bold tracking-[-0.03em] text-ink">{title}</h1>
       <p className="text-sm leading-relaxed">{body}</p>
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
@@ -140,7 +134,7 @@ function SignIn({ reason }: { reason: string | null }) {
   if (!waiting) {
     return (
       <div className="grid gap-4">
-        <h1 className="text-2xl font-extrabold tracking-[-0.03em] text-ink">登录后开始使用</h1>
+        <h1 className="text-2xl font-bold tracking-[-0.03em] text-ink">登录后开始使用</h1>
         <p className="text-sm leading-relaxed">
           点下面的按钮会在浏览器里打开官网，在那里登录或注册，再点「允许登录」。密码只在官网输入，工作台不经手。
           注册即是免费档：3 个环境、同时运行 1 个。
@@ -160,7 +154,7 @@ function SignIn({ reason }: { reason: string | null }) {
 
   return (
     <div className="grid gap-4">
-      <h1 className="text-2xl font-extrabold tracking-[-0.03em] text-ink">在浏览器里完成登录</h1>
+      <h1 className="text-2xl font-bold tracking-[-0.03em] text-ink">在浏览器里完成登录</h1>
       <p className="text-sm leading-relaxed">
         {waiting.opened
           ? "官网已在浏览器中打开。登录后点击「允许登录」，浏览器将询问是否打开 Enclave，请选择「打开」。"

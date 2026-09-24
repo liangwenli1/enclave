@@ -138,7 +138,7 @@ export function PageHeader({
   return (
     <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
-        <h1 className="text-[28px] leading-tight font-extrabold tracking-[-0.03em]">{title}</h1>
+        <h1 className="text-[28px] leading-tight font-bold tracking-[-0.03em]">{title}</h1>
         {status ? <div className="mt-2 text-[13px] text-subtle">{status}</div> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
@@ -219,7 +219,7 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/50" />
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#070b14]/55" />
       <DialogPrimitive.Content
         className={cn(
           "enclave-dialog fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line p-6",

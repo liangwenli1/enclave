@@ -65,7 +65,7 @@ function EnvDetail() {
             {t("back")}
           </Button>
           <EnvGlyph seed={env.profile.seed} size={44} />
-          <h1 className="min-w-0 text-2xl font-extrabold tracking-[-0.03em] text-ink [overflow-wrap:anywhere]">
+          <h1 className="min-w-0 text-2xl font-bold tracking-[-0.03em] text-ink [overflow-wrap:anywhere]">
             {env.name}
           </h1>
           <Badge tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}>

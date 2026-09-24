@@ -4,8 +4,10 @@
  * 这个算法在工作台（enclave 仓库 src/lib/glyph.ts）和官网（enclave-www 仓库 web/lib/glyph.ts）
  * 各有一份——两个仓库是有意解耦的，合不成一个文件。两边的测试用同一组黄金向量钉死输出：
  * 任何一边改了算法，另一边的章就对不上，测试会先叫。
+ *
+ * rings 只给标志用：标志画 4 圈（小尺寸下 5 圈会糊成一团）。黄金向量都是默认的 5 圈。
  */
-export function ridges(seed: number, size: number): string {
+export function ridges(seed: number, size: number, rings = 5): string {
   let a = seed >>> 0;
   const next = () => {
     a = (a + 0x6d2b79f5) >>> 0;
@@ -15,7 +17,6 @@ export function ridges(seed: number, size: number): string {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
   const c = size / 2;
-  const rings = 5;
   const step = (c - 2) / (rings + 0.4);
   let d = "";
   for (let i = 1; i <= rings; i += 1) {
