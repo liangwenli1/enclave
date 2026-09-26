@@ -33,14 +33,17 @@ function LabPage() {
   const env = environments.find((e) => e.id === envId);
   const proxy = proxies.find((p) => p.id === env?.proxyId);
   const staticChecks = env
-    ? staticConsistency(env, proxy, { exitCountry: runtimes[env.id]?.exit?.country, screen: windowBoundsOf(env) })
+    ? staticConsistency(env, proxy, {
+        exitCountry: runtimes[env.id]?.exit?.country,
+        screen: windowBoundsOf(env),
+      })
     : [];
   const envSnap = envId ? lab.lastByEnv[envId] : undefined;
   const liveChecks = env && envSnap ? snapshotChecks(env.profile, envSnap, env.engine) : [];
   const rows = diffSnaps(lab.control, envSnap);
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6">
       <h1 className="text-[32px] leading-tight font-bold tracking-tight text-ink">
         {t("labTitle")}
       </h1>
@@ -130,13 +133,17 @@ function LabPage() {
           {staticChecks.map((c) => (
             <li key={c.id} className="flex justify-between gap-3">
               <span>{c.label}</span>
-              <span className={c.ok ? "text-ok" : c.warn ? "text-warn" : "text-bad"}>{c.detail}</span>
+              <span className={c.ok ? "text-ok" : c.warn ? "text-warn" : "text-bad"}>
+                {c.detail}
+              </span>
             </li>
           ))}
           {liveChecks.map((c) => (
             <li key={`live-${c.id}`} className="flex justify-between gap-3">
               <span>{c.label}</span>
-              <span className={c.ok ? "text-ok" : c.warn ? "text-warn" : "text-bad"}>{c.detail}</span>
+              <span className={c.ok ? "text-ok" : c.warn ? "text-warn" : "text-bad"}>
+                {c.detail}
+              </span>
             </li>
           ))}
         </ul>
@@ -173,7 +180,17 @@ function LabPage() {
   );
 }
 
-function Meta({ snap }: { snap: { userAgent: string; timezone: string; canvasHash: string; webdriver: boolean | null; webglRenderer: string } }) {
+function Meta({
+  snap,
+}: {
+  snap: {
+    userAgent: string;
+    timezone: string;
+    canvasHash: string;
+    webdriver: boolean | null;
+    webglRenderer: string;
+  };
+}) {
   return (
     <dl className="grid gap-1 text-[13px]">
       <div className="truncate text-muted">{snap.userAgent}</div>

@@ -87,15 +87,13 @@ function EnvironmentsPage() {
   const mayEdit = canEdit(role);
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6">
       <PageHeader
         title={t("navEnv")}
         status={`${live.length} / ${limitText(plan, (p) => p.envLimit)} 个环境，${runningNow} / ${limitText(plan, (p) => p.concurrent)} 个运行中${plan ? `，${plan.label}` : ""}`}
         actions={
           <>
-            <Button onClick={() => setTrash((v) => !v)}>
-              {trash ? t("navEnv") : t("trash")}
-            </Button>
+            <Button onClick={() => setTrash((v) => !v)}>{trash ? t("navEnv") : t("trash")}</Button>
             {live.length > 0 && mayEdit ? (
               <Button variant="primary" onClick={tryCreate}>
                 <Plus className="size-3.5" />
@@ -126,11 +124,7 @@ function EnvironmentsPage() {
       ) : null}
 
       {!trash && rows.length > 0 ? (
-        <BatchBar
-          selected={picked}
-          environments={live}
-          onClear={() => setPicked([])}
-        />
+        <BatchBar selected={picked} environments={live} onClear={() => setPicked([])} />
       ) : null}
 
       <Panel className="overflow-hidden">
@@ -173,11 +167,10 @@ function EnvironmentsPage() {
                         checked={picked.length > 0 && picked.length === rows.length}
                         ref={(el) => {
                           // 选了一部分时显示成"半选"，比打勾更贴近实际。
-                          if (el) el.indeterminate = picked.length > 0 && picked.length < rows.length;
+                          if (el)
+                            el.indeterminate = picked.length > 0 && picked.length < rows.length;
                         }}
-                        onChange={(e) =>
-                          setPicked(e.target.checked ? rows.map((r) => r.id) : [])
-                        }
+                        onChange={(e) => setPicked(e.target.checked ? rows.map((r) => r.id) : [])}
                       />
                     </th>
                   )}
@@ -243,7 +236,8 @@ function EnvironmentsPage() {
                         {proxies.find((p) => p.id === env.proxyId)?.name ?? t("noProxy")}
                         {rt?.exit ? (
                           <div className="text-[13px] text-accent-text">
-                            {[rt.exit.country, rt.exit.city].filter(Boolean).join(" ") || rt.exit.ip}
+                            {[rt.exit.country, rt.exit.city].filter(Boolean).join(" ") ||
+                              rt.exit.ip}
                           </div>
                         ) : null}
                       </td>
@@ -268,11 +262,7 @@ function EnvironmentsPage() {
                         <div className="flex justify-end gap-1.5">
                           {trash ? (
                             <>
-                              <Button
-                                onClick={() => void restoreEnv(env)}
-                              >
-                                {t("restore")}
-                              </Button>
+                              <Button onClick={() => void restoreEnv(env)}>{t("restore")}</Button>
                               <Button
                                 variant="danger"
                                 onClick={() => setPurging({ id: env.id, name: env.name })}
@@ -451,10 +441,20 @@ function CreateWizard({
           }),
           extraFlags: [...src.extraFlags],
         };
-        copy.timeline[0] = { at: Date.now(), kind: "created", message: `复制自 ${src.name}`, level: "info" };
+        copy.timeline[0] = {
+          at: Date.now(),
+          kind: "created",
+          message: `复制自 ${src.name}`,
+          level: "info",
+        };
         if (!(await register(copy))) return;
         store.upsertEnv(copy);
-        store.addAudit({ action: "create_env", target: copy.id, level: "info", detail: `${copy.name} ← ${src.name}` });
+        store.addAudit({
+          action: "create_env",
+          target: copy.id,
+          level: "info",
+          detail: `${copy.name} ← ${src.name}`,
+        });
         onCreated(copy.id);
         return;
       }
@@ -479,7 +479,8 @@ function CreateWizard({
         kernelVersion,
         // 默认搜索引擎是靠 Chromium 扩展设的，Firefox 类没有这个机制。
         searchEngine: engine === "firefox" ? "none" : (searchEngine?.id ?? "none"),
-        searchProvider: engine === "firefox" || !searchEngine ? undefined : engineToProvider(searchEngine),
+        searchProvider:
+          engine === "firefox" || !searchEngine ? undefined : engineToProvider(searchEngine),
       });
       env.timeline[0] = {
         at: Date.now(),
@@ -499,6 +500,12 @@ function CreateWizard({
   };
 
   const steps = [t("step1"), t("step2"), t("step3")];
+  const sourceOptions = existing.length
+    ? ([
+        ["blank", t("blank")],
+        ["copy", t("fromCopy")],
+      ] as const)
+    : ([["blank", t("blank")]] as const);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
@@ -520,12 +527,7 @@ function CreateWizard({
 
         {step === 0 ? (
           <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                ["blank", t("blank")],
-                ["copy", t("fromCopy")],
-              ] as const
-            ).map(([id, label]) => (
+            {sourceOptions.map(([id, label]) => (
               <button
                 key={id}
                 type="button"
@@ -588,73 +590,84 @@ function CreateWizard({
               </Field>
             ) : (
               <>
-                <Field label="内核" hint={ENGINE_META[engine].summary}>
-                  <Select
-                    value={engine}
-                    onChange={(e) => {
-                      // 换类就是换了另一个浏览器：之前挑的版本不属于新的这一类。
-                      const next = e.target.value as EngineClass;
-                      setEngine(next);
-                      setPickedKernel(null);
-                      // Chrome 内核的平台只能是本机，换回这一类时归位。
-                      if (next === "chromium") setPlatform(thisPlatform());
-                    }}
-                  >
-                    {ENGINE_CLASSES.map((c) => (
-                      <option key={c} value={c}>
-                        {ENGINE_META[c].label}（{ENGINE_META[c].build}）
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-                <Field
-                  label={t("platform")}
-                  hint={engine === "chromium" ? t("platformPinnedHint") : undefined}
-                >
-                  {engine === "chromium" ? (
-                    <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm">
-                      {platformLabel({
-                        platform,
-                        platformVersion: defaultPlatformVersion(platform, winEdition),
-                        brand: "Chrome",
-                      })}
-                      <span className="ml-2 text-subtle">{t("platformPinned")}</span>
-                    </p>
-                  ) : (
-                    <Select
-                      value={platform}
-                      onChange={(e) => setPlatform(e.target.value as PlatformId)}
+                <div className="rounded-md border border-line bg-surface-2 px-3 py-3 text-[13px] leading-relaxed text-muted">
+                  <span className="font-medium text-ink">推荐配置：</span>
+                  {ENGINE_META[engine].label}，使用本机系统，兼容多数网站。
+                </div>
+                <details className="rounded-md border border-line bg-surface">
+                  <summary className="cursor-pointer px-3 py-2.5 text-[13px] font-medium text-muted hover:text-ink">
+                    高级设置
+                  </summary>
+                  <div className="grid gap-4 border-t border-line p-3">
+                    <Field label="浏览器内核" hint={ENGINE_META[engine].summary}>
+                      <Select
+                        value={engine}
+                        onChange={(e) => {
+                          // 换类就是换了另一个浏览器：之前挑的版本不属于新的这一类。
+                          const next = e.target.value as EngineClass;
+                          setEngine(next);
+                          setPickedKernel(null);
+                          // Chrome 内核的平台只能是本机，换回这一类时归位。
+                          if (next === "chromium") setPlatform(thisPlatform());
+                        }}
+                      >
+                        {ENGINE_CLASSES.map((c) => (
+                          <option key={c} value={c}>
+                            {ENGINE_META[c].label}（{ENGINE_META[c].build}）
+                          </option>
+                        ))}
+                      </Select>
+                    </Field>
+                    <Field
+                      label={t("platform")}
+                      hint={engine === "chromium" ? t("platformPinnedHint") : undefined}
                     >
-                      <option value="windows">Windows</option>
-                      <option value="macos">macOS</option>
-                      <option value="linux">Linux</option>
-                    </Select>
-                  )}
-                </Field>
-                {platform === "windows" ? (
-                  <Field label={t("osVersion")} hint={t("osHint")}>
-                    <Select
-                      value={winEdition}
-                      onChange={(e) => setWinEdition(e.target.value as "10" | "11")}
-                    >
-                      <option value="10">{t("win10")}</option>
-                      <option value="11">{t("win11")}</option>
-                    </Select>
-                  </Field>
-                ) : null}
-                {/* 默认搜索引擎是靠 Chromium 扩展设的，Firefox 类没有这一项。 */}
-                {engine === "chromium" ? (
-                  <Field label={t("searchEngine")}>
-                    <Select value={engineId} onChange={(e) => setEngineId(e.target.value)}>
-                      <option value="none">{t("searchEngineNone")}</option>
-                      {catalog.map((engine) => (
-                        <option key={engine.id} value={engine.id}>
-                          {engine.name}
-                        </option>
-                      ))}
-                    </Select>
-                  </Field>
-                ) : null}
+                      {engine === "chromium" ? (
+                        <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm">
+                          {platformLabel({
+                            platform,
+                            platformVersion: defaultPlatformVersion(platform, winEdition),
+                            brand: "Chrome",
+                          })}
+                          <span className="ml-2 text-subtle">{t("platformPinned")}</span>
+                        </p>
+                      ) : (
+                        <Select
+                          value={platform}
+                          onChange={(e) => setPlatform(e.target.value as PlatformId)}
+                        >
+                          <option value="windows">Windows</option>
+                          <option value="macos">macOS</option>
+                          <option value="linux">Linux</option>
+                        </Select>
+                      )}
+                    </Field>
+                    {platform === "windows" ? (
+                      <Field label={t("osVersion")} hint={t("osHint")}>
+                        <Select
+                          value={winEdition}
+                          onChange={(e) => setWinEdition(e.target.value as "10" | "11")}
+                        >
+                          <option value="10">{t("win10")}</option>
+                          <option value="11">{t("win11")}</option>
+                        </Select>
+                      </Field>
+                    ) : null}
+                    {/* 默认搜索引擎是靠 Chromium 扩展设的，Firefox 类没有这一项。 */}
+                    {engine === "chromium" ? (
+                      <Field label={t("searchEngine")}>
+                        <Select value={engineId} onChange={(e) => setEngineId(e.target.value)}>
+                          <option value="none">{t("searchEngineNone")}</option>
+                          {catalog.map((engine) => (
+                            <option key={engine.id} value={engine.id}>
+                              {engine.name}
+                            </option>
+                          ))}
+                        </Select>
+                      </Field>
+                    ) : null}
+                  </div>
+                </details>
               </>
             )}
           </div>
@@ -666,8 +679,8 @@ function CreateWizard({
               label="地区"
               hint={
                 followExit
-                  ? "已配置代理时，启动将按出口所在国家设置时区与语言；无法识别时使用此处选择的地区"
-                  : "决定时区与浏览器语言，两者成对设置"
+                  ? "已配置代理时，将根据出口地区设置时区与语言；无法识别时使用此处选择的地区。"
+                  : "用于设置浏览器时区与语言。"
               }
             >
               <Select value={country} onChange={(e) => setCountry(e.target.value)}>
@@ -722,7 +735,7 @@ function CreateWizard({
 
         {error ? <p className="mt-4 text-[13px] text-bad">{error}</p> : null}
 
-        <div className="mt-6 flex justify-between">
+        <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 mt-6 flex justify-between border-t border-line bg-canvas px-6 py-4">
           <Button type="button" onClick={step === 0 ? onClose : () => setStep((s) => s - 1)}>
             {step === 0 ? t("cancel") : t("back")}
           </Button>
@@ -747,7 +760,7 @@ function CreateWizard({
             </Button>
           ) : (
             <Button type="button" variant="primary" disabled={busy} onClick={() => void create()}>
-              {busy ? "登记中…" : t("create")}
+              {busy ? "正在创建…" : "创建环境"}
             </Button>
           )}
         </div>

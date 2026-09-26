@@ -24,7 +24,8 @@ function EnginesPage() {
     if (!keyword.trim()) found.keyword = "请填写关键字，例如 google.com。";
     else if (catalog.some((e) => e.keyword === keyword.trim())) found.keyword = "该关键字已存在。";
     if (!/^https?:\/\/\S+$/.test(url.trim())) found.url = "要以 http:// 或 https:// 开头。";
-    else if (!url.includes("{searchTerms}")) found.url = "地址中需包含 {searchTerms}，它将被替换为搜索词。";
+    else if (!url.includes("{searchTerms}"))
+      found.url = "地址中需包含 {searchTerms}，它将被替换为搜索词。";
     setErrors(found);
     if (Object.keys(found).length) return;
     const engine: CatalogEngine = {
@@ -49,7 +50,7 @@ function EnginesPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6 *:max-w-3xl">
       <PageHeader title={t("navEngines")} status={`${catalog.length} 个引擎`} />
 
       <Panel className="p-5">
@@ -58,7 +59,11 @@ function EnginesPage() {
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Google" />
           </Field>
           <Field label={t("engineKeyword")} error={errors.keyword}>
-            <Input value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="google.com" />
+            <Input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value)}
+              placeholder="google.com"
+            />
           </Field>
           <Field label={t("engineUrl")} error={errors.url}>
             <Input

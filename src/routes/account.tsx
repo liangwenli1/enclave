@@ -15,7 +15,9 @@ function fmtDate(ms: number | null): string {
 /** 账号页。这里的数字都是刚问来的：订阅、升级、解绑设备在官网做，这边下一次问到就是新的。 */
 function AccountPage() {
   const session = useEnclave((s) => s.session);
-  const running = useEnclave((s) => Object.values(s.runtimes).filter((r) => r.status === "running").length);
+  const running = useEnclave(
+    (s) => Object.values(s.runtimes).filter((r) => r.status === "running").length,
+  );
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
@@ -33,8 +35,11 @@ function AccountPage() {
   const { plan, usage } = session;
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
-      <PageHeader title={t("navAccount")} status={plan ? `${session.email}，${plan.label}` : (session.email ?? "")} />
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6 *:max-w-3xl">
+      <PageHeader
+        title={t("navAccount")}
+        status={plan ? `${session.email}，${plan.label}` : (session.email ?? "")}
+      />
 
       <div className="grid gap-4">
         {session.online ? null : (
@@ -65,11 +70,15 @@ function AccountPage() {
             )}
             <Row
               label="环境"
-              value={plan && usage ? `${usage.profiles} / ${plan.envLimit}（账号下所有电脑合计）` : "—"}
+              value={
+                plan && usage ? `${usage.profiles} / ${plan.envLimit}（账号下所有电脑合计）` : "—"
+              }
             />
             <Row
               label="同时运行"
-              value={plan && usage ? `${usage.running} / ${plan.concurrent}（账号下所有电脑合计）` : "—"}
+              value={
+                plan && usage ? `${usage.running} / ${plan.concurrent}（账号下所有电脑合计）` : "—"
+              }
             />
             <Row label="可登录设备" value={plan ? `${plan.deviceLimit} 台` : "—"} />
             <Row label="订阅到期" value={plan ? fmtDate(session.expiresAt) : "—"} />

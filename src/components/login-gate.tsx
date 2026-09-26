@@ -49,8 +49,12 @@ export function LoginGate({ children }: { children: ReactNode }) {
           <BrandMark size={28} />
           <span className="text-[19px] font-bold tracking-[-0.03em] text-ink">Enclave</span>
         </div>
-        {session.state === "loading" ? <p className="text-sm text-subtle">正在读取账号状态…</p> : null}
-        {signedIn && !storeError ? <p className="text-sm text-subtle">正在读取这台电脑上的环境…</p> : null}
+        {session.state === "loading" ? (
+          <p className="text-sm text-subtle">正在读取账号状态…</p>
+        ) : null}
+        {signedIn && !storeError ? (
+          <p className="text-sm text-subtle">正在读取这台电脑上的环境…</p>
+        ) : null}
         {signedIn && storeError ? (
           <Notice
             title="无法读取本机数据"
@@ -146,7 +150,8 @@ function SignIn({ reason }: { reason: string | null }) {
           </Button>
         </div>
         <p className="text-[13px] leading-relaxed text-subtle">
-          环境里的指纹、代理、Cookie 始终只在这台电脑上。服务器只登记环境的名字，用来数名额。
+          默认情况下，指纹配置、代理和 Cookie
+          只保存在本机。开启加密同步后，数据会先在本机加密，再上传密文。
         </p>
       </div>
     );

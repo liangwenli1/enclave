@@ -41,23 +41,31 @@ function EnvDetail() {
   const mayEdit = canEdit(useEnclave((s) => s.session.role));
   const { folders } = useFolders();
   const [tab, setTab] = useState<"overview" | "fingerprint" | "flags" | "timeline">("overview");
-  const [collect, setCollect] = useState<{ busy: boolean; note?: string; bad?: boolean }>({ busy: false });
+  const [collect, setCollect] = useState<{ busy: boolean; note?: string; bad?: boolean }>({
+    busy: false,
+  });
 
   if (!env) {
     return (
       <div className="p-8 text-subtle">
-        这个环境不存在了。<Link to="/" className="text-accent-text underline">回到环境列表</Link>
+        这个环境不存在了。
+        <Link to="/" className="text-accent-text underline">
+          回到环境列表
+        </Link>
       </div>
     );
   }
 
   const proxy = proxies.find((p) => p.id === env.proxyId);
-  const checks = staticConsistency(env, proxy, { exitCountry: runtime?.exit?.country, screen: windowBoundsOf(env) });
+  const checks = staticConsistency(env, proxy, {
+    exitCountry: runtime?.exit?.country,
+    screen: windowBoundsOf(env),
+  });
   const failed = checks.filter((c) => !c.ok && !c.warn);
   const status = runtime?.status ?? "stopped";
 
   return (
-    <div className="mx-auto grid max-w-[1280px] gap-4 px-8 py-6 lg:grid-cols-[1fr_320px]">
+    <div className="mx-auto grid max-w-[1280px] gap-4 px-4 py-5 sm:px-8 sm:py-6 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0">
         <div className="mb-4 flex flex-wrap items-center gap-3">
           <Button variant="ghost" onClick={() => void navigate({ to: "/" })}>
@@ -103,14 +111,14 @@ function EnvDetail() {
           {(["overview", "fingerprint", "flags", "timeline"] as const)
             .filter((key) => key !== "flags" || env.engine === "chromium")
             .map((key) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`px-3 py-2 text-[13px] ${tab === key ? "border-b-2 border-accent text-ink" : "text-subtle"}`}
-            >
-              {t(key === "flags" ? "flags" : key)}
-            </button>
-          ))}
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                className={`px-3 py-2 text-[13px] ${tab === key ? "border-b-2 border-accent text-ink" : "text-subtle"}`}
+              >
+                {t(key === "flags" ? "flags" : key)}
+              </button>
+            ))}
         </div>
 
         {tab === "overview" ? (
@@ -167,7 +175,12 @@ function EnvDetail() {
               label={`${t("kernelVersion")}（${ENGINE_META[env.engine].label}）`}
               hint="更换版本后，网站将看到该设备的浏览器版本发生变化"
             >
-              <KernelSelect envId={env.id} engine={env.engine} value={env.kernelVersion} disabled={status !== "stopped" && status !== "error"} />
+              <KernelSelect
+                envId={env.id}
+                engine={env.engine}
+                value={env.kernelVersion}
+                disabled={status !== "stopped" && status !== "error"}
+              />
             </Field>
             <Field label={t("note")}>
               <Textarea
@@ -219,20 +232,45 @@ function EnvDetail() {
           </div>
         ) : null}
 
-        {tab === "fingerprint" ? <FingerprintForm envId={env.id} engine={env.engine} profile={env.profile} followExit={env.followExit} /> : null}
+        {tab === "fingerprint" ? (
+          <FingerprintForm
+            envId={env.id}
+            engine={env.engine}
+            profile={env.profile}
+            followExit={env.followExit}
+          />
+        ) : null}
 
-
-        {tab === "flags" ? <FlagsForm envId={env.id} extraFlags={env.extraFlags} allowNoSandbox={env.allowNoSandbox} /> : null}
+        {tab === "flags" ? (
+          <FlagsForm
+            envId={env.id}
+            extraFlags={env.extraFlags}
+            allowNoSandbox={env.allowNoSandbox}
+          />
+        ) : null}
 
         {tab === "timeline" ? (
           <ol className="grid gap-2">
             {env.timeline.map((ev, i) => (
-              <li key={`${ev.at}-${i}`} className="rounded-md border border-line px-3 py-2 text-[13px]">
+              <li
+                key={`${ev.at}-${i}`}
+                className="rounded-md border border-line px-3 py-2 text-[13px]"
+              >
                 <div className="flex justify-between gap-3">
                   <span className="font-medium">{eventLabel(ev.kind)}</span>
-                  <span className="text-subtle tabular-nums">{new Date(ev.at).toLocaleString()}</span>
+                  <span className="text-subtle tabular-nums">
+                    {new Date(ev.at).toLocaleString()}
+                  </span>
                 </div>
-                <div className={ev.level === "bad" ? "text-bad" : ev.level === "warn" ? "text-warn" : "text-muted"}>
+                <div
+                  className={
+                    ev.level === "bad"
+                      ? "text-bad"
+                      : ev.level === "warn"
+                        ? "text-warn"
+                        : "text-muted"
+                  }
+                >
                   {ev.message}
                 </div>
               </li>
@@ -288,7 +326,9 @@ function EnvDetail() {
             </Button>
           ) : null}
           {runtime?.status === "running" && collect.note ? (
-            <p className={`mt-2 text-[13px] ${collect.bad ? "text-bad" : "text-subtle"}`}>{collect.note}</p>
+            <p className={`mt-2 text-[13px] ${collect.bad ? "text-bad" : "text-subtle"}`}>
+              {collect.note}
+            </p>
           ) : null}
         </Panel>
       </aside>
@@ -400,7 +440,9 @@ function ExtensionPicker({ envId, selected }: { envId: string; selected: string[
                   权限较大
                 </Badge>
               ) : null}
-              <span className="app-mono mt-0.5 block text-xs break-all text-subtle">{ext.path}</span>
+              <span className="app-mono mt-0.5 block text-xs break-all text-subtle">
+                {ext.path}
+              </span>
             </span>
           </label>
         ))}
@@ -458,7 +500,9 @@ function FingerprintForm({
       ? deviceWindowBounds({ screen: profile.screen, dpr: profile.devicePixelRatio })
       : realScreen(),
   );
-  const sizes = fitting.some((w) => w.width === profile.window.width && w.height === profile.window.height)
+  const sizes = fitting.some(
+    (w) => w.width === profile.window.width && w.height === profile.window.height,
+  )
     ? fitting
     : [profile.window, ...fitting];
   const region = regionOfTimezone(profile.timezone);
@@ -484,18 +528,12 @@ function FingerprintForm({
               if (/^\d{1,10}$/.test(seed)) patch({ seed });
             }}
           />
-          <Button
-            disabled={seedBad}
-            onClick={() => patch({ seedLocked: !profile.seedLocked })}
-          >
+          <Button disabled={seedBad} onClick={() => patch({ seedLocked: !profile.seedLocked })}>
             {profile.seedLocked ? t("unlockSeed") : t("lockSeed")}
           </Button>
         </div>
       </Field>
-      <Field
-        label={t("platform")}
-        hint={firefox ? undefined : t("platformPinnedHint")}
-      >
+      <Field label={t("platform")} hint={firefox ? undefined : t("platformPinnedHint")}>
         {firefox ? (
           <Select
             value={profile.platform}
@@ -526,7 +564,9 @@ function FingerprintForm({
         <Field label={t("osVersion")}>
           <Select
             value={windowsEdition(profile.platformVersion)}
-            onChange={(e) => patch({ platformVersion: defaultWinVersion(e.target.value as "10" | "11") })}
+            onChange={(e) =>
+              patch({ platformVersion: defaultWinVersion(e.target.value as "10" | "11") })
+            }
           >
             <option value="10">{t("win10")}</option>
             <option value="11">{t("win11")}</option>
@@ -549,7 +589,8 @@ function FingerprintForm({
             {deviceIndex < 0 && profile.screen ? (
               <option value={-1}>
                 {profile.screen.width}×{profile.screen.height}
-                {profile.devicePixelRatio === 1 ? "" : ` @${profile.devicePixelRatio}x`}，{profile.hardwareConcurrency} 核（不在可选设备里）
+                {profile.devicePixelRatio === 1 ? "" : ` @${profile.devicePixelRatio}x`}，
+                {profile.hardwareConcurrency} 核（不在可选设备里）
               </option>
             ) : null}
             {deviceList.map((d, index) => (
@@ -696,7 +737,9 @@ function FingerprintForm({
             type="checkbox"
             className="size-4 accent-[var(--enclave-accent)]"
             checked={followExit}
-            onChange={(e) => useEnclave.getState().patchEnv(envId, { followExit: e.target.checked })}
+            onChange={(e) =>
+              useEnclave.getState().patchEnv(envId, { followExit: e.target.checked })
+            }
           />
           时区和语言跟着代理出口走
         </span>
@@ -724,7 +767,11 @@ function FingerprintForm({
       </Field>
       <Field
         label="窗口大小"
-        hint={firefox ? "仅列出同时适配该环境屏幕与本机显示器（按缩放折算）的尺寸" : "仅列出适配本机屏幕的尺寸"}
+        hint={
+          firefox
+            ? "仅列出同时适配该环境屏幕与本机显示器（按缩放折算）的尺寸"
+            : "仅列出适配本机屏幕的尺寸"
+        }
       >
         <Select
           value={`${profile.window.width}x${profile.window.height}`}
@@ -745,13 +792,17 @@ function FingerprintForm({
         {firefox ? (
           <>
             <p className="mt-1">
-              由内核按环境生效：平台、核数、屏幕{profile.screen ? `（${profile.screen.width} × ${profile.screen.height}）` : ""}
-              、缩放{profile.devicePixelRatio ? `（${profile.devicePixelRatio}）` : ""}、显卡字符串、地区、WebRTC、字体名单，以及由种子决定的字体间距。
+              由内核按环境生效：平台、核数、屏幕
+              {profile.screen ? `（${profile.screen.width} × ${profile.screen.height}）` : ""}
+              、缩放{profile.devicePixelRatio ? `（${profile.devicePixelRatio}）` : ""}
+              、显卡字符串、地区、WebRTC、字体名单，以及由种子决定的字体间距。
               缩放是真的缩放——页面会按这个比例显示，这样网站用媒体查询去量也对得上。
             </p>
             <p className="mt-1">
-              Canvas 不加噪声：同一台电脑上所有 Firefox 类环境的像素级 Canvas 指纹相同（上游认为像素噪声本身会被识别，已经去掉）。
-              每次启动 toDataURL 的哈希会变，那是 Firefox 自己的保护，真实用户也一样。需要 Canvas 噪声就用 Chromium 类。
+              Canvas 不加噪声：同一台电脑上所有 Firefox 类环境的像素级 Canvas
+              指纹相同（上游认为像素噪声本身会被识别，已经去掉）。 每次启动 toDataURL
+              的哈希会变，那是 Firefox 自己的保护，真实用户也一样。需要 Canvas 噪声就用 Chromium
+              类。
             </p>
           </>
         ) : (
@@ -762,8 +813,11 @@ function FingerprintForm({
             </p>
             <p className="mt-1">
               屏幕分辨率和缩放来自这台电脑，内核改不了
-              {screen ? `（现在是 ${window.screen.width} × ${window.screen.height}，缩放 ${dpr}）` : ""}
-              ：同一台电脑上的所有环境，网站看到的屏幕是同一个。要按环境给屏幕和显卡，用 Firefox 类。
+              {screen
+                ? `（现在是 ${window.screen.width} × ${window.screen.height}，缩放 ${dpr}）`
+                : ""}
+              ：同一台电脑上的所有环境，网站看到的屏幕是同一个。要按环境给屏幕和显卡，用 Firefox
+              类。
             </p>
           </>
         )}
@@ -793,7 +847,9 @@ function FlagsForm({
   useEffect(() => {
     let alive = true;
     const timer = window.setTimeout(() => {
-      void classifyFlags(flags).then((result) => alive && setVerdict({ checkedFor: key, flags: result }));
+      void classifyFlags(flags).then(
+        (result) => alive && setVerdict({ checkedFor: key, flags: result }),
+      );
     }, 200);
     return () => {
       alive = false;
@@ -840,8 +896,13 @@ function FlagsForm({
         {classified.map((f) => (
           <li key={f.raw} className="flex justify-between gap-2 border-b border-line py-1">
             <span className="font-mono">{f.raw}</span>
-            <span className={f.cls === "reject" ? "text-bad" : f.cls === "warn" ? "text-warn" : "text-ok"}>
-              {t(f.cls === "reject" ? "rejected" : f.cls === "warn" ? "warn" : "allowed")}，{f.reason}
+            <span
+              className={
+                f.cls === "reject" ? "text-bad" : f.cls === "warn" ? "text-warn" : "text-ok"
+              }
+            >
+              {t(f.cls === "reject" ? "rejected" : f.cls === "warn" ? "warn" : "allowed")}，
+              {f.reason}
             </span>
           </li>
         ))}
@@ -856,11 +917,13 @@ function FlagsForm({
         <Button
           disabled={!dirty || !checked || unreachable || rejected > 0}
           onClick={() => {
-            useEnclave.getState().patchEnv(
-              envId,
-              { extraFlags: flags },
-              { at: Date.now(), kind: "flag", message: "启动参数已更新", level: "info" },
-            );
+            useEnclave
+              .getState()
+              .patchEnv(
+                envId,
+                { extraFlags: flags },
+                { at: Date.now(), kind: "flag", message: "启动参数已更新", level: "info" },
+              );
           }}
         >
           {t("save")}
@@ -872,5 +935,3 @@ function FlagsForm({
     </div>
   );
 }
-
-

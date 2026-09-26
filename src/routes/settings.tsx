@@ -27,15 +27,24 @@ function SettingsPage() {
   // 界面只是不显示，真正拦住的是本机服务和服务器。
   const mayEdit = canEdit(role);
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-2xl">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6 *:max-w-[1080px]">
       <PageHeader title={t("settingsTitle")} status={mayEdit ? undefined : "当前角色为操作员"} />
 
       <div className="grid gap-4">
-        <AppearancePanel />
-        <VaultPanel />
+        <div className="grid items-start gap-4 xl:grid-cols-2">
+          <AppearancePanel />
+          <VaultPanel />
+        </div>
         {mayEdit ? <SyncPanel /> : <OperatorPanel />}
-        <ApiPanel />
-        {mayEdit ? <TransferPanel /> : null}
+        <details className="rounded border border-line bg-surface">
+          <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-ink hover:bg-surface-2">
+            高级设置
+          </summary>
+          <div className="grid gap-4 border-t border-line p-4 xl:grid-cols-2">
+            <ApiPanel />
+            {mayEdit ? <TransferPanel /> : null}
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -48,12 +57,11 @@ function OperatorPanel() {
       <PanelHeader title="同步" actions={<Badge tone="ok">由团队统一管理</Badge>} />
       <div className="grid gap-3 p-5 text-[13px] leading-relaxed text-muted">
         <p>
-          团队分配的环境会自动同步过来，登录态也会跟着走：在这台电脑上登录过的网站，
-          换一台电脑打开同一个环境仍保持登录。
+          团队分配的环境与登录状态会自动同步。在其他已授权设备上打开同一环境时，可以继续使用已有登录状态。
         </p>
         <p>
-          当前角色是<b>操作员</b>：可以打开已分配的环境，但无法新建和修改环境、
-          无法查看代理密码、也无法导出环境包。需要这些权限请联系团队所有者。
+          当前角色为<b>操作员</b>
+          。可以打开已分配的环境，但不能新建或修改环境、查看代理密码或导出环境包。
         </p>
       </div>
     </Panel>
@@ -96,7 +104,11 @@ function VaultPanel() {
     <Panel>
       <PanelHeader
         title="应用锁"
-        actions={<Badge tone={exists ? "ok" : "neutral"}>{exists ? (unlocked ? "已开启" : "已锁定") : "未开启"}</Badge>}
+        actions={
+          <Badge tone={exists ? "ok" : "neutral"}>
+            {exists ? (unlocked ? "已开启" : "已锁定") : "未开启"}
+          </Badge>
+        }
       />
       <form
         className="grid gap-4 p-5"
@@ -106,10 +118,11 @@ function VaultPanel() {
         }}
       >
         <p className="text-[13px] leading-relaxed text-muted">
-          不开也是安全的：代理密码用一把放在系统钥匙串里的钥匙加密，只有登录了这台电脑的系统账号才取得到。
-          和别人共用同一个系统账号时再开应用锁。
+          代理密码默认使用系统钥匙串保护。多人共用同一系统账号时，可启用应用锁增加访问控制。
         </p>
-        <p className="text-[13px] text-warn">口令无法找回。忘了只能重置，保存过的代理密码要重填。</p>
+        <p className="text-[13px] text-warn">
+          应用锁口令无法找回。重置后需要重新填写已保存的代理密码。
+        </p>
         <Field label={exists ? "新口令（至少 8 位）" : "口令（至少 8 位）"}>
           <Input
             type="password"
@@ -165,7 +178,11 @@ function AppearancePanel() {
     <Panel>
       <PanelHeader title="外观" />
       <div className="p-5">
-        <div className="inline-flex rounded-md border border-line-strong" role="group" aria-label="外观">
+        <div
+          className="inline-flex rounded-md border border-line-strong"
+          role="group"
+          aria-label="外观"
+        >
           {options.map(([id, label]) => (
             <button
               key={id}
@@ -303,7 +320,10 @@ function TransferPanel() {
         // "已保存密码"以本机服务里真的有为准（store 会按 secretIds 重算），不照抄文件里的标记。
         store.upsertProxy(
           proxy.auth
-            ? { ...proxy, auth: { ...proxy.auth, hasPassword: store.secretIds.includes(`proxy:${proxy.id}`) } }
+            ? {
+                ...proxy,
+                auth: { ...proxy.auth, hasPassword: store.secretIds.includes(`proxy:${proxy.id}`) },
+              }
             : proxy,
         );
       }

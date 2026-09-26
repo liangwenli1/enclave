@@ -66,10 +66,7 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
 
 export function Textarea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return (
-    <textarea
-      className={cn(fieldBase, "min-h-20 py-2.5 leading-relaxed", className)}
-      {...props}
-    />
+    <textarea className={cn(fieldBase, "min-h-20 py-2.5 leading-relaxed", className)} {...props} />
   );
 }
 
@@ -181,10 +178,10 @@ export function CodeBlock({
   const [done, setDone] = useState(false);
   return (
     <div className={cn("relative rounded-md bg-surface-2 p-4 pr-24", className)}>
-      {label ? (
-        <div className="mb-1.5 text-[13px] text-subtle">{label}</div>
-      ) : null}
-      <code className="block font-mono text-[13px] leading-relaxed break-all text-muted">{value}</code>
+      {label ? <div className="mb-1.5 text-[13px] text-subtle">{label}</div> : null}
+      <code className="block font-mono text-[13px] leading-relaxed break-all text-muted">
+        {value}
+      </code>
       <button
         type="button"
         className={cn(
@@ -222,7 +219,7 @@ export function DialogContent({
       <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#070b14]/55" />
       <DialogPrimitive.Content
         className={cn(
-          "enclave-dialog fixed top-1/2 left-1/2 z-50 w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-line p-6",
+          "enclave-dialog fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-24px)] w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line p-6",
           className,
         )}
       >
@@ -231,8 +228,11 @@ export function DialogContent({
             <DialogPrimitive.Title className="text-lg font-bold tracking-tight text-ink">
               {title}
             </DialogPrimitive.Title>
-            <DialogPrimitive.Close className="grid size-8 flex-none place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-ink">
-              <X className="size-4" />
+            <DialogPrimitive.Close
+              aria-label="关闭对话框"
+              className="grid size-8 flex-none place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-ink"
+            >
+              <X className="size-4" aria-hidden="true" />
             </DialogPrimitive.Close>
           </div>
         ) : (
@@ -327,5 +327,9 @@ export function StatusDot({ tone }: { tone: "ok" | "warn" | "bad" | "idle" }) {
     bad: "bg-bad",
     idle: "bg-faint",
   }[tone];
-  return <span className={cn("inline-block size-2 flex-none", tone === "bad" ? "" : "rounded-full", color)} />;
+  return (
+    <span
+      className={cn("inline-block size-2 flex-none", tone === "bad" ? "" : "rounded-full", color)}
+    />
+  );
 }

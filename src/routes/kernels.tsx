@@ -60,7 +60,7 @@ function KernelsPage() {
 
   if (view && !view.online) {
     return (
-      <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
+      <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6 *:max-w-3xl">
         <PageHeader title={t("kernelsTitle")} />
         <Panel className="p-6">
           <Badge tone="bad">无法连接本机服务</Badge>
@@ -88,7 +88,7 @@ function KernelsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6 *:max-w-3xl">
       <PageHeader
         title={t("kernelsTitle")}
         status={`${kernels.length} 个版本，${downloaded} 个已下载`}
@@ -137,7 +137,11 @@ function KernelsPage() {
           <Line k="窗口" v={caps?.headlessForced ? "无头模式（无显示器）" : "可见窗口"} />
           <Line k="沙箱" v={caps?.sandboxLikely === false ? "本机可能无法启用" : "默认开启"} />
           {ENGINE_CLASSES.map((engine) => (
-            <Line key={engine} k={`${ENGINE_META[engine].label}许可证`} v={ENGINE_META[engine].license} />
+            <Line
+              key={engine}
+              k={`${ENGINE_META[engine].label}许可证`}
+              v={ENGINE_META[engine].license}
+            />
           ))}
         </dl>
       </Panel>

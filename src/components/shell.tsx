@@ -21,27 +21,39 @@ import { BrandMark } from "@/components/brand-mark";
 import { Button, Dialog, DialogContent, Input } from "@/components/ui";
 import { Onboarding } from "@/components/onboarding";
 import { cn } from "@/lib/cn";
-import {
-  configureApi,
-  getKernelView,
-  hostBaseUrl,
-  type ExitInfo,
-} from "@/lib/kernel/host-api";
+import { configureApi, getKernelView, hostBaseUrl, type ExitInfo } from "@/lib/kernel/host-api";
 import { launchSpec, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { syncNow, useEnclave } from "@/lib/store";
 import { lockVault, resetVault, unlockVault } from "@/lib/vault";
 
-const NAV = [
-  { to: "/", key: "navEnv" as const, icon: Box },
-  { to: "/network", key: "navNet" as const, icon: Globe },
-  { to: "/engines", key: "navEngines" as const, icon: SearchCode },
-  { to: "/extensions", key: "navExt" as const, icon: Puzzle },
-  { to: "/automation", key: "navAutomation" as const, icon: Workflow },
-  { to: "/lab", key: "navLab" as const, icon: FlaskConical },
-  { to: "/kernels", key: "navKernels" as const, icon: Cpu },
-  { to: "/security", key: "navSecurity" as const, icon: Shield },
-];
+const NAV_GROUPS = [
+  {
+    label: "工作区",
+    items: [
+      { to: "/", key: "navEnv" as const, icon: Box },
+      { to: "/network", key: "navNet" as const, icon: Globe },
+      { to: "/automation", key: "navAutomation" as const, icon: Workflow },
+    ],
+  },
+  {
+    label: "资源",
+    items: [
+      { to: "/engines", key: "navEngines" as const, icon: SearchCode },
+      { to: "/extensions", key: "navExt" as const, icon: Puzzle },
+    ],
+  },
+  {
+    label: "系统",
+    items: [
+      { to: "/kernels", key: "navKernels" as const, icon: Cpu },
+      { to: "/security", key: "navSecurity" as const, icon: Shield },
+      { to: "/lab", key: "navLab" as const, icon: FlaskConical, preview: true },
+    ],
+  },
+] as const;
+
+const NAV = [...NAV_GROUPS[0].items, ...NAV_GROUPS[1].items, ...NAV_GROUPS[2].items];
 
 export function AppShell({ children }: { children: ReactNode }) {
   // 锁没锁只有一个事实来源：本机服务说开着应用锁、而且还没输过口令。
@@ -62,20 +74,34 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div
-      className="flex h-full min-h-full bg-canvas text-muted"
-    >
+    <div className="flex h-full min-h-full bg-canvas text-muted">
       <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
         <div className="flex h-14 items-center gap-2.5 px-5">
           <BrandMark />
           <span className="text-[17px] font-bold tracking-[-0.03em] text-ink">Enclave</span>
         </div>
         <nav className="app-nav min-h-0 flex-1 overflow-auto">
-          {NAV.map((item) => (
-            <Link key={item.to} to={item.to} data-active={pathname === item.to ? "true" : "false"}>
-              <item.icon className="size-4" />
-              {t(item.key)}
-            </Link>
+          {NAV_GROUPS.map((group, index) => (
+            <div key={group.label} className={index ? "mt-4" : undefined}>
+              <p className="px-4 pb-1 text-[11px] font-medium tracking-wide text-faint">
+                {group.label}
+              </p>
+              {group.items.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  data-active={pathname === item.to ? "true" : "false"}
+                >
+                  <item.icon className="size-4" />
+                  <span>{t(item.key)}</span>
+                  {"preview" in item && item.preview ? (
+                    <span className="ml-auto rounded-sm bg-surface-2 px-1.5 py-0.5 text-[10px] text-subtle">
+                      预览
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
           ))}
         </nav>
         <div className="app-nav-foot">
@@ -110,28 +136,51 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               <Search className="size-3.5" />
               <kbd className="hidden font-mono text-[10px] md:inline">
-              {/Mac/.test(navigator.platform) ? "⌘K" : "Ctrl K"}
-            </kbd>
+                {/Mac/.test(navigator.platform) ? "⌘K" : "Ctrl K"}
+              </kbd>
             </button>
             <LockButton />
           </div>
         </header>
 
         {mobileNav ? (
-          <div className="flex flex-wrap gap-1.5 border-b border-line px-3 py-2.5 md:hidden">
-            {[...NAV, { to: "/account", key: "navAccount" as const, icon: UserRound }].map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                onClick={() => setMobileNav(false)}
-                className={cn(
-                  "inline-flex min-h-10 shrink-0 items-center rounded-md px-4 text-[13px]",
-                  pathname === item.to ? "bg-ink font-semibold text-canvas" : "bg-surface-2 text-muted",
-                )}
-              >
-                {t(item.key)}
-              </Link>
+          <div className="grid gap-3 border-b border-line px-3 py-3 md:hidden">
+            {NAV_GROUPS.map((group) => (
+              <div key={group.label}>
+                <p className="mb-1 px-1 text-[11px] font-medium tracking-wide text-faint">
+                  {group.label}
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {group.items.map((item) => (
+                    <Link
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMobileNav(false)}
+                      className={cn(
+                        "inline-flex min-h-10 shrink-0 items-center rounded-md px-4 text-[13px]",
+                        pathname === item.to
+                          ? "bg-ink font-semibold text-canvas"
+                          : "bg-surface-2 text-muted",
+                      )}
+                    >
+                      {t(item.key)}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             ))}
+            <Link
+              to="/account"
+              onClick={() => setMobileNav(false)}
+              className={cn(
+                "inline-flex min-h-10 w-fit items-center rounded-md px-4 text-[13px]",
+                pathname === "/account"
+                  ? "bg-ink font-semibold text-canvas"
+                  : "bg-surface-2 text-muted",
+              )}
+            >
+              {t("navAccount")}
+            </Link>
           </div>
         ) : null}
 
@@ -158,9 +207,7 @@ function AccountChip() {
       to="/account"
       className="mx-2 mb-2 block rounded-md border border-line px-3 py-2.5 hover:bg-surface-2"
     >
-      <div className="truncate text-[13px] font-medium text-ink">
-        {session.email}
-      </div>
+      <div className="truncate text-[13px] font-medium text-ink">{session.email}</div>
       <div className={cn("mt-0.5 text-xs", session.online ? "text-subtle" : "text-warn")}>
         {session.plan && session.usage
           ? `${session.plan.label}，${session.usage.profiles} / ${session.plan.envLimit} 个环境`
@@ -219,9 +266,7 @@ function PlanNotice() {
       <DialogContent title={notice.title} className="z-[70]">
         <p className="text-sm leading-relaxed text-muted">{notice.body}</p>
         <div className="mt-6 flex justify-end gap-2">
-          <Button onClick={() => useEnclave.getState().setPlanNotice(null)}>
-            {t("gotIt")}
-          </Button>
+          <Button onClick={() => useEnclave.getState().setPlanNotice(null)}>{t("gotIt")}</Button>
           <Button
             variant="primary"
             onClick={() => {
@@ -299,7 +344,10 @@ function HostSync() {
       const view = await getKernelView();
       if (!alive || !view.online) return;
       const known = new Set(
-        useEnclave.getState().environments.filter((e) => !e.deletedAt).map((e) => e.id),
+        useEnclave
+          .getState()
+          .environments.filter((e) => !e.deletedAt)
+          .map((e) => e.id),
       );
       const live: Record<string, ReturnType<typeof runtimeRow>> = {};
       for (const r of view.runtimes) {
@@ -424,7 +472,7 @@ function LockScreen() {
             className="mt-4 w-full text-center text-[13px] text-subtle hover:text-ink"
             onClick={() => setForgot(true)}
           >
-            忘了主密码
+            忘记应用锁口令？
           </button>
         )}
       </form>
@@ -463,10 +511,7 @@ function CommandPalette({
             <Command.Empty className="px-2 py-8 text-center text-[13px] text-subtle">
               {t("noMatch")}
             </Command.Empty>
-            <Command.Group
-              heading={t("pages")}
-              className="px-1 text-[13px] text-subtle"
-            >
+            <Command.Group heading={t("pages")} className="px-1 text-[13px] text-subtle">
               {pages.map((p) => (
                 <Command.Item
                   key={p.to}
@@ -482,10 +527,7 @@ function CommandPalette({
               ))}
             </Command.Group>
             {envs.length ? (
-              <Command.Group
-                heading={t("navEnv")}
-                className="mt-3 px-1 text-[13px] text-subtle"
-              >
+              <Command.Group heading={t("navEnv")} className="mt-3 px-1 text-[13px] text-subtle">
                 {envs.map((env) => (
                   <Command.Item
                     key={env.id}

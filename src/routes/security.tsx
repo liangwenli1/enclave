@@ -26,66 +26,88 @@ function SecurityPage() {
     ? kernels.filter((k) => k.status.state === "admitted")
     : kernels.filter((k) => k.record.version === view?.defaultVersions.chromium);
   const previewChannel = inUse.some((k) => k.record.channel !== "stable");
+  const checks = [
+    {
+      ok: online,
+      label: "本机接口",
+      detail: online
+        ? "仅监听 127.0.0.1，使用令牌验证并限制工作台来源。"
+        : "无法连接本机服务。请重启工作台后重试。",
+    },
+    {
+      ok: admitted,
+      neutral: !online,
+      label: "内核完整性",
+      detail: !online
+        ? "未知"
+        : admitted
+          ? "每次启动前校验内核文件。"
+          : "尚未下载内核，环境无法启动。",
+    },
+    {
+      ok: !settings.allowNoSandboxHost,
+      label: "内核沙箱",
+      detail: settings.allowNoSandboxHost ? "已允许关闭内核沙箱。" : "已启用。",
+    },
+    {
+      ok: hasVault,
+      label: "应用锁",
+      detail: hasVault ? "代理密码已加密保存。" : "未设置应用锁，代理密码不会持久保存。",
+    },
+    {
+      ok: !previewChannel || !settings.allowPreviewKernel,
+      neutral: !online,
+      label: "内核通道",
+      detail: !online
+        ? "未知"
+        : previewChannel
+          ? settings.allowPreviewKernel
+            ? "正在使用预览通道，已确认相关风险。"
+            : "预览通道需要确认后才能使用。"
+          : "稳定通道。",
+    },
+    {
+      ok: false,
+      neutral: true,
+      label: "安装包签名",
+      detail: "未提供代码签名。请使用下载页公布的 SHA256 校验文件。",
+    },
+  ];
+  const attention = checks.filter((item) => !item.neutral && !item.ok);
+  const cleared = attention.length ? checks.filter((item) => item.neutral || item.ok) : [];
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6 *:max-w-3xl">
-      <PageHeader title={t("securityTitle")} />
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6 *:max-w-[1080px]">
+      <PageHeader
+        title={t("securityTitle")}
+        status={`${attention.length} 项需要处理，${checks.filter((item) => item.ok).length} 项正常`}
+      />
 
       <div className="grid gap-4">
         <Panel className="overflow-hidden">
-          <PanelHeader title="当前状态" />
+          <PanelHeader title={attention.length ? "需要处理" : "当前状态正常"} />
           <ul className="grid gap-px bg-line">
-            <Check
-              ok={online}
-              label="本机接口"
-              detail={online ? "仅 127.0.0.1，需令牌，限工作台来源" : "无法连接本机服务，请重启工作台"}
-            />
-            <Check
-              ok={admitted}
-              neutral={!online}
-              label="内核完整性"
-              detail={
-                !online
-                  ? "未知"
-                  : admitted
-                    ? "每次启动前核对可执行文件哈希"
-                    : "尚未下载任何内核，环境无法启动"
-              }
-            />
-            <Check
-              ok={!settings.allowNoSandboxHost}
-              label="内核沙箱"
-              detail={
-settings.allowNoSandboxHost ? "已允许关闭沙箱" : "开启"
-              }
-            />
-            <Check
-              ok={hasVault}
-              label="保险箱"
-              detail={
-hasVault ? "代理密码以密文保存" : "未设置主密码，代理密码将不会保存"
-              }
-            />
-            <Check
-              ok={!previewChannel || !settings.allowPreviewKernel}
-              neutral={!online}
-              label="内核通道"
-              detail={
-                !online
-                  ? "未知"
-                  : previewChannel
-                  ? settings.allowPreviewKernel
-                    ? "预览通道，已同意使用"
-                    : "预览通道，需确认同意后方可使用"
-                  : "稳定通道"
-              }
-            />
-            <Check ok={false} neutral label="安装包签名" detail="未签名，请使用下载页公示的 SHA256 核对" />
+            {(attention.length ? attention : checks.filter((item) => item.ok)).map((item) => (
+              <Check key={item.label} {...item} />
+            ))}
           </ul>
         </Panel>
 
+        {cleared.length ? (
+          <details className="rounded border border-line bg-surface">
+            <summary className="cursor-pointer px-5 py-3 text-[13px] font-medium text-muted hover:text-ink">
+              已通过的检查与其他状态（{cleared.length}）
+            </summary>
+            <ul className="grid gap-px border-t border-line bg-line">
+              {cleared.map((item) => (
+                <Check key={item.label} {...item} />
+              ))}
+            </ul>
+          </details>
+        ) : null}
+
         <Panel>
-          <PanelHeader title="可自行关闭的保护" />
+          <PanelHeader title="高级安全选项" />
           <div className="grid gap-4 p-5">
             <Consent
               checked={settings.allowNoSandboxHost}
@@ -118,7 +140,7 @@ hasVault ? "代理密码以密文保存" : "未设置主密码，代理密码将
 
         <Panel>
           <PanelHeader
-            title="诊断包"
+            title="诊断与日志"
             hint="不包含 Cookie、密码与访问记录"
             actions={
               <Button
@@ -161,7 +183,7 @@ hasVault ? "代理密码以密文保存" : "未设置主密码，代理密码将
         <Panel>
           <PanelHeader title={t("audit")} />
           {audit.length === 0 ? (
-            <p className="px-5 py-8 text-center text-[13px] text-subtle">还没有需要记录的操作。</p>
+            <p className="px-5 py-8 text-center text-[13px] text-subtle">尚未产生审计记录。</p>
           ) : (
             <ol className="max-h-96 overflow-auto">
               {audit.map((ev) => (
@@ -188,7 +210,6 @@ hasVault ? "代理密码以密文保存" : "未设置主密码，代理密码将
             </ol>
           )}
         </Panel>
-
       </div>
     </div>
   );
@@ -240,10 +261,16 @@ function Consent({
         onChange={(e) => onChange(e.target.checked)}
       />
       <span>
-        <span className={checked ? "text-[13px] font-medium text-warn" : "text-[13px] font-medium text-ink"}>
+        <span
+          className={
+            checked ? "text-[13px] font-medium text-warn" : "text-[13px] font-medium text-ink"
+          }
+        >
           {title}
         </span>
-        <span className="mt-1 block max-w-[62ch] text-[13px] leading-relaxed text-subtle">{body}</span>
+        <span className="mt-1 block max-w-[62ch] text-[13px] leading-relaxed text-subtle">
+          {body}
+        </span>
       </span>
     </label>
   );

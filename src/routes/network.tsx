@@ -35,12 +35,14 @@ function NetworkPage() {
     const name = proxies.find((p) => p.id === id)?.name ?? id;
     void removeSecret(`proxy:${id}`);
     useEnclave.getState().removeProxy(id);
-    useEnclave.getState().addAudit({ action: "proxy_remove", target: id, level: "warn", detail: name });
+    useEnclave
+      .getState()
+      .addAudit({ action: "proxy_remove", target: id, level: "warn", detail: name });
     setRemoving(null);
   };
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6">
       <PageHeader
         title={t("netTitle")}
         status={`${proxies.length} 个代理`}
@@ -85,7 +87,9 @@ function NetworkPage() {
               </thead>
               <tbody>
                 {proxies.map((p) => {
-                  const used = environments.filter((e) => !e.deletedAt && e.proxyId === p.id).length;
+                  const used = environments.filter(
+                    (e) => !e.deletedAt && e.proxyId === p.id,
+                  ).length;
                   return (
                     <tr key={p.id}>
                       <td className="wrap">
@@ -183,7 +187,12 @@ function PasswordDialog({ proxy, onClose }: { proxy: ProxyItem; onClose: () => v
     }
     const store = useEnclave.getState();
     store.upsertProxy({ ...proxy, auth: { username: proxy.auth!.username, hasPassword: true } });
-    store.addAudit({ action: "proxy_password", target: proxy.id, level: "info", detail: proxy.name });
+    store.addAudit({
+      action: "proxy_password",
+      target: proxy.id,
+      level: "info",
+      detail: proxy.name,
+    });
     onClose();
   };
 
@@ -196,7 +205,11 @@ function PasswordDialog({ proxy, onClose }: { proxy: ProxyItem; onClose: () => v
             void save();
           }}
         >
-          <Field label={`用户名 ${proxy.auth?.username ?? ""}`} error={error} hint="仅以密文保存在本机，保存后页面无法读回明文">
+          <Field
+            label={`用户名 ${proxy.auth?.username ?? ""}`}
+            error={error}
+            hint="仅以密文保存在本机，保存后页面无法读回明文"
+          >
             <Input
               type="password"
               autoFocus
@@ -228,7 +241,12 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
     password: "",
     country: "",
   });
-  const [errors, setErrors] = useState<{ host?: string; port?: string; username?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{
+    host?: string;
+    port?: string;
+    username?: string;
+    password?: string;
+  }>({});
   const vault = useEnclave((s) => s.vault);
 
   // 平时不用任何口令就能存；只有开着应用锁又没解锁时存不了。
@@ -242,10 +260,10 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
     if (!host) found.host = "请填写代理的域名或 IP。";
     else if (/[\s/:@]/.test(host) && !/^\[[0-9a-fA-F:]+\]$/.test(host))
       found.host = "仅填写域名或 IP，不含协议、端口与路径。";
-    if (!/^\d+$/.test(draft.port.trim()) || port < 1 || port > 65535) found.port = "请填写 1–65535 之间的整数。";
+    if (!/^\d+$/.test(draft.port.trim()) || port < 1 || port > 65535)
+      found.port = "请填写 1–65535 之间的整数。";
     if (draft.password && !username) found.username = "填写密码时需同时填写用户名。";
-    if (draft.password && !canStorePassword)
-      found.password = "应用锁已锁定，请先解锁。";
+    if (draft.password && !canStorePassword) found.password = "应用锁已锁定，请先解锁。";
     setErrors(found);
     if (Object.keys(found).length) return;
     const id = makeId("prx");

@@ -27,7 +27,7 @@ function ExtensionsPage() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="mx-auto max-w-[1280px] px-8 py-6">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6">
       <PageHeader
         title={t("extTitle")}
         status={`${extensions.length} 个扩展`}
@@ -152,11 +152,7 @@ function ExtDialog({ onClose }: { onClose: () => void }) {
           <Field label={t("name")} hint="留空则使用文件夹名称">
             <Input value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
-          <Field
-            label="扩展文件夹"
-            hint="manifest.json 所在的文件夹"
-            error={error}
-          >
+          <Field label="扩展文件夹" hint="manifest.json 所在的文件夹" error={error}>
             <Input
               value={path}
               onChange={(e) => setPath(e.target.value)}

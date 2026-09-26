@@ -35,7 +35,12 @@ export function SyncPanel() {
   const [recoveryCode, setRecoveryCode] = useState("");
   const [saved, setSaved] = useState(false);
   const [pending, setPending] = useState<PendingDevice[]>([]);
-  const [usage, setUsage] = useState<{ count: number; bytes: number; max: number; ready: boolean } | null>(null);
+  const [usage, setUsage] = useState<{
+    count: number;
+    bytes: number;
+    max: number;
+    ready: boolean;
+  } | null>(null);
   const [code, setCode] = useState("");
   const [note, setNote] = useState("");
 
@@ -53,7 +58,12 @@ export function SyncPanel() {
       const used = await blobUsage();
       setUsage(
         used.ok
-          ? { count: used.blobs.length, bytes: used.totalBytes, max: used.maxBytes, ready: used.ready }
+          ? {
+              count: used.blobs.length,
+              bytes: used.totalBytes,
+              max: used.maxBytes,
+              ready: used.ready,
+            }
           : null,
       );
     } else {
@@ -85,7 +95,13 @@ export function SyncPanel() {
     return (
       <Panel>
         <PanelHeader title="同步" />
-        <p className="p-5 text-[13px] text-subtle">{error || "读取中…"}</p>
+        <p className="p-5 text-[13px] text-subtle">
+          {error
+            ? error.startsWith("/")
+              ? "暂时无法读取同步状态，请稍后重试。"
+              : error
+            : "正在读取同步状态…"}
+        </p>
       </Panel>
     );
   }
@@ -141,7 +157,8 @@ export function SyncPanel() {
       <div className="grid gap-4 p-5">
         <p className="text-[13px] leading-relaxed text-muted">
           开启后，环境与登录态加密之后才会上传，密钥只在本人的多台电脑之间传递——
-          <span className="text-ink">我们无法读取其中的内容</span>。更换电脑时，在这台电脑上点击「允许」即可。
+          <span className="text-ink">我们无法读取其中的内容</span>
+          。更换电脑时，在这台电脑上点击「允许」即可。
         </p>
 
         {/* 还没开：这个账号的第一台电脑 */}
@@ -177,10 +194,14 @@ export function SyncPanel() {
                 在另一台已经登录过的电脑上打开设置页，会看到这台电脑在等批准。
                 <span className="text-ink">核对下面这串数字一致</span>，再点「允许」。
               </p>
-              <p className="mt-3 font-mono text-[28px] tracking-[0.3em] text-ink">{state.digits ?? "······"}</p>
+              <p className="mt-3 font-mono text-[28px] tracking-[0.3em] text-ink">
+                {state.digits ?? "······"}
+              </p>
             </div>
             <div className="grid gap-3 border-t border-line pt-4">
-              <p className="text-[13px] text-muted">手边没有别的电脑了？用开启同步时保存的恢复码。</p>
+              <p className="text-[13px] text-muted">
+                手边没有别的电脑了？用开启同步时保存的恢复码。
+              </p>
               <Field label="恢复码" error={error}>
                 <Input
                   value={code}
@@ -193,11 +214,13 @@ export function SyncPanel() {
               <div>
                 <Button
                   disabled={busy || !code.trim()}
-                  onClick={() => void run(async () => {
-                    const res = await recoverKey(code.trim());
-                    if (res.ok) await syncNow();
-                    return res;
-                  }, "密钥已接收，正在拉取环境。")}
+                  onClick={() =>
+                    void run(async () => {
+                      const res = await recoverKey(code.trim());
+                      if (res.ok) await syncNow();
+                      return res;
+                    }, "密钥已接收，正在拉取环境。")
+                  }
                 >
                   {busy ? "处理中…" : "使用恢复码继续"}
                 </Button>
@@ -215,15 +238,20 @@ export function SyncPanel() {
                 {pending.map((d) => (
                   <div key={d.deviceId} className="rounded-md border border-line px-4 py-3">
                     <p className="text-[13px] text-muted">
-                      「{d.name}」要接上同步。<span className="text-ink">先看那台电脑上显示的数字</span>
+                      「{d.name}」要接上同步。
+                      <span className="text-ink">先看那台电脑上显示的数字</span>
                       ，和下面这串一致再允许。不一致就不要允许。
                     </p>
-                    <p className="my-3 font-mono text-[28px] tracking-[0.3em] text-ink">{d.digits}</p>
+                    <p className="my-3 font-mono text-[28px] tracking-[0.3em] text-ink">
+                      {d.digits}
+                    </p>
                     <div className="flex gap-2">
                       <Button
                         variant="primary"
                         disabled={busy}
-                        onClick={() => void run(() => approveDevice(d), `已经把密钥交给「${d.name}」。`)}
+                        onClick={() =>
+                          void run(() => approveDevice(d), `已经把密钥交给「${d.name}」。`)
+                        }
                       >
                         数字一致，允许
                       </Button>
@@ -235,7 +263,10 @@ export function SyncPanel() {
               <p className="text-[13px] text-subtle">没有电脑在等。新电脑登录后会出现在这里。</p>
             )}
             <p className="text-[13px] text-subtle">
-              {syncNote ?? (syncedAt ? `上次同步：${new Date(syncedAt).toLocaleTimeString("zh-CN")}` : "尚未同步")}
+              {syncNote ??
+                (syncedAt
+                  ? `上次同步：${new Date(syncedAt).toLocaleTimeString("zh-CN")}`
+                  : "尚未同步")}
             </p>
             {usage && !usage.ready ? (
               <p className="text-[13px] text-warn">
@@ -244,12 +275,20 @@ export function SyncPanel() {
             ) : null}
             {usage?.ready ? (
               <p className="text-[13px] text-subtle">
-                云端存着 {usage.count} 个环境的登录态，共 {mib(usage.bytes)}。
-                单个环境上限 {mib(usage.max)}；不想上传的环境，可以在它的页面上勾「只留在这台电脑上」。
+                云端存着 {usage.count} 个环境的登录态，共 {mib(usage.bytes)}。 单个环境上限{" "}
+                {mib(usage.max)}；不想上传的环境，可以在它的页面上勾「只留在这台电脑上」。
               </p>
             ) : null}
             <div className="flex flex-wrap gap-2 border-t border-line pt-4">
-              <Button disabled={busy} onClick={() => void run(async () => { await syncNow(); return { ok: true }; }, "同步完成。")}>
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await syncNow();
+                    return { ok: true };
+                  }, "同步完成。")
+                }
+              >
                 立刻同步
               </Button>
               <Button disabled={busy} onClick={() => void run(adoptKey)}>
