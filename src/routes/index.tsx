@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { BatchBar } from "@/components/batch-bar";
 import { DEFAULT_FOLDER, folderName, useFolders } from "@/lib/folders";
 import { FolderBar } from "@/components/folder-bar";
-import { Boxes, Play, Plus, Square, Trash2 } from "lucide-react";
+import { Boxes, Play, Plus, Search, Square, Trash2 } from "lucide-react";
 import { EnvGlyph } from "@/components/env-glyph";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -53,6 +53,7 @@ function EnvironmentsPage() {
   const [picked, setPicked] = useState<string[]>([]);
   const { folders, reload: reloadFolders } = useFolders();
   const [folderFilter, setFolderFilter] = useState("");
+  const [restoreNote, setRestoreNote] = useState<{ id: string; message: string } | null>(null);
 
   const live = useMemo(() => environments.filter((e) => !e.deletedAt), [environments]);
   const runningNow = Object.values(runtimes).filter((r) => r.status === "running").length;
@@ -93,9 +94,16 @@ function EnvironmentsPage() {
         status={`${live.length} / ${limitText(plan, (p) => p.envLimit)} 个环境，${runningNow} / ${limitText(plan, (p) => p.concurrent)} 个运行中${plan ? `，${plan.label}` : ""}`}
         actions={
           <>
-            <Button onClick={() => setTrash((v) => !v)}>{trash ? t("navEnv") : t("trash")}</Button>
+            <Button
+              onClick={() => {
+                if (!trash) setFolderFilter("");
+                setTrash((v) => !v);
+              }}
+            >
+              {trash ? t("navEnv") : t("trash")}
+            </Button>
             {live.length > 0 && mayEdit ? (
-              <Button variant="primary" onClick={tryCreate}>
+              <Button variant={picked.length > 0 && !trash ? "secondary" : "primary"} onClick={tryCreate}>
                 <Plus className="size-3.5" />
                 {t("newEnv")}
               </Button>
@@ -105,12 +113,19 @@ function EnvironmentsPage() {
       />
 
       {live.length > 0 || trash ? (
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t("search")}
-          className="mb-4 max-w-sm"
-        />
+        <div className="relative mb-4 max-w-sm">
+          <Search
+            className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-faint"
+            aria-hidden="true"
+          />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("searchList")}
+            aria-label={t("searchList")}
+            className="pl-9"
+          />
+        </div>
       ) : null}
 
       {!trash ? (
@@ -131,8 +146,14 @@ function EnvironmentsPage() {
         {rows.length === 0 && query.trim() ? (
           <Empty
             title={t("noMatch")}
-            body={`没有名字、分组或标签里带「${query.trim()}」的环境。`}
+            body={`没有名称、文件夹、标签或平台里带「${query.trim()}」的环境。`}
             action={<Button onClick={() => setQuery("")}>清除搜索</Button>}
+          />
+        ) : rows.length === 0 && folderFilter && !trash ? (
+          <Empty
+            title="这个文件夹里没有环境"
+            body="换一个文件夹，或显示全部。"
+            action={<Button onClick={() => setFolderFilter("")}>显示全部</Button>}
           />
         ) : rows.length === 0 ? (
           <Empty
@@ -140,13 +161,13 @@ function EnvironmentsPage() {
             title={trash ? "回收站为空" : mayEdit ? t("emptyEnv") : "尚未分配环境"}
             body={
               trash
-                ? "删除的环境将先移入此处，可恢复或彻底销毁。"
+                ? "删除的环境会先放在这里。可以恢复，也可以彻底删除。"
                 : mayEdit
                   ? t("emptyEnvHint")
                   : "当前角色为操作员。团队所有者分配环境后，将在此处显示。"
             }
             action={
-              trash || !mayEdit ? undefined : (
+              trash || !mayEdit || live.length > 0 ? undefined : (
                 <Button variant="primary" onClick={tryCreate}>
                   {t("newEnv")}
                 </Button>
@@ -179,7 +200,7 @@ function EnvironmentsPage() {
                   <th>{t("kernelVersion")}</th>
                   <th>{t("proxy")}</th>
                   <th>{t("statusCol")}</th>
-                  <th />
+                  <th className="pin-end" />
                 </tr>
               </thead>
               <tbody>
@@ -220,7 +241,7 @@ function EnvironmentsPage() {
                             <Link
                               to="/environments/$id"
                               params={{ id: env.id }}
-                              className="font-semibold text-ink hover:text-accent-text"
+                              className="font-semibold text-ink underline-offset-4 hover:text-accent-text hover:underline"
                             >
                               {env.name}
                             </Link>
@@ -258,11 +279,21 @@ function EnvironmentsPage() {
                           </span>
                         </span>
                       </td>
-                      <td>
-                        <div className="flex justify-end gap-1.5">
+                      <td className="pin-end">
+                        <div className="flex items-center justify-end gap-2">
                           {trash ? (
                             <>
-                              <Button onClick={() => void restoreEnv(env)}>{t("restore")}</Button>
+                              <Button
+                                onClick={() => {
+                                  void restoreEnv(env).then((res) => {
+                                    if (!res.ok && res.code !== "PLAN_ENV_LIMIT") {
+                                      setRestoreNote({ id: env.id, message: res.message });
+                                    }
+                                  });
+                                }}
+                              >
+                                {t("restore")}
+                              </Button>
                               <Button
                                 variant="danger"
                                 onClick={() => setPurging({ id: env.id, name: env.name })}
@@ -283,21 +314,36 @@ function EnvironmentsPage() {
                                   title={status === "starting" ? t("starting") : undefined}
                                   onClick={() => void startEnv(env)}
                                 >
-                                  <Play className="size-3 text-accent-text" />
+                                  <Play className="size-3" />
                                   {status === "starting" ? t("starting") : t("start")}
                                 </Button>
                               )}
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title={t("trash")}
-                                onClick={() => void trashEnv(env.id)}
+                                title="移入回收站"
+                                aria-label="移入回收站"
+                                className="ml-1 text-subtle hover:text-bad"
+                                onClick={() => {
+                                  if (
+                                    !window.confirm(
+                                      `把「${env.name}」移入回收站？正在运行的浏览器会先停止。`,
+                                    )
+                                  )
+                                    return;
+                                  void trashEnv(env.id);
+                                }}
                               >
                                 <Trash2 className="size-3.5" />
                               </Button>
                             </>
                           )}
                         </div>
+                        {restoreNote?.id === env.id ? (
+                          <p className="mt-1 text-right text-[13px] whitespace-normal text-bad">
+                            {restoreNote.message}
+                          </p>
+                        ) : null}
                       </td>
                     </tr>
                   );
@@ -516,8 +562,10 @@ function CreateWizard({
               key={label}
               className={
                 i === step
-                  ? "rounded-full bg-accent px-3 py-1 text-xs font-semibold text-accent-fg"
-                  : "rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-subtle"
+                  ? "rounded-full bg-accent-wash px-3 py-1 text-xs font-semibold text-accent-text"
+                  : i < step
+                    ? "rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-ink"
+                    : "rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-subtle"
               }
             >
               {i + 1} {label}
@@ -623,7 +671,7 @@ function CreateWizard({
                       hint={engine === "chromium" ? t("platformPinnedHint") : undefined}
                     >
                       {engine === "chromium" ? (
-                        <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm">
+                        <p className="rounded-md border border-line bg-surface-2 px-3 py-2 text-sm">
                           {platformLabel({
                             platform,
                             platformVersion: defaultPlatformVersion(platform, winEdition),

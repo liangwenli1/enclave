@@ -11,9 +11,9 @@ import {
   Menu as MenuIcon,
   Puzzle,
   Search,
-  SearchCode,
   Settings,
   Shield,
+  TextSearch,
   UserRound,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -39,7 +39,7 @@ const NAV_GROUPS = [
   {
     label: "资源",
     items: [
-      { to: "/engines", key: "navEngines" as const, icon: SearchCode },
+      { to: "/engines", key: "navEngines" as const, icon: TextSearch },
       { to: "/extensions", key: "navExt" as const, icon: Puzzle },
     ],
   },
@@ -54,6 +54,22 @@ const NAV_GROUPS = [
 ] as const;
 
 const NAV = [...NAV_GROUPS[0].items, ...NAV_GROUPS[1].items, ...NAV_GROUPS[2].items];
+
+const ACCOUNT_NAV = [
+  { to: "/account", key: "navAccount" as const, icon: UserRound },
+  { to: "/settings", key: "navSettings" as const, icon: Settings },
+] as const;
+
+/** 环境详情仍算在「环境」里，侧栏不要在打开一条环境后失去当前位置。 */
+function navActive(pathname: string, to: string) {
+  if (to === "/") return pathname === "/" || pathname.startsWith("/environments/");
+  return pathname === to;
+}
+
+function currentTitle(pathname: string) {
+  const item = [...NAV, ...ACCOUNT_NAV].find((entry) => navActive(pathname, entry.to));
+  return item ? t(item.key) : "Enclave";
+}
 
 export function AppShell({ children }: { children: ReactNode }) {
   // 锁没锁只有一个事实来源：本机服务说开着应用锁、而且还没输过口令。
@@ -90,7 +106,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.to}
                   to={item.to}
-                  data-active={pathname === item.to ? "true" : "false"}
+                  data-active={navActive(pathname, item.to) ? "true" : "false"}
                 >
                   <item.icon className="size-4" />
                   <span>{t(item.key)}</span>
@@ -106,35 +122,44 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="app-nav-foot">
           <nav className="app-nav">
-            <Link to="/account" data-active={pathname === "/account" ? "true" : "false"}>
-              <UserRound className="size-4" />
-              {t("navAccount")}
-            </Link>
-            <Link to="/settings" data-active={pathname === "/settings" ? "true" : "false"}>
-              <Settings className="size-4" />
-              {t("navSettings")}
-            </Link>
+            {ACCOUNT_NAV.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                data-active={navActive(pathname, item.to) ? "true" : "false"}
+              >
+                <item.icon className="size-4" />
+                {t(item.key)}
+              </Link>
+            ))}
           </nav>
           <AccountChip />
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
+        <RecoveryBanner pathname={pathname} />
         <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-line bg-canvas px-4">
           <button
-            className="grid size-9 place-items-center rounded-md text-subtle hover:bg-surface hover:text-ink md:hidden"
+            className="grid size-9 place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-ink md:hidden"
             onClick={() => setMobileNav((v) => !v)}
             aria-label={t("menu")}
+            aria-expanded={mobileNav}
           >
             <MenuIcon className="size-4" />
           </button>
+          <p className="min-w-0 truncate text-[15px] font-semibold text-ink md:hidden">
+            {currentTitle(pathname)}
+          </p>
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={() => setCmdOpen(true)}
               title={t("command")}
+              aria-label={t("command")}
               className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-[13px] text-subtle hover:border-ink hover:text-ink"
             >
               <Search className="size-3.5" />
+              <span className="hidden sm:inline">搜索</span>
               <kbd className="hidden font-mono text-[10px] md:inline">
                 {/Mac/.test(navigator.platform) ? "⌘K" : "Ctrl K"}
               </kbd>
@@ -144,43 +169,45 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {mobileNav ? (
-          <div className="grid gap-3 border-b border-line px-3 py-3 md:hidden">
+          <div className="border-b border-line bg-canvas md:hidden">
             {NAV_GROUPS.map((group) => (
               <div key={group.label}>
-                <p className="mb-1 px-1 text-[11px] font-medium tracking-wide text-faint">
+                <p className="px-4 pt-3 pb-1 text-[11px] font-medium tracking-wide text-faint">
                   {group.label}
                 </p>
-                <div className="flex flex-wrap gap-1.5">
+                <nav className="app-nav">
                   {group.items.map((item) => (
                     <Link
                       key={item.to}
                       to={item.to}
                       onClick={() => setMobileNav(false)}
-                      className={cn(
-                        "inline-flex min-h-10 shrink-0 items-center rounded-md px-4 text-[13px]",
-                        pathname === item.to
-                          ? "bg-ink font-semibold text-canvas"
-                          : "bg-surface-2 text-muted",
-                      )}
+                      data-active={navActive(pathname, item.to) ? "true" : "false"}
                     >
-                      {t(item.key)}
+                      <item.icon className="size-4" />
+                      <span>{t(item.key)}</span>
+                      {"preview" in item && item.preview ? (
+                        <span className="ml-auto rounded-sm bg-surface-2 px-1.5 py-0.5 text-[10px] text-subtle">
+                          预览
+                        </span>
+                      ) : null}
                     </Link>
                   ))}
-                </div>
+                </nav>
               </div>
             ))}
-            <Link
-              to="/account"
-              onClick={() => setMobileNav(false)}
-              className={cn(
-                "inline-flex min-h-10 w-fit items-center rounded-md px-4 text-[13px]",
-                pathname === "/account"
-                  ? "bg-ink font-semibold text-canvas"
-                  : "bg-surface-2 text-muted",
-              )}
-            >
-              {t("navAccount")}
-            </Link>
+            <nav className="app-nav border-t border-line">
+              {ACCOUNT_NAV.map((item) => (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMobileNav(false)}
+                  data-active={navActive(pathname, item.to) ? "true" : "false"}
+                >
+                  <item.icon className="size-4" />
+                  <span>{t(item.key)}</span>
+                </Link>
+              ))}
+            </nav>
           </div>
         ) : null}
 
@@ -322,6 +349,20 @@ function ApiSync() {
   return null;
 }
 
+/** 团队密钥换过、新恢复码还没抄下来时，在每一页顶上留一句。码本身只在设置页出现。 */
+function RecoveryBanner({ pathname }: { pathname: string }) {
+  const pending = useEnclave((s) => s.recoveryPending);
+  if (!pending || pathname === "/settings") return null;
+  return (
+    <Link
+      to="/settings"
+      className="border-b border-line bg-surface-2 px-4 py-2 text-[13px] text-ink"
+    >
+      团队密钥已更换。打开设置，保存新的恢复码。上一份已经作废。
+    </Link>
+  );
+}
+
 /** 把 Host 里真实的运行态同步进界面。界面永远不自己编造 Running。 */
 /** 开着工作台时定时同步一轮；切回窗口时也来一次（另一台电脑刚改过的能早点看到）。 */
 function CloudSync() {
@@ -454,12 +495,18 @@ function LockScreen() {
                 type="button"
                 variant="danger"
                 onClick={() => {
-                  void resetVault();
-                  useEnclave.getState().addAudit({
-                    action: "vault_reset",
-                    level: "warn",
-                    detail: "已重置应用锁口令，此前保存的代理密码已清空",
-                  });
+                  void (async () => {
+                    const ok = await resetVault();
+                    if (!ok) {
+                      setError("没有重置，请重试。");
+                      return;
+                    }
+                    useEnclave.getState().addAudit({
+                      action: "vault_reset",
+                      level: "warn",
+                      detail: "已重置应用锁口令，此前保存的代理密码已清空",
+                    });
+                  })();
                 }}
               >
                 重置应用锁
@@ -489,6 +536,8 @@ function CommandPalette({
 }) {
   const navigate = useNavigate();
   const environments = useEnclave((s) => s.environments);
+  const proxies = useEnclave((s) => s.proxies);
+  const workflows = useEnclave((s) => s.workflows);
   const envs = useMemo(() => environments.filter((e) => !e.deletedAt), [environments]);
   const pages = useMemo(
     () => [
@@ -539,6 +588,43 @@ function CommandPalette({
                     }}
                   >
                     {env.name}
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            ) : null}
+            {proxies.length ? (
+              <Command.Group heading={t("proxy")} className="mt-3 px-1 text-[13px] text-subtle">
+                {proxies.map((proxy) => (
+                  <Command.Item
+                    key={proxy.id}
+                    value={`proxy ${proxy.name} ${proxy.host}`}
+                    className="mt-1 cursor-pointer rounded-md px-2.5 py-2 text-[13px] text-muted aria-selected:bg-surface-2 aria-selected:text-ink"
+                    onSelect={() => {
+                      void navigate({ to: "/network" });
+                      onOpenChange(false);
+                    }}
+                  >
+                    {proxy.name}
+                    <span className="ml-2 text-subtle">
+                      {proxy.host}:{proxy.port}
+                    </span>
+                  </Command.Item>
+                ))}
+              </Command.Group>
+            ) : null}
+            {workflows.length ? (
+              <Command.Group heading={t("workflows")} className="mt-3 px-1 text-[13px] text-subtle">
+                {workflows.map((workflow) => (
+                  <Command.Item
+                    key={workflow.id}
+                    value={`workflow ${workflow.name}`}
+                    className="mt-1 cursor-pointer rounded-md px-2.5 py-2 text-[13px] text-muted aria-selected:bg-surface-2 aria-selected:text-ink"
+                    onSelect={() => {
+                      void navigate({ to: "/automation" });
+                      onOpenChange(false);
+                    }}
+                  >
+                    {workflow.name}
                   </Command.Item>
                 ))}
               </Command.Group>

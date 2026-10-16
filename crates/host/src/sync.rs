@@ -214,8 +214,10 @@ pub fn new_key_id() -> String {
   成员设备的公钥 ──包住──> EK（只发给被分配了这个环境的人）
 
 环境和登录态都用 EK 加密。所以"没分配给你"不是"服务器不发给你"，
-而是**密文给了你也解不开**。移除成员时只需要给他碰过的那几个槽位换 EK，
-别的环境一个字节都不用动。 */
+而是**密文给了你也解不开**。
+操作员离开时，只给他碰过的那几个槽位换 EK，别的环境一个字节都不用动。
+管理员离开时不够：他拿得到 DK，新的 EK 只要还用同一把 DK 包着，他就解得开。
+那一次要换掉 DK 本身，再把每个槽位的 EK 重新包一遍。 */
 
 /// 槽位的名字：`env:<环境编号>`，或者放代理那一包的 `shared`。
 pub fn env_slot(env_id: &str) -> String {
@@ -226,6 +228,27 @@ pub const SHARED_SLOT: &str = "shared";
 
 pub fn new_slot_key() -> DataKey {
     random::<32>()
+}
+
+/// 一把新的团队数据密钥。和槽位钥匙一样是 32 字节随机数，只是用途不同。
+pub fn new_data_key() -> DataKey {
+    random::<32>()
+}
+
+/// 一台还能拿团队密钥的电脑。换密钥时用它的公钥包一份新的。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TeamPeer {
+    pub device_id: String,
+    pub public_key: String,
+}
+
+/// 服务器给的名单里，只留下这台电脑批准时钉住的公钥。
+/// 没钉过的、或者公钥被换过的，都不包。自动轮换要是照单全收，服务器把公钥换成自己的就能拿走新密钥。
+pub fn peers_to_rewrap(peers: &[TeamPeer], pinned: impl Fn(&str, &str) -> bool) -> Vec<&TeamPeer> {
+    peers
+        .iter()
+        .filter(|p| pinned(&p.device_id, &p.public_key))
+        .collect()
 }
 
 /// 用团队密钥包住一把槽位钥匙。附加认证数据绑着槽位名和编号：
@@ -327,6 +350,41 @@ mod tests {
             crate::keychain::clear(dir, &device_item(dir));
             let _ = std::fs::remove_dir_all(dir);
         }
+    }
+
+    #[test]
+    fn a_swapped_public_key_is_not_rewrapped() {
+        let peers = [
+            TeamPeer {
+                device_id: "admin-pc".into(),
+                public_key: "pinned-key".into(),
+            },
+            TeamPeer {
+                device_id: "other-pc".into(),
+                public_key: "never-seen".into(),
+            },
+        ];
+        let kept = peers_to_rewrap(&peers, |id, key| id == "admin-pc" && key == "pinned-key");
+        assert_eq!(kept.len(), 1);
+        assert_eq!(kept[0].device_id, "admin-pc");
+        // 服务器把已经钉住的那台电脑的公钥换成自己的：对不上，不包。
+        let swapped = [TeamPeer {
+            device_id: "admin-pc".into(),
+            public_key: "server-key".into(),
+        }];
+        assert!(
+            peers_to_rewrap(&swapped, |id, key| id == "admin-pc" && key == "pinned-key").is_empty()
+        );
+    }
+
+    #[test]
+    fn the_old_team_key_cannot_open_a_slot_boxed_for_the_new_one() {
+        let old: DataKey = [1u8; 32];
+        let new_dk = new_data_key();
+        let ek = new_slot_key();
+        let boxed = seal_slot(&new_dk, SHARED_SLOT, "k2", &ek).unwrap();
+        assert!(open_slot(&old, SHARED_SLOT, "k2", &boxed).is_err());
+        assert_eq!(open_slot(&new_dk, SHARED_SLOT, "k2", &boxed).unwrap(), ek);
     }
 
     #[test]

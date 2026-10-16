@@ -30,13 +30,13 @@ const STATE_LABEL: Record<string, { text: string; tone: "ok" | "warn" | "bad" | 
   verifying: { text: "校验中", tone: "warn" },
   extracting: { text: "解压中", tone: "warn" },
   admitted: { text: "已下载", tone: "ok" },
-  hash_mismatch: { text: "哈希不符，已拒用", tone: "bad" },
+  hash_mismatch: { text: "文件校验未通过，已拒绝使用", tone: "bad" },
   error: { text: "出错", tone: "bad" },
 };
 
 /** 只在出错时出现，所以写得具体一点：说清是什么、下一步做什么。 */
 const ERROR_HINT: Record<string, string> = {
-  KERNEL_HASH_MISMATCH: "文件哈希与清单不符，已拒绝使用。请重新下载；若反复出现，请联系我们。",
+  KERNEL_HASH_MISMATCH: "文件和官方清单对不上，已拒绝使用。请重新下载；若反复出现，请联系我们。",
   KERNEL_CHANNEL_BLOCKED: "该版本处于预览通道，请先在安全中心确认同意。",
   KERNEL_UNTRUSTED_SOURCE: "清单中不存在该版本，或文件已失效。",
   KERNEL_WITHDRAWN: "该版本已下架，无法继续下载。",
@@ -242,10 +242,10 @@ function KernelCard({
           </div>
         ) : null}
 
-        <CodeBlock label="清单哈希 SHA256" value={record.sha256} />
+        <CodeBlock label="官方校验值（SHA256）" value={record.sha256} />
 
         {status.exeSha256 ? (
-          <CodeBlock label="本机可执行文件 SHA256" value={status.exeSha256} />
+          <CodeBlock label="本机文件校验值（SHA256）" value={status.exeSha256} />
         ) : null}
 
         {status.executable && state === "admitted" ? (

@@ -62,6 +62,8 @@ type Store = {
   syncedAt: number | null;
   /** 同步有话要说时（读不了的条目、失败原因）。 */
   syncNote: string | null;
+  /** 团队密钥换过，新的恢复码还没确认保存。不进 localStorage。 */
+  recoveryPending: boolean;
   /** 应用锁：exists = 开着应用锁，unlocked = 已经输过口令（没开应用锁时永远是 true）。由 lib/vault.ts 写入。 */
   vault: { exists: boolean; unlocked: boolean };
   /** 本机 API 的运行状态。令牌由 Host 生成，这里只在内存里留一份给设置页显示。 */
@@ -115,6 +117,7 @@ export const useEnclave = create<Store>()(
       secretIds: [],
       syncedAt: null,
       syncNote: null,
+      recoveryPending: false,
       vault: { exists: false, unlocked: true },
       api: { active: false, failed: false, token: "", baseUrl: "" },
       setSession: (session) => set({ session }),
@@ -340,8 +343,10 @@ export async function syncNow(): Promise<void> {
   }
   if (res.enabled && res.hasKey && ((res.pulled ?? 0) > 0 || (res.stale ?? 0) > 0)) await loadStore();
   useEnclave.setState({
-    syncNote:
-      res.enabled && res.hasKey && (res.unreadable ?? 0) > 0
+    recoveryPending: Boolean(res.recoveryPending),
+    syncNote: res.recoveryPending
+      ? "团队密钥已更换。请到设置页保存新的恢复码，上一份已经作废。"
+      : res.enabled && res.hasKey && (res.unreadable ?? 0) > 0
         ? `有 ${res.unreadable} 条是用别的密钥加密的，暂时读不了。到设置页重新取一次密钥。`
         : null,
     syncedAt: res.enabled && res.hasKey ? Date.now() : null,

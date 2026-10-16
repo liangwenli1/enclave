@@ -1,7 +1,7 @@
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Badge, Button, Panel } from "@/components/ui";
-import { admitKernel, getKernelView, kernelEntry } from "@/lib/kernel/host-api";
+import { admitKernel, getKernelView, kernelEntry, type KernelStatus } from "@/lib/kernel/host-api";
 import { registerEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { newEnvironment, profileFromSeed, randomSeed } from "@/lib/schema";
@@ -19,6 +19,10 @@ export function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [progress, setProgress] = useState<string | null>(null);
+  // 轮询结束时还在下载：按钮保持停用，避免再点一次又下一份。
+  const [stalled, setStalled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [admitted, setAdmitted] = useState(false);
   // 这个平台的内核是不是还在预览通道。是的话要先拿到同意，否则准入必然被 Host 拒绝，
@@ -60,18 +64,26 @@ export function Onboarding() {
       setBusy(false);
       return;
     }
-    // 下载是后台进行的，这里轮询到准入或出错为止。
+    // 下载是后台进行的，这里轮询到准入或出错为止，并把进度留在按钮上。
+    let settled = false;
     for (let i = 0; i < 600; i += 1) {
       const status = kernelEntry(await getKernelView(), version)?.status;
+      setProgress(downloadProgress(status));
       if (status?.state === "admitted") {
         setAdmitted(true);
+        settled = true;
         break;
       }
       if (!status || status.state === "hash_mismatch" || status.state === "error") {
-        setError(status?.error ?? "内核准入失败，详情请查看内核管理页。");
+        setError(status?.error ?? "内核下载失败，请到内核管理页查看原因。");
+        settled = true;
         break;
       }
       await new Promise((r) => setTimeout(r, 1000));
+    }
+    if (!settled) {
+      setStalled(true);
+      setError("仍在下载，可到内核管理查看。");
     }
     setBusy(false);
   };
@@ -93,8 +105,8 @@ export function Onboarding() {
               每个环境拥有自己的 Cookie、指纹与出口，互不串用数据。
             </p>
             <p>
-              内核不包含在安装包中：下一步将按清单下载并校验哈希，约 190 MB，仅需下载一次。
-              之后每次启动环境，都会重新核对磁盘上实际执行的文件。
+              浏览器内核不在安装包里。下一步会下载并核对文件是否完整，大约 190 MB，只需一次。
+              之后每次启动环境，都会再核对一次本机上的文件。
             </p>
           </div>
         ) : null}
@@ -102,7 +114,7 @@ export function Onboarding() {
         {step === 1 ? (
           <div className="mt-5 grid gap-4">
             <p className="text-[13px] leading-relaxed text-muted">{t("kernelNeed")}</p>
-            {admitted ? <Badge tone="ok">已准入</Badge> : null}
+            {admitted ? <Badge tone="ok">{t("admitted")}</Badge> : null}
             {previewChannel && !admitted ? (
               <label className="flex cursor-pointer items-start gap-2.5 text-[13px]">
                 <input
@@ -119,19 +131,27 @@ export function Onboarding() {
                   }}
                 />
                 <span className="text-muted">
-                  这个平台的内核还在预览通道：哈希已核对，但还没做过完整行为测试。我同意使用。
+                  这个平台的内核还在预览通道：文件已经核对过，但还没做过完整测试。我同意使用。
                 </span>
               </label>
             ) : null}
             {error ? <p className="text-[13px] text-bad">{error}</p> : null}
             <div>
               <Button
-                variant="primary"
-                disabled={busy || admitted || needsConsent}
+                variant={admitted ? "secondary" : "primary"}
+                disabled={busy || admitted || needsConsent || stalled}
                 title={needsConsent ? "请先勾选上方的同意项" : undefined}
                 onClick={() => void admit()}
               >
-                {busy ? "下载并校验中…" : admitted ? "已完成" : t("download")}
+                {busy
+                  ? progress
+                    ? `下载并校验中 ${progress}`
+                    : "下载并校验中…"
+                  : admitted
+                    ? "已完成"
+                    : stalled
+                      ? "仍在下载"
+                      : t("download")}
               </Button>
             </div>
           </div>
@@ -144,36 +164,45 @@ export function Onboarding() {
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="primary"
+                disabled={creating}
                 onClick={async () => {
+                  if (creating) return;
                   const store = useEnclave.getState();
-                  if (store.environments.filter((e) => !e.deletedAt).length === 0) {
-                    const env = newEnvironment({
-                      name: "第一个环境",
-                      folderId: "default",
-                      profile: profileFromSeed(randomSeed(), thisPlatform(), {
-                        brandVersion: version ?? undefined,
-                      }),
-                      kernelVersion: version ?? undefined,
-                    });
-                    // 名额由服务器数。没登记上（满了、连不上）就不建，原因留在这一步让用户看到。
-                    const registered = await registerEnv(env);
-                    if (!registered.ok) {
-                      setError(registered.message);
-                      return;
-                    }
-                    store.upsertEnv(env);
-                    store.addAudit({
-                      action: "create_env",
-                      target: env.id,
-                      level: "info",
-                      detail: "引导创建",
-                    });
+                  const existing = store.environments.find((e) => !e.deletedAt);
+                  // 已经有环境就直接去它的页面，启动按钮在那里。
+                  if (existing) {
+                    finish();
+                    void navigate({ to: "/environments/$id", params: { id: existing.id } });
+                    return;
                   }
+                  setCreating(true);
+                  const env = newEnvironment({
+                    name: "第一个环境",
+                    folderId: "default",
+                    profile: profileFromSeed(randomSeed(), thisPlatform(), {
+                      brandVersion: version ?? undefined,
+                    }),
+                    kernelVersion: version ?? undefined,
+                  });
+                  // 名额由服务器数。没登记上（满了、连不上）就不建，原因留在这一步让用户看到。
+                  const registered = await registerEnv(env);
+                  if (!registered.ok) {
+                    setError(registered.message);
+                    setCreating(false);
+                    return;
+                  }
+                  store.upsertEnv(env);
+                  store.addAudit({
+                    action: "create_env",
+                    target: env.id,
+                    level: "info",
+                    detail: "引导创建",
+                  });
                   finish();
-                  void navigate({ to: "/" });
+                  void navigate({ to: "/environments/$id", params: { id: env.id } });
                 }}
               >
-                建一个环境
+                {creating ? "正在创建…" : "建一个环境"}
               </Button>
             </div>
           </div>
@@ -186,11 +215,20 @@ export function Onboarding() {
               variant={step === 1 && !admitted ? "secondary" : "primary"}
               onClick={() => setStep((s) => s + 1)}
             >
-              {t("next")}
+              {step === 1 && !admitted ? "稍后下载" : t("next")}
             </Button>
           ) : null}
         </div>
       </Panel>
     </div>
   );
+}
+
+function downloadProgress(status: KernelStatus | undefined): string | null {
+  if (!status) return null;
+  if (status.state === "verifying") return "正在校验";
+  if (status.state === "extracting") return "正在解压";
+  if (status.state !== "downloading" || status.bytesExpected <= 0) return null;
+  const pct = Math.min(99, Math.round((status.bytesReceived / status.bytesExpected) * 100));
+  return `${pct}%`;
 }

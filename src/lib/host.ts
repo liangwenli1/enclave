@@ -223,18 +223,19 @@ export async function startEnv(env: Environment) {
     detail: env.name,
   });
   void refreshSession();
-  // 跟着出口走时，Host 实际用的时区和语言可能和画像里的不一样：把画像改成真实用的，
-  // 界面、导出、一致性检查看到的才是浏览器里的样子。
+  // 跟着出口走时，Host 实际用的时区和语言可能和画像里的不一样：只改这两项。
+  // 用启动完成时的画像，不用点击那一刻的副本，避免盖掉启动期间改过的种子和代理。
+  const profile = useEnclave.getState().environments.find((e) => e.id === env.id)?.profile ?? env.profile;
   const aligned =
-    result.timezone !== env.profile.timezone ||
-    result.locale !== env.profile.locale ||
-    result.languages.join() !== env.profile.languages.join();
-  store.patchEnv(
+    result.timezone !== profile.timezone ||
+    result.locale !== profile.locale ||
+    result.languages.join() !== profile.languages.join();
+  useEnclave.getState().patchEnv(
     env.id,
     aligned
       ? {
           profile: {
-            ...env.profile,
+            ...profile,
             timezone: result.timezone,
             locale: result.locale,
             languages: result.languages,

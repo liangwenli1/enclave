@@ -89,7 +89,6 @@ export function FolderBar({
                 />
               </div>
               <Button
-                variant="primary"
                 disabled={!adding.trim() || busy === "new"}
                 onClick={() => {
                   const name = adding.trim();
@@ -183,9 +182,9 @@ function Chip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full border px-3 py-1.5 text-[13px] transition-colors ${
+      className={`min-h-8 rounded-full border px-3 text-[13px] font-medium transition-colors ${
         active
-          ? "border-transparent bg-accent text-accent-fg"
+          ? "border-accent/30 bg-accent-wash text-accent-text"
           : "border-line text-muted hover:border-line-strong hover:text-ink"
       }`}
     >

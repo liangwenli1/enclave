@@ -95,7 +95,7 @@ function AutomationPage() {
   const save = (wf: Workflow) => putWorkflow({ ...wf, updatedAt: Date.now() });
 
   return (
-    <div className="p-6 md:p-8">
+    <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6">
       <PageHeader title={t("navAutomation")} status={mayEdit ? undefined : "当前角色为操作员，可运行、不可修改"} />
       <p className="mb-6 max-w-[720px] text-[13px] leading-relaxed text-subtle">{t("automationIntro")}</p>
 
@@ -112,7 +112,9 @@ function AutomationPage() {
                   type="button"
                   onClick={() => setPickedId(w.id)}
                   className={`rounded-md px-3 py-2 text-left text-sm ${
-                    w.id === pickedId ? "bg-raised text-ink" : "text-muted hover:bg-raised hover:text-ink"
+                    w.id === pickedId
+                      ? "bg-accent-wash font-medium text-accent-text"
+                      : "text-muted hover:bg-surface-2 hover:text-ink"
                   }`}
                 >
                   <div className="font-medium">{w.name}</div>
@@ -159,11 +161,27 @@ function AutomationPage() {
             }}
           />
         ) : (
-          <Empty title={t("workflowPick")} body={t("workflowPickHint")} />
+          <Panel>
+            <Empty title={t("workflowPick")} body={t("workflowPickHint")} />
+          </Panel>
         )}
       </div>
     </div>
   );
+}
+
+/** 步骤号从 1 数。删掉或换位之后，条件跳转和循环范围跟着改，避免还指向旧位置。 */
+function shiftRef(n: number, removed: number): { n: number; lost: boolean } {
+  if (n === 0) return { n: 0, lost: false };
+  if (n === removed) return { n: 0, lost: true };
+  if (n > removed) return { n: n - 1, lost: false };
+  return { n, lost: false };
+}
+
+function swapRef(n: number, a: number, b: number): number {
+  if (n === a) return b;
+  if (n === b) return a;
+  return n;
 }
 
 function Editor({
@@ -178,15 +196,62 @@ function Editor({
   onDelete: () => void;
 }) {
   const [adding, setAdding] = useState<WorkflowStep["type"]>("open");
+  // 删除后跳转目标没了的步骤。0 表示结束，这里额外说明是因为目标被删了。
+  const [lost, setLost] = useState<Set<number>>(new Set());
   const steps = wf.steps;
 
   const setSteps = (next: WorkflowStepDef[]) => onChange({ ...wf, steps: next });
-  const patchStep = (i: number, s: WorkflowStepDef) => setSteps(steps.map((x, k) => (k === i ? s : x)));
+  const patchStep = (i: number, s: WorkflowStepDef) => {
+    setLost((prev) => {
+      if (!prev.has(i)) return prev;
+      const next = new Set(prev);
+      next.delete(i);
+      return next;
+    });
+    setSteps(steps.map((x, k) => (k === i ? s : x)));
+  };
   const move = (i: number, dir: -1 | 1) => {
     const j = i + dir;
     if (j < 0 || j >= steps.length) return;
     const next = [...steps];
     [next[i], next[j]] = [next[j]!, next[i]!];
+    const a = i + 1;
+    const b = j + 1;
+    setSteps(
+      next.map((s) =>
+        s.type === "if"
+          ? { ...s, goto: swapRef(s.goto, a, b) }
+          : s.type === "loop"
+            ? { ...s, from: swapRef(s.from, a, b), to: swapRef(s.to, a, b) }
+            : s,
+      ),
+    );
+    setLost((prev) => {
+      const moved = new Set<number>();
+      for (const k of prev) moved.add(k === i ? j : k === j ? i : k);
+      return moved;
+    });
+  };
+  const removeAt = (index: number) => {
+    const removed = index + 1;
+    const kept = steps.filter((_, k) => k !== index);
+    const lostAt = new Set<number>();
+    const next = kept.map((s, i) => {
+      const oldIndex = i >= index ? i + 1 : i;
+      if (s.type === "if") {
+        const goto = shiftRef(s.goto, removed);
+        if (goto.lost || (lost.has(oldIndex) && goto.n === 0)) lostAt.add(i);
+        return { ...s, goto: goto.n };
+      }
+      if (s.type === "loop") {
+        const from = shiftRef(s.from, removed);
+        const to = shiftRef(s.to, removed);
+        if (from.lost || to.lost || lost.has(oldIndex)) lostAt.add(i);
+        return { ...s, from: from.n, to: to.n };
+      }
+      return s;
+    });
+    setLost(lostAt);
     setSteps(next);
   };
 
@@ -212,12 +277,16 @@ function Editor({
         }
       />
 
+      <p className="px-4 pt-4 text-[13px] leading-relaxed text-subtle">
+        要运行这个流程，回到环境列表，勾选环境，再点「运行流程」。
+      </p>
+
       <div className="grid gap-3 p-4">
         {steps.length === 0 ? <p className="text-[13px] text-subtle">{t("workflowNoSteps")}</p> : null}
         {steps.map((s, i) => (
           <div key={i} className="grid gap-3 rounded-md border border-line p-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="www-mono w-8 text-[13px] text-subtle">{i + 1}</span>
+              <span className="app-mono w-8 text-[13px] text-subtle">{i + 1}</span>
               <span className="text-sm font-semibold text-ink">{stepLabel(s.type)}</span>
               <span className="flex-1 truncate text-[13px] text-subtle">{stepSummary(s)}</span>
               {mayEdit ? (
@@ -228,12 +297,17 @@ function Editor({
                   <Button variant="ghost" disabled={i === steps.length - 1} onClick={() => move(i, 1)} aria-label="下移">
                     <ArrowDown className="size-3.5" />
                   </Button>
-                  <Button variant="ghost" className="text-bad" onClick={() => setSteps(steps.filter((_, k) => k !== i))} aria-label="删除这一步">
+                  <Button variant="ghost" className="text-bad" onClick={() => removeAt(i)} aria-label="删除这一步">
                     <Trash2 className="size-3.5" />
                   </Button>
                 </>
               ) : null}
             </div>
+            {lost.has(i) ? (
+              <p className="text-[13px] text-warn">
+                {s.type === "if" ? "原目标已删除，将结束流程。" : "原目标已删除，这一段不再重复。"}
+              </p>
+            ) : null}
             {mayEdit ? <StepForm step={s} onChange={(next) => patchStep(i, next)} count={steps.length} /> : null}
           </div>
         ))}

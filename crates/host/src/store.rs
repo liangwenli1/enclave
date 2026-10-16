@@ -299,6 +299,22 @@ impl Store {
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
+    /// 换了团队密钥之后，本机每一条都用新钥匙重传一遍。版本号必须加一，
+    /// 服务器不收同一版本的第二次写入。
+    pub fn touch_all(&self) -> Result<()> {
+        for kind in [Kind::Environment, Kind::Proxy, Kind::Workflow] {
+            for doc in self.list(kind)? {
+                if let Some(id) = doc["id"].as_str() {
+                    self.touch(kind, id)?;
+                }
+            }
+        }
+        for id in self.secret_ids()? {
+            self.touch_secret(&id)?;
+        }
+        Ok(())
+    }
+
     /// 换了密钥、或者刚接上同步：把本机现有的东西全部标成"等着上传"。
     pub fn mark_all_pending(&self) -> Result<()> {
         self.conn
@@ -516,6 +532,22 @@ impl Store {
     }
 
     /* ── 登录态的版本 ─────────────────────────────────────── */
+
+    /// 重传登录态时，新版本必须比云端那一版大。本机落后就直接抬到它后面。
+    /// 一条语句里做完，避免和「停止环境时导出」交错时把版本号改小。
+    pub fn cookie_version_after(&self, env_id: &str, remote: i64) -> Result<i64> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO cookie_versions (env_id, version, synced) VALUES (?1, ?2, 0)
+             ON CONFLICT(env_id) DO UPDATE SET version = MAX(cookie_versions.version, ?3) + 1, synced = 0",
+            params![env_id, remote + 1, remote],
+        )?;
+        Ok(conn.query_row(
+            "SELECT version FROM cookie_versions WHERE env_id = ?1",
+            [env_id],
+            |r| r.get(0),
+        )?)
+    }
 
     /// 刚从浏览器里导出一份：版本 +1，标成等着上传。返回新的版本号。
     pub fn bump_cookies(&self, env_id: &str) -> Result<i64> {
@@ -747,6 +779,19 @@ mod tests {
             store.secret_ids().unwrap().is_empty(),
             "删代理要把它的密码一起删掉"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_cookie_reupload_jumps_past_the_cloud_version() {
+        let (dir, store) = temp();
+        assert_eq!(store.cookie_version_after("env_a", 5).unwrap(), 6);
+        assert_eq!(store.cookie_version("env_a"), 6);
+        assert_eq!(store.bump_cookies("env_a").unwrap(), 7);
+        // 本机已经比云端新：再抬一格就行。
+        assert_eq!(store.cookie_version_after("env_a", 5).unwrap(), 8);
+        // 云端跑到前面去了：必须超过它，同一版本服务器不收。
+        assert_eq!(store.cookie_version_after("env_a", 20).unwrap(), 21);
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

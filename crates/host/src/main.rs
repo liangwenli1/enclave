@@ -48,6 +48,9 @@ const APP_ORIGINS: &[&str] = &[
     "http://localhost:8080",
 ];
 
+/// 团队密钥换过之后的新恢复码。留在系统钥匙串里，直到用户在设置页确认已经抄下来。
+const RECOVERY_PENDING: &str = "sync-recovery-pending";
+
 struct App {
     paths: HostPaths,
     /// 这个系统能用的全部内核版本，新的在前。
@@ -72,6 +75,8 @@ struct App {
     store: Store,
     /// 数据密钥（平时在系统钥匙串里）和可选的应用锁。
     vault: Mutex<Vault>,
+    /// 同步一轮一轮来。两轮叠在一起时，可能各换一把团队密钥。
+    syncing: Mutex<()>,
 }
 
 /// 一个内核版本和它在本进程里的状态。版本之间互不影响：可以一个在下载、另一个在跑。
@@ -246,6 +251,7 @@ async fn main() {
         batch: Default::default(),
         gate: Default::default(),
         supervisors: Mutex::new(HashMap::new()),
+        syncing: Mutex::new(()),
     });
 
     // 落盘的那份清单重新验一遍再用：磁盘上的东西不因为是自己写的就可信。
@@ -301,6 +307,7 @@ async fn main() {
         .route("/v1/sync/adopt", post(sync_adopt))
         .route("/v1/sync/recover", post(sync_recover))
         .route("/v1/sync/disable", post(sync_disable))
+        .route("/v1/sync/recovery-ack", post(sync_recovery_ack))
         .route("/v1/sync/run", post(sync_run))
         .route("/v1/sync/usage", get(sync_usage))
         .route("/v1/flags/classify", post(flags_classify))
@@ -411,7 +418,7 @@ fn operator_blocked(method: &Method, path: &str) -> bool {
     let write = method == Method::PUT || method == Method::DELETE;
     match path {
         "/v1/secrets/export" | "/v1/secrets/import" => true,
-        "/v1/sync/enable" | "/v1/sync/disable" | "/v1/sync/approve" => true,
+        "/v1/sync/enable" | "/v1/sync/disable" | "/v1/sync/approve" | "/v1/sync/rotate" => true,
         _ => {
             write
                 && (path.starts_with("/v1/store/")
@@ -950,6 +957,10 @@ async fn sync_view(State(state): State<Arc<App>>) -> Json<Value> {
     }
     view["ok"] = json!(true);
     view["publicKey"] = json!(public);
+    // 恢复码只在用户确认抄下来之前出现在这台电脑的设置页上。不进日志。
+    if let Some(code) = enclave_host::keychain::load(&state.paths.root, RECOVERY_PENDING) {
+        view["recoveryCode"] = json!(code);
+    }
     Json(view)
 }
 
@@ -1068,12 +1079,14 @@ async fn adopt(state: &App, dk: enclave_host::vault::DataKey) -> Json<Value> {
     if old == dk {
         return Json(json!({ "ok": true, "rekeyed": 0 }));
     }
+    // 版本号加一再传。只把同步标记清掉的话，服务器上看着还是旧版本，新密文送不上去。
+    if let Err(e) = state.store.touch_all() {
+        return refuse("SYNC_FAILED", format!("本机的数据没能排上重传：{e:#}"));
+    }
     let rekeyed = match state.store.rekey(&old, &dk) {
         Ok(n) => n,
         Err(e) => return refuse("SYNC_FAILED", format!("本机已保存的密码换不过去：{e:#}")),
     };
-    // 换了钥匙：本机所有东西都要用新钥匙重新传一遍，否则另一台拉下来解不开。
-    let _ = state.store.mark_all_pending();
     match vault.replace_key(dk) {
         Ok(()) => Json(json!({ "ok": true, "rekeyed": rekeyed })),
         Err(e) => refuse("SYNC_FAILED", format!("{e:#}")),
@@ -1304,6 +1317,7 @@ fn doc_slot(kind: Kind, id: &str) -> String {
     }
 }
 
+/// 管理员离开时，团队密钥本身的更换在这一步之前做完。
 /// 拿得到团队密钥的电脑每轮同步都做这三件事：
 ///   1. 本机有环境、云端还没有它的钥匙 → 建一把；
 ///   2. 服务器说某几把该换了（有人被移出团队）→ 换新的，并把那几个环境重新加密；
@@ -1568,7 +1582,8 @@ async fn rekey_slot(
             &sealed,
         )
         .ok()?;
-        let next = state.store.bump_cookies(env_id).ok()?;
+        // 本机的登录态版本可能落后于云端。只加一的话送不上去，旧密文就会留着。
+        let next = state.store.cookie_version_after(env_id, version).ok()?;
         upload_packed(state, env_id, fresh, next, packed).await.ok()
     }
     .await;
@@ -1581,19 +1596,279 @@ async fn rekey_slot(
     }
 }
 
+fn recovery_pending(dir: &std::path::Path) -> bool {
+    enclave_host::keychain::load(dir, RECOVERY_PENDING).is_some()
+}
+
+fn team_peers(view: &Value) -> Vec<enclave_host::sync::TeamPeer> {
+    view["teamDevices"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|d| {
+                    Some(enclave_host::sync::TeamPeer {
+                        device_id: d["deviceId"].as_str()?.to_string(),
+                        public_key: d["publicKey"].as_str()?.to_string(),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// 管理员离开之后：这台（所有者的）电脑换一把团队密钥。
+///
+/// 新密钥重新包给这台电脑上批准过的其余设备——没钉住的公钥不包，等用户重新核对数字。
+/// 每个槽位换一把新钥匙，环境和登录态随后重传。新的恢复码留在钥匙串里，直到用户确认抄下。
+async fn rotate_team_key(state: &App, view: &Value) -> Result<(), String> {
+    let old = {
+        let vault = state.vault.lock().await;
+        if vault.app_lock() {
+            return Err(
+                "开着应用锁时不能更换团队密钥。先在设置里关掉应用锁，换完可以再打开。".into(),
+            );
+        }
+        *vault.key().ok_or_else(|| LOCKED.1.to_string())?
+    };
+    let device = DeviceKey::load(&state.paths.root).map_err(|e| e.to_string())?;
+    let self_id = view["deviceId"].as_str().unwrap_or_default().to_string();
+    if self_id.is_empty() {
+        return Err("服务器没有返回这台电脑的编号。".into());
+    }
+    let new_dk = enclave_host::sync::new_data_key();
+    let code = enclave_host::sync::new_recovery_code();
+    let rec = enclave_host::sync::seal_recovery(&code, &new_dk).map_err(|e| e.to_string())?;
+    let (self_eph, self_box) =
+        enclave_host::sync::seal_for(&device.public_b64(), &new_dk).map_err(|e| e.to_string())?;
+    let mut envelopes = Vec::new();
+    for peer in enclave_host::sync::peers_to_rewrap(&team_peers(view), |id, key| {
+        state.store.device_pinned(id, key)
+    }) {
+        if peer.device_id == self_id {
+            continue;
+        }
+        let (eph, boxed) =
+            enclave_host::sync::seal_for(&peer.public_key, &new_dk).map_err(|e| e.to_string())?;
+        envelopes.push(json!({ "deviceId": peer.device_id, "ephemeral": eph, "box": boxed }));
+    }
+
+    let slots_view = state
+        .cloud
+        .sync_get("/v1/sync/slots")
+        .await
+        .map_err(|e| e.message)?;
+    let ring = Keyring::build(&slots_view, Some(&old), &device);
+    let mut names = vec![enclave_host::sync::SHARED_SLOT.to_string()];
+    if let Some(arr) = slots_view["slots"].as_array() {
+        for slot in arr {
+            if let Some(name) = slot["slot"].as_str() {
+                if !names.iter().any(|n| n == name) {
+                    names.push(name.to_string());
+                }
+            }
+        }
+    }
+    if let Ok(list) = state.store.list(Kind::Environment) {
+        for env in list {
+            if let Some(id) = env["id"].as_str() {
+                let name = enclave_host::sync::env_slot(id);
+                if !names.iter().any(|n| n == &name) {
+                    names.push(name);
+                }
+            }
+        }
+    }
+    let mut slots = Vec::new();
+    let mut fresh = Vec::new();
+    let mut previous = HashMap::new();
+    for name in &names {
+        if let Some(old_key) = ring.get(name) {
+            previous.insert(name.clone(), old_key.clone());
+        }
+        let (key, boxed) = enclave_host::slots::mint(&new_dk, name).map_err(|e| e.to_string())?;
+        slots.push(json!({ "slot": name, "keyId": key.key_id, "boxTeam": boxed }));
+        fresh.push((name.clone(), key));
+    }
+    let key_id = enclave_host::sync::new_key_id();
+    enclave_host::keychain::save(&state.paths.root, RECOVERY_PENDING, &code)
+        .map_err(|e| format!("新的恢复码没能存进系统钥匙串：{e}"))?;
+    let body = json!({
+        "keyId": key_id,
+        "recoverySalt": rec.salt, "recoveryParams": rec.params, "recoveryBox": rec.sealed,
+        "ephemeral": self_eph, "box": self_box,
+        "envelopes": envelopes,
+        "slots": slots,
+    });
+    if let Err(e) = state.cloud.sync_post("/v1/sync/rotate", body).await {
+        match state.cloud.sync_get("/v1/sync").await {
+            // 应答丢了，但这把新密钥已经写进去了。恢复码留着，继续在本机换上。
+            Ok(v) if v["keyId"].as_str() == Some(key_id.as_str()) => {}
+            // 服务器还是旧的（或者是另一台电脑换的）。这份码没生效，别让用户抄走。
+            Ok(_) => {
+                enclave_host::keychain::clear(&state.paths.root, RECOVERY_PENDING);
+                return Err(e.message);
+            }
+            // 问不到。码先留着：写进去了就靠它；没写进去的话，下一轮会重新生成并盖掉。
+            Err(_) => return Err(e.message),
+        }
+    }
+    {
+        let mut vault = state.vault.lock().await;
+        state
+            .store
+            .rekey(&old, &new_dk)
+            .map_err(|e| e.to_string())?;
+        vault.replace_key(new_dk).map_err(|e| e.to_string())?;
+    }
+    // 先把云端较新的那几条用旧钥匙收下来，再改版本重传。顺序反了就解不开了。
+    absorb_remote_with_old_keys(state, &previous, &new_dk).await;
+    for (name, key) in &fresh {
+        rekey_slot(state, name, previous.get(name), key).await;
+    }
+    Ok(())
+}
+
+/// 云端有的版本比本机新时，用还没丢掉的旧槽位钥匙解开，收进本机。
+/// 不收的话，本机只把版本加一，仍然追不上，旧密文会一直留在服务器上。
+async fn absorb_remote_with_old_keys(
+    state: &App,
+    previous: &HashMap<String, enclave_host::slots::SlotKey>,
+    dk: &enclave_host::vault::DataKey,
+) {
+    let Ok(remote) = state.cloud.sync_get("/v1/sync/docs").await else {
+        return;
+    };
+    let mine = state.store.versions().unwrap_or_default();
+    let secrets = state.store.secret_versions().unwrap_or_default();
+    for d in remote["docs"].as_array().cloned().unwrap_or_default() {
+        let (Some(kind_wire), Some(id), Some(version)) =
+            (d["kind"].as_str(), d["id"].as_str(), d["version"].as_i64())
+        else {
+            continue;
+        };
+        if kind_wire == store::SECRET_KIND {
+            if secrets.get(id).is_some_and(|v| *v >= version) {
+                continue;
+            }
+            let Some(old) = previous.get(enclave_host::sync::SHARED_SLOT) else {
+                continue;
+            };
+            if d["deleted"] == true {
+                let _ = state.store.delete_secret_remote(id, version);
+                continue;
+            }
+            let Some(value) = enclave_host::sync::open_doc(
+                &old.key,
+                d["keyId"].as_str().unwrap_or_default(),
+                kind_wire,
+                id,
+                version,
+                d["box"].as_str().unwrap_or_default(),
+            )
+            .ok()
+            .and_then(|bytes| String::from_utf8(bytes).ok()) else {
+                continue;
+            };
+            let _ = state.store.put_secret_remote(dk, id, &value, version);
+            continue;
+        }
+        let Some(kind) = Kind::parse(kind_wire) else {
+            continue;
+        };
+        if mine
+            .get(&(kind_wire.to_string(), id.to_string()))
+            .is_some_and(|v| *v >= version)
+        {
+            continue;
+        }
+        let Some(old) = previous.get(&doc_slot(kind, id)) else {
+            continue;
+        };
+        if d["deleted"] == true {
+            let _ = state.store.delete_remote(kind, id, version);
+            continue;
+        }
+        let Some(doc) = enclave_host::sync::open_doc(
+            &old.key,
+            d["keyId"].as_str().unwrap_or_default(),
+            kind_wire,
+            id,
+            version,
+            d["box"].as_str().unwrap_or_default(),
+        )
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok()) else {
+            continue;
+        };
+        let _ = state.store.put_remote(kind, id, &doc, version);
+    }
+}
+
+/// 信封里的团队密钥和本机这把不一样时，收下它。别的管理员的电脑靠这个接上轮换后的新密钥。
+async fn adopt_envelope_if_needed(state: &App, view: &Value) -> Result<(), String> {
+    if view["holdsTeamKey"] == false || view["hasKey"] != true {
+        return Ok(());
+    }
+    let (Some(ephemeral), Some(sealed)) = (
+        view.pointer("/envelope/ephemeral").and_then(Value::as_str),
+        view.pointer("/envelope/box").and_then(Value::as_str),
+    ) else {
+        return Ok(());
+    };
+    let device = DeviceKey::load(&state.paths.root).map_err(|e| e.to_string())?;
+    let dk = device
+        .unseal(ephemeral, sealed)
+        .map_err(|e| format!("拆不开交过来的密钥：{e}"))?;
+    let same = {
+        let vault = state.vault.lock().await;
+        vault.key().copied() == Some(dk)
+    };
+    if same {
+        return Ok(());
+    }
+    let done = adopt(state, dk).await;
+    if done.0["ok"] == true {
+        Ok(())
+    } else {
+        Err(done.0["message"]
+            .as_str()
+            .unwrap_or("没能收下新的团队密钥")
+            .to_string())
+    }
+}
+
 async fn sync_once(state: &App) -> Result<Value, String> {
-    let view = state
+    let _one_sync_at_a_time = state.syncing.lock().await;
+    let mut view = state
         .cloud
         .sync_get("/v1/sync")
         .await
         .map_err(|e| e.message)?;
-    if view["enabled"] != true {
-        return Ok(json!({ "ok": true, "enabled": false }));
+    if view["enabled"] == true && view["needsRotation"] == true && state.role() == "owner" {
+        rotate_team_key(state, &view).await?;
+        view = state
+            .cloud
+            .sync_get("/v1/sync")
+            .await
+            .map_err(|e| e.message)?;
     }
+    if view["enabled"] != true {
+        return Ok(json!({
+            "ok": true,
+            "enabled": false,
+            "recoveryPending": recovery_pending(&state.paths.root),
+        }));
+    }
+    adopt_envelope_if_needed(state, &view).await?;
     let holds_team_key = view["holdsTeamKey"] != false;
     // 所有者和管理员靠团队密钥；操作员没有团队密钥，只有一把把单独发给他的槽位钥匙。
     if holds_team_key && view["hasKey"] != true {
-        return Ok(json!({ "ok": true, "enabled": true, "hasKey": false }));
+        return Ok(json!({
+            "ok": true,
+            "enabled": true,
+            "hasKey": false,
+            "recoveryPending": recovery_pending(&state.paths.root),
+        }));
     }
     let dk = if holds_team_key {
         let vault = state.vault.lock().await;
@@ -1614,8 +1889,12 @@ async fn sync_once(state: &App) -> Result<Value, String> {
     };
     let mut rotated = 0usize;
     let mut granted = 0usize;
+    // 团队密钥还没换完时，别的管理员不要用旧密钥去重铸槽位。
+    let pause_slots = view["needsRotation"] == true && state.role() != "owner";
     if let Some(dk) = dk.as_ref() {
-        (rotated, granted) = tend_slots(state, dk, &device, &mut ring).await?;
+        if !pause_slots {
+            (rotated, granted) = tend_slots(state, dk, &device, &mut ring).await?;
+        }
     }
     if ring.is_empty() {
         // 一把钥匙都没有：新加入的操作员还等着团队里的电脑把钥匙发过来。
@@ -1767,13 +2046,17 @@ async fn sync_once(state: &App) -> Result<Value, String> {
                 continue;
             };
             // 环境已经删了，或者用户把它改成了「只留在这台电脑上」：云端那一份留着没有意义。
+            // 钥匙换过之后，云端还是旧钥匙封的那一份同样留着没有意义。
             let gone = state
                 .store
                 .get(Kind::Environment, env_id)
                 .ok()
                 .flatten()
                 .is_none();
-            if (gone || state.store.local_only(env_id))
+            let obsolete = ring
+                .get(&enclave_host::sync::env_slot(env_id))
+                .is_some_and(|slot| b["keyId"].as_str() != Some(slot.key_id.as_str()));
+            if (gone || state.store.local_only(env_id) || obsolete)
                 && state
                     .cloud
                     .sync_delete(&format!("/v1/sync/blobs/{env_id}"))
@@ -1789,7 +2072,14 @@ async fn sync_once(state: &App) -> Result<Value, String> {
         "pushed": pushed, "pulled": pulled, "stale": stale.len(), "unreadable": unreadable,
         "cookiesRemoved": removed, "rotated": rotated, "granted": granted, "keys": ring.len(),
         "secretsPushed": secrets_pushed, "secretsPulled": secrets_pulled,
+        "recoveryPending": recovery_pending(&state.paths.root),
     }))
+}
+
+/// 用户确认已经把新的恢复码抄下来了。
+async fn sync_recovery_ack(State(state): State<Arc<App>>) -> Json<Value> {
+    enclave_host::keychain::clear(&state.paths.root, RECOVERY_PENDING);
+    Json(json!({ "ok": true }))
 }
 
 /// 云端存了哪些环境的登录态、一共多大。界面上给用户一个交代。
@@ -2595,6 +2885,7 @@ mod tests {
             (Method::POST, "/v1/sync/enable"),
             (Method::POST, "/v1/sync/disable"),
             (Method::POST, "/v1/sync/approve"),
+            (Method::POST, "/v1/sync/rotate"),
         ] {
             assert!(operator_blocked(&m, p), "{m} {p} 该拦没拦住");
         }

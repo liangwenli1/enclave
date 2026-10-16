@@ -102,7 +102,14 @@ function EnginesPage() {
                         variant="ghost"
                         size="icon"
                         title={t("engineRemove")}
-                        onClick={() => remove(engine.id)}
+                        aria-label={t("engineRemove")}
+                        className="text-subtle hover:text-bad"
+                        onClick={() => {
+                          if (!confirm(`移除搜索引擎「${engine.name}」？正在使用它的环境会改回不覆盖。`)) {
+                            return;
+                          }
+                          remove(engine.id);
+                        }}
                       >
                         <Trash2 className="size-3.5" />
                       </Button>

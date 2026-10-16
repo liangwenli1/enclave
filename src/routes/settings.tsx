@@ -36,7 +36,7 @@ function SettingsPage() {
           <VaultPanel />
         </div>
         {mayEdit ? <SyncPanel /> : <OperatorPanel />}
-        <details className="rounded border border-line bg-surface">
+        <details className="rounded-lg border border-line bg-canvas">
           <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-ink hover:bg-surface-2">
             高级设置
           </summary>
@@ -144,7 +144,7 @@ function VaultPanel() {
         </Field>
         {done ? <p className="text-[13px] text-ok">{done}</p> : null}
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" type="submit" disabled={busy}>
+          <Button type="submit" disabled={busy}>
             {busy ? "处理中…" : exists ? "更换口令" : "开启应用锁"}
           </Button>
           {exists ? (
@@ -191,7 +191,7 @@ function AppearancePanel() {
               onClick={() => useEnclave.getState().patchSettings({ theme: id })}
               className={
                 theme === id
-                  ? "bg-ink px-4 py-1.5 text-[13px] font-semibold text-canvas first:rounded-l-[2px] last:rounded-r-[2px]"
+                  ? "bg-accent-wash px-4 py-1.5 text-[13px] font-semibold text-accent-text first:rounded-l-[2px] last:rounded-r-[2px]"
                   : "px-4 py-1.5 text-[13px] text-muted hover:bg-surface-2 hover:text-ink"
               }
             >
@@ -211,6 +211,7 @@ function ApiPanel() {
   const label = useEnclave((s) => s.session.plan?.label ?? "当前档位");
   const api = useEnclave((s) => s.api);
   const locked = level === "off";
+  const [tokenError, setTokenError] = useState("");
 
   return (
     <Panel>
@@ -263,8 +264,13 @@ function ApiPanel() {
             <div>
               <Button
                 onClick={async () => {
+                  if (!confirm("重置令牌？正在使用的脚本会立刻失效。")) return;
                   const token = await rotateApiToken();
-                  if (!token) return;
+                  if (!token) {
+                    setTokenError("没换成，请重试。");
+                    return;
+                  }
+                  setTokenError("");
                   useEnclave.setState((s) => ({ api: { ...s.api, token } }));
                   useEnclave.getState().addAudit({
                     action: "api_token_rotate",
@@ -275,6 +281,7 @@ function ApiPanel() {
               >
                 重置令牌
               </Button>
+              {tokenError ? <p className="mt-2 text-[13px] text-bad">{tokenError}</p> : null}
             </div>
           </>
         ) : null}
@@ -291,23 +298,30 @@ function TransferPanel() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [passphrase, setPassphrase] = useState("");
   const [importPass, setImportPass] = useState("");
+  const [importPassError, setImportPassError] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const doExport = async () => {
     setError("");
-    const file = await buildExport({ environments, proxies, engines, passphrase });
-    downloadExport(file);
-    setMessage(
-      file.secrets
-        ? "已导出，代理密码以导出口令加密保存在文件中。"
-        : "已导出，文件中不含任何密码。",
-    );
-    setPassphrase("");
+    setMessage("");
+    try {
+      const file = await buildExport({ environments, proxies, engines, passphrase });
+      downloadExport(file);
+      setMessage(
+        file.secrets
+          ? "已导出，代理密码以导出口令加密保存在文件中。"
+          : "已导出，文件中不含任何密码。",
+      );
+      setPassphrase("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "导出失败。");
+    }
   };
 
   const doImport = async (text: string) => {
     setError("");
+    setImportPassError("");
     setMessage("");
     try {
       const file = parseExport(text);
@@ -315,7 +329,15 @@ function TransferPanel() {
       const existing = new Set(store.environments.map((e) => e.id));
       const incoming = file.environments.filter((e) => !existing.has(e.id));
       // 先导密码，再导代理："已保存密码"以保险箱里真有为准，不照抄文件里的标记。
-      const secretCount = file.secrets && importPass ? await importSecrets(file, importPass) : 0;
+      let secretCount = 0;
+      if (file.secrets && importPass) {
+        try {
+          secretCount = await importSecrets(file, importPass);
+        } catch (err) {
+          setImportPassError(err instanceof Error ? err.message : "导入口令不正确。");
+          return;
+        }
+      }
       for (const proxy of file.proxies) {
         // "已保存密码"以本机服务里真的有为准（store 会按 secretIds 重算），不照抄文件里的标记。
         store.upsertProxy(
@@ -375,6 +397,14 @@ function TransferPanel() {
               autoComplete="off"
             />
           </Field>
+          <Field label="导入口令" hint="仅当文件包含密码时需要" error={importPassError}>
+            <Input
+              type="password"
+              value={importPass}
+              onChange={(e) => setImportPass(e.target.value)}
+              autoComplete="off"
+            />
+          </Field>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => void doExport()}>导出环境包</Button>
             <Button onClick={() => fileInput.current?.click()}>选择文件导入</Button>
@@ -391,14 +421,6 @@ function TransferPanel() {
               }}
             />
           </div>
-          <Field label="导入口令" hint="仅当文件包含密码时需要">
-            <Input
-              type="password"
-              value={importPass}
-              onChange={(e) => setImportPass(e.target.value)}
-              autoComplete="off"
-            />
-          </Field>
         </div>
 
         {message ? <p className="text-[13px] text-ok">{message}</p> : null}

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FlaskConical, Play, Square } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge, Button, Field, Input, Panel, Select, Textarea } from "@/components/ui";
 import { EnvGlyph } from "@/components/env-glyph";
 import { ENGINE_META } from "@/lib/engines-meta";
@@ -41,6 +41,8 @@ function EnvDetail() {
   const mayEdit = canEdit(useEnclave((s) => s.session.role));
   const { folders } = useFolders();
   const [tab, setTab] = useState<"overview" | "fingerprint" | "flags" | "timeline">("overview");
+  const [flagsDirty, setFlagsDirty] = useState(false);
+  const onFlagsDirty = useCallback((dirty: boolean) => setFlagsDirty(dirty), []);
   const [collect, setCollect] = useState<{ busy: boolean; note?: string; bad?: boolean }>({
     busy: false,
   });
@@ -48,7 +50,7 @@ function EnvDetail() {
   if (!env) {
     return (
       <div className="p-8 text-subtle">
-        这个环境不存在了。
+        这个环境不存在了。{" "}
         <Link to="/" className="text-accent-text underline">
           回到环境列表
         </Link>
@@ -67,19 +69,25 @@ function EnvDetail() {
   return (
     <div className="mx-auto grid max-w-[1280px] gap-4 px-4 py-5 sm:px-8 sm:py-6 lg:grid-cols-[1fr_320px]">
       <div className="min-w-0">
-        <div className="mb-4 flex flex-wrap items-center gap-3">
-          <Button variant="ghost" onClick={() => void navigate({ to: "/" })}>
+        <div className="mb-5">
+          <Button variant="ghost" className="-ml-2 mb-3" onClick={() => void navigate({ to: "/" })}>
             <ArrowLeft className="size-3.5" />
             {t("back")}
           </Button>
-          <EnvGlyph seed={env.profile.seed} size={44} />
-          <h1 className="min-w-0 text-2xl font-bold tracking-[-0.03em] text-ink [overflow-wrap:anywhere]">
-            {env.name}
-          </h1>
-          <Badge tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}>
-            {runtimeLabel(status, runtime?.error)}
-          </Badge>
-          <div className="ml-auto flex gap-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+            <EnvGlyph seed={env.profile.seed} size={44} />
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl font-bold tracking-[-0.03em] text-ink [overflow-wrap:anywhere]">
+                {env.name}
+              </h1>
+              <Badge
+                className="mt-1"
+                tone={status === "running" ? "ok" : status === "error" ? "bad" : "neutral"}
+              >
+                {runtimeLabel(status, runtime?.error)}
+              </Badge>
+            </div>
+            <div className="flex gap-2">
             {status === "running" ? (
               <Button onClick={() => void stopEnv(env.id)}>
                 <Square className="size-3" />
@@ -104,22 +112,36 @@ function EnvDetail() {
               <FlaskConical className="size-3.5" />
               {t("sendLab")}
             </Button>
+            </div>
           </div>
         </div>
 
-        <div className="mb-3 flex gap-1 border-b border-line">
+        <div className="mb-4 flex gap-1 border-b border-line">
           {(["overview", "fingerprint", "flags", "timeline"] as const)
             .filter((key) => key !== "flags" || env.engine === "chromium")
             .map((key) => (
               <button
                 key={key}
-                onClick={() => setTab(key)}
-                className={`px-3 py-2 text-[13px] ${tab === key ? "border-b-2 border-accent text-ink" : "text-subtle"}`}
+                onClick={() => {
+                  if (tab === "flags" && flagsDirty && key !== "flags") {
+                    if (!window.confirm("启动参数还没保存，离开会丢掉这些改动。")) return;
+                  }
+                  setTab(key);
+                }}
+                className={`min-h-10 border-b-2 px-3 text-[13px] font-medium ${
+                  tab === key
+                    ? "border-accent text-ink"
+                    : "border-transparent text-subtle hover:text-ink"
+                }`}
               >
                 {t(key === "flags" ? "flags" : key)}
               </button>
             ))}
         </div>
+
+        {tab !== "timeline" && (status === "running" || status === "starting") ? (
+          <p className="mb-3 text-[13px] text-subtle">修改会保存，停止后再启动才进入浏览器。</p>
+        ) : null}
 
         {tab === "overview" ? (
           <div className="grid gap-3 md:grid-cols-2">
@@ -246,6 +268,7 @@ function EnvDetail() {
             envId={env.id}
             extraFlags={env.extraFlags}
             allowNoSandbox={env.allowNoSandbox}
+            onDirty={onFlagsDirty}
           />
         ) : null}
 
@@ -553,7 +576,7 @@ function FingerprintForm({
             <option value="linux">Linux</option>
           </Select>
         ) : (
-          <p className="rounded-md border border-line bg-raised px-3 py-2 text-sm">
+          <p className="rounded-md border border-line bg-surface-2 px-3 py-2 text-sm">
             {platformLabel(profile)}
             <span className="ml-2 text-subtle">{t("platformPinned")}</span>
           </p>
@@ -637,7 +660,7 @@ function FingerprintForm({
                 })
               }
             >
-              <option value="noise">加噪声（每个环境不同，跟着种子走，重启不变）</option>
+              <option value="noise">加噪声（每个环境不同，由指纹种子固定，重启不变）</option>
               <option value="real">真实（这台电脑的；同一台电脑上选了真实的环境彼此相同）</option>
             </Select>
           </Field>
@@ -795,21 +818,20 @@ function FingerprintForm({
               由内核按环境生效：平台、核数、屏幕
               {profile.screen ? `（${profile.screen.width} × ${profile.screen.height}）` : ""}
               、缩放{profile.devicePixelRatio ? `（${profile.devicePixelRatio}）` : ""}
-              、显卡字符串、地区、WebRTC、字体名单，以及由种子决定的字体间距。
+              、显卡字符串、地区、WebRTC、字体名单，以及由指纹种子决定的字体间距。
               缩放是真的缩放——页面会按这个比例显示，这样网站用媒体查询去量也对得上。
             </p>
             <p className="mt-1">
-              Canvas 不加噪声：同一台电脑上所有 Firefox 类环境的像素级 Canvas
-              指纹相同（上游认为像素噪声本身会被识别，已经去掉）。 每次启动 toDataURL
-              的哈希会变，那是 Firefox 自己的保护，真实用户也一样。需要 Canvas 噪声就用 Chromium
+              Canvas 不加噪声：同一台电脑上所有 Firefox 类环境的画面指纹相同（像素噪声本身容易被认出来，所以去掉了）。
+              每次读取画面，结果都会略有不同，这是 Firefox 自己的保护，真实用户也一样。需要 Canvas 噪声就用 Chromium
               类。
             </p>
           </>
         ) : (
           <>
             <p className="mt-1">
-              上面这些由内核按环境生效：平台、系统版本、浏览器、核数、地区、WebRTC，以及由种子决定的
-              Canvas、文字测量（字体）、ClientRects 的噪声和内存大小。
+              上面这些按环境生效：平台、系统版本、浏览器、核数、地区、WebRTC，以及由指纹种子决定的
+              Canvas、文字测量、文字位置的细微偏差，以及内存大小。
             </p>
             <p className="mt-1">
               屏幕分辨率和缩放来自这台电脑，内核改不了
@@ -830,10 +852,12 @@ function FlagsForm({
   envId,
   extraFlags,
   allowNoSandbox,
+  onDirty,
 }: {
   envId: string;
   extraFlags: string[];
   allowNoSandbox: boolean;
+  onDirty: (dirty: boolean) => void;
 }) {
   const [draft, setDraft] = useState(extraFlags.join("\n"));
   const flags = useMemo(() => draft.split(/\s+/).filter(Boolean), [draft]);
@@ -861,6 +885,12 @@ function FlagsForm({
   const unreachable = checked && verdict.flags === null;
   const rejected = classified.filter((f) => f.cls === "reject").length;
   const dirty = key !== extraFlags.join("\n");
+  useEffect(() => {
+    onDirty(dirty);
+    return () => onDirty(false);
+  }, [dirty, onDirty]);
+  const saveTitle =
+    rejected > 0 ? "有参数不允许" : unreachable ? undefined : !checked ? "正在校验" : !dirty ? "没有改动" : undefined;
   return (
     <div className="grid gap-3">
       <label className="flex items-center gap-2 text-[13px]">
@@ -916,6 +946,7 @@ function FlagsForm({
       <div className="flex items-center gap-3">
         <Button
           disabled={!dirty || !checked || unreachable || rejected > 0}
+          title={saveTitle}
           onClick={() => {
             useEnclave
               .getState()
@@ -928,7 +959,9 @@ function FlagsForm({
         >
           {t("save")}
         </Button>
-        {!dirty && extraFlags.length ? (
+        {dirty ? (
+          <span className="text-[13px] text-subtle">还没保存。浏览器用的是上一份。</span>
+        ) : extraFlags.length ? (
           <span className="text-[13px] text-subtle">已保存，重新启动后生效。</span>
         ) : null}
       </div>

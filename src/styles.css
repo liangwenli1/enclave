@@ -274,8 +274,22 @@ body {
   background: var(--enclave-surface-2);
 }
 
-.app-table tbody tr[data-running="true"] td {
+.app-table tbody tr[data-running="true"] td,
+.app-table tbody tr[data-running="true"]:hover td {
   background: var(--enclave-accent-wash);
+}
+
+/* 窄屏横滑时，启动和停止留在右侧，不跟表格一起滚走。 */
+.app-table .pin-end {
+  position: sticky;
+  right: 0;
+  z-index: 2;
+  background: var(--enclave-canvas);
+  border-left: 1px solid var(--enclave-line);
+}
+
+.app-table thead th.pin-end {
+  z-index: 3;
 }
 
 .app-mono {

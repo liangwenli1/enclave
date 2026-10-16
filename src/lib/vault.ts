@@ -46,10 +46,11 @@ export async function removeAppLock(): Promise<void> {
  * 忘了口令的唯一出路：换一把新的数据密钥。旧钥匙加密的代理密码一起没了，
  * 所以把"已保存密码"的记录也清掉，界面才不会说谎。环境和代理本身不受影响。
  */
-export async function resetVault(): Promise<void> {
-  if (apply(await hostJson<VaultView>("/v1/vault/reset", "POST", {}))) {
-    useEnclave.setState({ secretIds: [] });
-  }
+/** 成功才清掉「已保存密码」。失败时界面保持锁定，调用方不要记审计。 */
+export async function resetVault(): Promise<boolean> {
+  if (!apply(await hostJson<VaultView>("/v1/vault/reset", "POST", {}))) return false;
+  useEnclave.setState({ secretIds: [] });
+  return true;
 }
 
 export async function putSecret(id: string, secret: string): Promise<void> {

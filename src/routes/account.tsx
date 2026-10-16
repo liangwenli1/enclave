@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Badge, Button, Panel, PanelHeader, PageHeader } from "@/components/ui";
+import { Badge, Button, CodeBlock, Panel, PanelHeader, PageHeader } from "@/components/ui";
 import { applySession, refreshSession } from "@/lib/host";
 import { t } from "@/lib/i18n";
 import { getSession, logoutSession, openSite } from "@/lib/kernel/host-api";
@@ -20,6 +20,21 @@ function AccountPage() {
   );
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [siteNote, setSiteNote] = useState("");
+  const [siteUrl, setSiteUrl] = useState("");
+
+  const openPage = async (page: "account" | "pricing") => {
+    setSiteNote("");
+    setSiteUrl("");
+    const res = await openSite(page);
+    if (res.ok) return;
+    if ("url" in res && res.url) {
+      setSiteNote("浏览器未能自动打开。请将下方地址复制到浏览器中。");
+      setSiteUrl(res.url);
+      return;
+    }
+    setSiteNote(res.message || "无法打开官网。");
+  };
 
   const doSignOut = async () => {
     setBusy(true);
@@ -86,11 +101,13 @@ function AccountPage() {
         </Panel>
 
         <div className="flex flex-wrap gap-2">
-          <Button variant="primary" onClick={() => void openSite("pricing")}>
+          <Button variant="primary" onClick={() => void openPage("pricing")}>
             升级档位
           </Button>
-          <Button onClick={() => void openSite("account")}>在官网管理订阅和设备</Button>
+          <Button onClick={() => void openPage("account")}>在官网管理订阅和设备</Button>
         </div>
+        {siteNote ? <p className="text-[13px] text-bad">{siteNote}</p> : null}
+        {siteUrl ? <CodeBlock value={siteUrl} /> : null}
         <p className="text-[13px] leading-relaxed text-subtle">
           订阅、更换支付方式、取消订阅与解绑其他设备均在官网完成，将在浏览器中打开。新建和启动环境始终以服务器当前状态为准；本页数字最多延迟一分钟，点击「刷新」可立即更新。
         </p>
@@ -127,7 +144,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-3 bg-surface px-5 py-3">
       <dt className="text-[13px] text-subtle">{label}</dt>
-      <dd className="app-mono text-[13px] text-muted">{value}</dd>
+      <dd className="text-[13px] font-medium text-ink tabular-nums">{value}</dd>
     </div>
   );
 }

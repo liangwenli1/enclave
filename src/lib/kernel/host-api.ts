@@ -443,9 +443,15 @@ export const completeLogin = (code: string) =>
 
 export const logoutSession = () => cloud<{ ok: true }>("/v1/session/logout", { method: "POST", body: "{}" });
 
-/** 在系统浏览器里打开官网的某一页。只能是这几页，不接受任意地址。 */
+/**
+ * 在系统浏览器里打开官网的某一页。只能是这几页，不接受任意地址。
+ * 浏览器没打开时 `ok` 为 false，同时带上 `url`，让用户自己复制。
+ */
 export const openSite = (page: "account" | "pricing") =>
-  cloud<{ ok: true }>("/v1/session/site", { method: "POST", body: JSON.stringify({ page }) });
+  cloud<{ ok: boolean; url?: string; code?: string; message?: string }>("/v1/session/site", {
+    method: "POST",
+    body: JSON.stringify({ page }),
+  });
 
 /** 在账号下登记一个环境（或更新名字）。新登记占一个名额，名额由服务器数。 */
 export const putProfile = (env: { id: string; name: string; folderId: string; kernelVersion: string; os: string }) =>

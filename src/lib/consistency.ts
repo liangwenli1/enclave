@@ -174,7 +174,7 @@ export function snapshotChecks(
     {
       id: "webdriver",
       ok: snap.webdriver !== true,
-      label: "webdriver 标记",
+      label: "自动化标记",
       detail: snap.webdriver === true ? "暴露了（异常）" : "未暴露",
     },
     {

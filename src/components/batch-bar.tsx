@@ -114,7 +114,14 @@ export function BatchBar({
               已选 {selected.length} 个环境
             </span>
             <div className="flex flex-wrap gap-2">
-              <Button variant="primary" onClick={() => { setOpening((v) => !v); setRunning(false); }}>
+              <Button
+                variant={opening || running ? "secondary" : "primary"}
+                onClick={() => {
+                  if (opening) return;
+                  setOpening(true);
+                  setRunning(false);
+                }}
+              >
                 {t("batchStart")}
               </Button>
               <Button disabled={busy} onClick={() => void go("stop")}>
@@ -180,7 +187,7 @@ export function BatchBar({
                 <>
                   <Field label={t("batchWorkflowPick")}>
                     <Select value={workflowId} onChange={(e) => setWorkflowId(e.target.value)}>
-                      <option value="">—</option>
+                      <option value="">请选择流程</option>
                       {workflows.map((w) => (
                         <option key={w.id} value={w.id}>
                           {w.name}（{w.steps.length} 步）
@@ -207,7 +214,12 @@ export function BatchBar({
                     </Select>
                   </Field>
                   <div className="flex gap-2">
-                    <Button variant="primary" disabled={busy || !workflowId} onClick={() => void go("workflow")}>
+                    <Button
+                      variant="primary"
+                      disabled={busy || !workflowId}
+                      title={!workflowId ? "请先选择流程" : undefined}
+                      onClick={() => void go("workflow")}
+                    >
                       {busy ? "…" : t("batchGo")}
                     </Button>
                     <Button variant="ghost" onClick={() => setRunning(false)}>

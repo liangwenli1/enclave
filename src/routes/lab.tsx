@@ -47,14 +47,14 @@ function LabPage() {
       <h1 className="text-[32px] leading-tight font-bold tracking-tight text-ink">
         {t("labTitle")}
       </h1>
-      <p className="mt-2 text-[13px] text-subtle">对照是工作台这一页，另一边是真正的内核窗口。</p>
+      <p className="mt-2 text-[13px] text-subtle">一边是工作台自己的页面，一边是这个环境打开的浏览器。</p>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <select
           className="h-8 rounded-md border border-line-strong bg-surface px-2.5 text-[13px] text-ink"
           value={envId}
           onChange={(e) => setEnvId(e.target.value)}
         >
-          <option value="">{t("env")}</option>
+          <option value="">选择环境</option>
           {environments.map((e) => (
             <option key={e.id} value={e.id}>
               {e.name}
@@ -94,7 +94,7 @@ function LabPage() {
             try {
               await collectEnvCdp(env.id);
             } catch (err) {
-              setError(`采集内核窗口失败：${err instanceof Error ? err.message : String(err)}`);
+              setError(`采集浏览器窗口失败：${err instanceof Error ? err.message : String(err)}`);
             } finally {
               setBusy(false);
             }
@@ -103,6 +103,11 @@ function LabPage() {
           {t("collectCdp")}
         </Button>
       </div>
+      {!env ? (
+        <p className="mt-2 text-[13px] text-subtle">先选择一个环境，再采集它打开的浏览器。</p>
+      ) : runtimes[envId]?.status !== "running" ? (
+        <p className="mt-2 text-[13px] text-subtle">这个环境没在运行。先在环境页启动，再回来采集。</p>
+      ) : null}
 
       {error ? <p className="mt-3 text-[13px] text-bad">{error}</p> : null}
 
@@ -203,7 +208,7 @@ function Meta({
         <span className="font-mono">{snap.canvasHash.slice(0, 12)}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-subtle">webdriver 标记</span>
+        <span className="text-subtle">{t("webdriver")}</span>
         <span>{snap.webdriver === true ? "已暴露" : "未暴露"}</span>
       </div>
       <div className="truncate text-subtle">{snap.webglRenderer}</div>

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Badge, Button, CodeBlock, Field, Input, Panel, PanelHeader } from "@/components/ui";
 import { syncNow, useEnclave } from "@/lib/store";
 import {
+  ackRecovery,
   adoptKey,
   approveDevice,
   blobUsage,
@@ -30,7 +31,11 @@ export function SyncPanel() {
   const syncedAt = useEnclave((s) => s.syncedAt);
   const syncNote = useEnclave((s) => s.syncNote);
   const [state, setState] = useState<SyncState | null>(null);
-  const [error, setError] = useState("");
+  // 读状态失败，只在还没有任何状态时显示。刷新不能把操作失败清掉。
+  const [statusError, setStatusError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [recoverError, setRecoverError] = useState("");
+  const seen = useRef(false);
   const [busy, setBusy] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
   const [saved, setSaved] = useState(false);
@@ -47,11 +52,14 @@ export function SyncPanel() {
   const load = useCallback(async () => {
     const res = await syncState();
     if (!res.ok) {
-      setError(res.message);
+      if (!seen.current) setStatusError(res.message);
       return;
     }
-    setError("");
+    seen.current = true;
+    setStatusError("");
     setState(res);
+    // 换密钥之后码在钥匙串里。同步那一轮要是没走完，横幅也要出现。
+    if (res.recoveryCode) useEnclave.setState({ recoveryPending: true });
     if (res.enabled && res.hasKey) {
       const list = await pendingDevices();
       setPending(list.ok ? list.devices : []);
@@ -81,10 +89,10 @@ export function SyncPanel() {
 
   const run = async (fn: () => Promise<{ ok: boolean; message?: string }>, done?: string) => {
     setBusy(true);
-    setError("");
+    setActionError("");
     setNote("");
     const res = await fn();
-    if (!res.ok) setError(res.message ?? "操作未成功。");
+    if (!res.ok) setActionError(res.message ?? "操作未成功。");
     else if (done) setNote(done);
     setBusy(false);
     await load();
@@ -96,28 +104,31 @@ export function SyncPanel() {
       <Panel>
         <PanelHeader title="同步" />
         <p className="p-5 text-[13px] text-subtle">
-          {error
-            ? error.startsWith("/")
+          {statusError
+            ? statusError.startsWith("/")
               ? "暂时无法读取同步状态，请稍后重试。"
-              : error
+              : statusError
             : "正在读取同步状态…"}
         </p>
       </Panel>
     );
   }
 
-  // 开启时拿到的恢复码：用户保存之前不让它消失。
-  if (recoveryCode) {
+  // 开启时拿到的恢复码，或者团队密钥换过之后的新码：用户保存之前不让它消失。
+  const shownCode = recoveryCode || state.recoveryCode || "";
+  if (shownCode) {
     return (
       <Panel>
         <PanelHeader title="保存恢复码" actions={<Badge tone="warn">仅显示一次</Badge>} />
         <div className="grid gap-4 p-5">
           <p className="text-[13px] leading-relaxed text-muted">
-            所有登录过的电脑都没了的时候，靠它把数据找回来。
+            {state.recoveryCode
+              ? "团队密钥已经换过，上一份恢复码作废了。所有登录过的电脑都没了的时候，靠这份新的把数据找回来。"
+              : "所有登录过的电脑都没了的时候，靠它把数据找回来。"}
             <span className="text-bad">我们没有它的副本，丢了就找不回数据。</span>
             抄下来放在安全的地方，或者存进密码管理器。
           </p>
-          <CodeBlock label="恢复码" value={recoveryCode} />
+          <CodeBlock label="恢复码" value={shownCode} />
           <label className="flex items-center gap-2 text-[13px] text-muted">
             <input
               type="checkbox"
@@ -132,8 +143,12 @@ export function SyncPanel() {
               variant="primary"
               disabled={!saved}
               onClick={() => {
-                setRecoveryCode("");
-                setSaved(false);
+                void ackRecovery().finally(() => {
+                  useEnclave.setState({ recoveryPending: false });
+                  setRecoveryCode("");
+                  setSaved(false);
+                  void load();
+                });
               }}
             >
               完成
@@ -160,6 +175,16 @@ export function SyncPanel() {
           <span className="text-ink">我们无法读取其中的内容</span>
           。更换电脑时，在这台电脑上点击「允许」即可。
         </p>
+        {state.needsRotation && state.role === "owner" ? (
+          <p className="text-[13px] leading-relaxed text-warn">
+            有管理员离开了团队。这台电脑会更换团队密钥，完成后在这里显示新的恢复码。
+          </p>
+        ) : null}
+        {state.needsRotation && state.role !== "owner" ? (
+          <p className="text-[13px] leading-relaxed text-warn">
+            团队密钥正在更换。这台电脑会自动接上。如果一直停在等待批准，请所有者重新允许这台电脑。
+          </p>
+        ) : null}
 
         {/* 还没开：这个账号的第一台电脑 */}
         {!state.enabled ? (
@@ -169,13 +194,12 @@ export function SyncPanel() {
               disabled={busy}
               onClick={() => {
                 setBusy(true);
-                setError("");
+                setActionError("");
                 void enableSync().then((res) => {
                   if (res.ok) {
                     setRecoveryCode(res.recoveryCode);
                     void syncNow();
-                  }
-                  if (!res.ok) setError(res.message);
+                  } else setActionError(res.message ?? "没有开启。");
                   setBusy(false);
                   void load();
                 });
@@ -202,7 +226,7 @@ export function SyncPanel() {
               <p className="text-[13px] text-muted">
                 手边没有别的电脑了？用开启同步时保存的恢复码。
               </p>
-              <Field label="恢复码" error={error}>
+              <Field label="恢复码" error={recoverError}>
                 <Input
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
@@ -214,13 +238,20 @@ export function SyncPanel() {
               <div>
                 <Button
                   disabled={busy || !code.trim()}
-                  onClick={() =>
-                    void run(async () => {
-                      const res = await recoverKey(code.trim());
-                      if (res.ok) await syncNow();
-                      return res;
-                    }, "密钥已接收，正在拉取环境。")
-                  }
+                  onClick={() => {
+                    setBusy(true);
+                    setRecoverError("");
+                    setNote("");
+                    void recoverKey(code.trim()).then(async (res) => {
+                      if (!res.ok) setRecoverError(res.message ?? "恢复码不正确。");
+                      else {
+                        await syncNow();
+                        setNote("密钥已接收，正在拉取环境。");
+                      }
+                      setBusy(false);
+                      await load();
+                    });
+                  }}
                 >
                   {busy ? "处理中…" : "使用恢复码继续"}
                 </Button>
@@ -235,7 +266,7 @@ export function SyncPanel() {
             {pending.length ? (
               <div className="grid gap-3">
                 <p className="text-[13px] font-medium text-ink">有电脑在等着接上同步</p>
-                {pending.map((d) => (
+                {pending.map((d, i) => (
                   <div key={d.deviceId} className="rounded-md border border-line px-4 py-3">
                     <p className="text-[13px] text-muted">
                       「{d.name}」要接上同步。
@@ -247,7 +278,7 @@ export function SyncPanel() {
                     </p>
                     <div className="flex gap-2">
                       <Button
-                        variant="primary"
+                        variant={i === 0 ? "primary" : "secondary"}
                         disabled={busy}
                         onClick={() =>
                           void run(() => approveDevice(d), `已经把密钥交给「${d.name}」。`)
@@ -297,9 +328,10 @@ export function SyncPanel() {
               <Button
                 variant="danger"
                 disabled={busy}
-                onClick={() =>
-                  void run(disableSync, "同步已关闭，云端密文已删除。本机数据不受影响。")
-                }
+                onClick={() => {
+                  if (!confirm("关掉同步？云端密文会删除，本机环境还在。")) return;
+                  void run(disableSync, "同步已关闭，云端密文已删除。本机数据不受影响。");
+                }}
               >
                 关掉同步
               </Button>
@@ -308,7 +340,11 @@ export function SyncPanel() {
         ) : null}
 
         {note ? <p className="text-[13px] text-ok">{note}</p> : null}
-        {error && state.hasKey ? <p className="text-[13px] text-bad">{error}</p> : null}
+        {actionError ? (
+          <p className="text-[13px] text-bad" role="alert">
+            {actionError}
+          </p>
+        ) : null}
       </div>
     </Panel>
   );

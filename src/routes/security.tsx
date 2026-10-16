@@ -74,7 +74,9 @@ function SecurityPage() {
     },
   ];
   const attention = checks.filter((item) => !item.neutral && !item.ok);
-  const cleared = attention.length ? checks.filter((item) => item.neutral || item.ok) : [];
+  const passed = checks.filter((item) => item.ok);
+  const neutral = checks.filter((item) => item.neutral);
+  const unsigned = neutral.some((item) => item.detail.includes("未提供"));
 
   return (
     <div className="mx-auto max-w-[1280px] px-4 py-5 sm:px-8 sm:py-6 *:max-w-[1080px]">
@@ -85,21 +87,36 @@ function SecurityPage() {
 
       <div className="grid gap-4">
         <Panel className="overflow-hidden">
-          <PanelHeader title={attention.length ? "需要处理" : "当前状态正常"} />
+          <PanelHeader
+            title={
+              attention.length ? "需要处理" : unsigned ? "仍有未提供的项" : "当前状态正常"
+            }
+          />
           <ul className="grid gap-px bg-line">
-            {(attention.length ? attention : checks.filter((item) => item.ok)).map((item) => (
+            {(attention.length ? attention : passed).map((item) => (
               <Check key={item.label} {...item} />
             ))}
           </ul>
         </Panel>
 
-        {cleared.length ? (
-          <details className="rounded border border-line bg-surface">
+        {neutral.length ? (
+          <Panel className="overflow-hidden">
+            <PanelHeader title="其他状态" />
+            <ul className="grid gap-px bg-line">
+              {neutral.map((item) => (
+                <Check key={item.label} {...item} />
+              ))}
+            </ul>
+          </Panel>
+        ) : null}
+
+        {attention.length && passed.length ? (
+          <details className="rounded-lg border border-line bg-canvas">
             <summary className="cursor-pointer px-5 py-3 text-[13px] font-medium text-muted hover:text-ink">
-              已通过的检查与其他状态（{cleared.length}）
+              已通过的检查（{passed.length}）
             </summary>
             <ul className="grid gap-px border-t border-line bg-line">
-              {cleared.map((item) => (
+              {passed.map((item) => (
                 <Check key={item.label} {...item} />
               ))}
             </ul>
@@ -125,7 +142,7 @@ function SecurityPage() {
             <Consent
               checked={settings.allowPreviewKernel}
               title="允许使用预览通道的内核"
-              body="哈希已核对，但尚未在当前平台完成完整的行为测试。"
+              body="文件已经核对过，但还没在这台电脑上做完测试。"
               onChange={(checked) => {
                 useEnclave.getState().patchSettings({ allowPreviewKernel: checked });
                 useEnclave.getState().addAudit({

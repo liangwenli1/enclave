@@ -32,9 +32,11 @@ function ExtensionsPage() {
         title={t("extTitle")}
         status={`${extensions.length} 个扩展`}
         actions={
-          <Button variant="primary" onClick={() => setOpen(true)}>
-            {t("addExt")}
-          </Button>
+          extensions.length > 0 ? (
+            <Button variant="primary" onClick={() => setOpen(true)}>
+              {t("addExt")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -86,8 +88,17 @@ function ExtensionsPage() {
                       <td>
                         <div className="flex justify-end">
                           <Button
-                            variant="danger"
+                            variant="ghost"
+                            className="text-subtle hover:text-bad"
                             onClick={() => {
+                              if (
+                                used &&
+                                !confirm(
+                                  `有 ${used} 个环境在用「${ext.name}」。删除后，这些环境不再加载它。`,
+                                )
+                              ) {
+                                return;
+                              }
                               const store = useEnclave.getState();
                               for (const env of store.environments) {
                                 if (env.extensionIds.includes(ext.id)) {

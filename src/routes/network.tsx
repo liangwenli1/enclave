@@ -107,7 +107,9 @@ function NetworkPage() {
                             <span className="max-w-[18ch] truncate" title={p.auth.username}>
                               {p.auth.username}
                             </span>
-                            <span>· {p.auth.hasPassword ? "密码已保存" : "无密码"}</span>
+                            <span className="text-subtle">
+                              {p.auth.hasPassword ? "密码已保存" : "无密码"}
+                            </span>
                           </Badge>
                         ) : (
                           <span className="text-subtle">团队统一配置</span>
@@ -116,18 +118,19 @@ function NetworkPage() {
                       <td className="text-subtle">{used ? `${used} 个环境` : "未使用"}</td>
                       <td>
                         <div className="flex justify-end gap-1.5">
-                          {!mayEdit ? null : p.auth?.username && !p.auth.hasPassword ? (
+                          {!mayEdit || !p.auth?.username ? null : (
                             <Button
                               disabled={!vault.unlocked}
                               title={vault.unlocked ? undefined : "应用锁已锁定，请先解锁"}
                               onClick={() => setFilling(p)}
                             >
-                              填密码
+                              {p.auth.hasPassword ? "更换密码" : "填密码"}
                             </Button>
-                          ) : null}
+                          )}
                           {mayEdit ? (
                             <Button
-                              variant="danger"
+                              variant="ghost"
+                              className="text-subtle hover:text-bad"
                               onClick={() =>
                                 used ? setRemoving({ id: p.id, name: p.name, used }) : remove(p.id)
                               }
@@ -267,7 +270,14 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
     setErrors(found);
     if (Object.keys(found).length) return;
     const id = makeId("prx");
-    if (draft.password) await putSecret(`proxy:${id}`, draft.password);
+    if (draft.password) {
+      try {
+        await putSecret(`proxy:${id}`, draft.password);
+      } catch (err) {
+        setErrors({ password: err instanceof Error ? err.message : "密码没有保存。" });
+        return;
+      }
+    }
     useEnclave.getState().upsertProxy({
       id,
       name: draft.name.trim() || `${host}:${port}`,
@@ -281,7 +291,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
       action: "proxy_add",
       target: id,
       level: "info",
-      detail: `${draft.protocol}://${host}:${port}${draft.password ? "，密码已存入保险箱" : ""}`,
+      detail: `${draft.protocol}://${host}:${port}${draft.password ? "，密码已保存" : ""}`,
     });
     onClose();
   };
@@ -297,7 +307,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
               placeholder="留空则使用地址"
             />
           </Field>
-          <div className="grid grid-cols-[1fr_2fr_1fr] gap-3">
+          <div className="grid gap-3 sm:grid-cols-[1fr_2fr_1fr]">
             <Field label={t("protocol")}>
               <Select
                 value={draft.protocol}

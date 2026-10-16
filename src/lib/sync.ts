@@ -16,6 +16,11 @@ export type SyncState = {
   /** 这台电脑的校验码，给另一台电脑上的人核对。 */
   digits?: string;
   keyId?: string;
+  role?: string;
+  /** 有管理员离开了，所有者的电脑要换团队密钥。 */
+  needsRotation?: boolean;
+  /** 换过密钥之后的新恢复码。用户确认保存之前，每次打开设置都还在。 */
+  recoveryCode?: string;
 };
 
 export type PendingDevice = {
@@ -48,7 +53,7 @@ export const recoverKey = (code: string) => hostJson<{ ok: true; rekeyed: number
 
 /** 跑一轮同步：先推本机改过的，再拉云端更新的。加解密都在本机服务里。 */
 export const runSync = () =>
-  hostJson<{ ok: true; enabled: boolean; hasKey?: boolean; pushed?: number; pulled?: number; stale?: number; unreadable?: number }>(
+  hostJson<{ ok: true; enabled: boolean; hasKey?: boolean; pushed?: number; pulled?: number; stale?: number; unreadable?: number; recoveryPending?: boolean }>(
     "/v1/sync/run",
     "POST",
     {},
@@ -61,5 +66,8 @@ export const blobUsage = () =>
   );
 
 export const disableSync = () => hostJson<{ ok: true }>("/v1/sync/disable", "POST", {});
+
+/** 用户确认已经把新的恢复码抄下来了。 */
+export const ackRecovery = () => hostJson<{ ok: true }>("/v1/sync/recovery-ack", "POST", {});
 
 export type SyncResult<T> = T | CloudFailure;

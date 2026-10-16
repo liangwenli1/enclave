@@ -926,6 +926,105 @@ fn profile_search_engines(user_data: &Path) -> Vec<SearchEngineRow> {
     rows
 }
 
+/// Chromium `ContentSetting`：2 是拒绝，3 是询问。和内核枚举一致，不能改。
+const CONTENT_SETTING_BLOCK: i64 = 2;
+const CONTENT_SETTING_ASK: i64 = 3;
+
+/// 启动前把定位的默认权限写进 `Default/Preferences`。
+///
+/// CDP 的 `Browser.setPermission` 能让网页拿不到坐标，但 `permissions.query` 仍报 `prompt`。
+/// 真实浏览器里设成「不允许」时报的是 `denied`，这个状态只认启动时读到的内容设置。
+/// 改回其他选项时写回「询问」，否则禁用会一直留着。
+/// 禁用时清掉按网站单独允许的记录，否则那几个站仍能拿到位置。
+fn apply_geolocation_pref(user_data: &Path, blocked: bool) -> std::io::Result<()> {
+    let dir = user_data.join("Default");
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join("Preferences");
+    let mut prefs = read_preferences(&path)?;
+    let want = if blocked {
+        CONTENT_SETTING_BLOCK
+    } else {
+        CONTENT_SETTING_ASK
+    };
+    let current = prefs
+        .pointer("/profile/default_content_setting_values/geolocation")
+        .and_then(Value::as_i64);
+    if current == Some(want) && (!blocked || geolocation_exceptions_empty(&prefs)) {
+        return Ok(());
+    }
+    {
+        let values = ensure_object(
+            ensure_object(&mut prefs, "profile"),
+            "default_content_setting_values",
+        );
+        values
+            .as_object_mut()
+            .unwrap()
+            .insert("geolocation".into(), json!(want));
+    }
+    if blocked {
+        let exceptions = ensure_object(
+            ensure_object(ensure_object(&mut prefs, "profile"), "content_settings"),
+            "exceptions",
+        );
+        exceptions
+            .as_object_mut()
+            .unwrap()
+            .insert("geolocation".into(), json!({}));
+    }
+    let text = serde_json::to_string(&prefs)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    // 先写临时文件。直接盖掉的话，写到一半进程没了，整个环境的配置就空了。
+    let tmp = dir.join("Preferences.enclave-tmp");
+    std::fs::write(&tmp, &text)?;
+    if std::fs::rename(&tmp, &path).is_err() {
+        // Windows 上 rename 盖不掉已有文件。临时文件已经写完，再拷过去。
+        if let Err(e) = std::fs::copy(&tmp, &path) {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        let _ = std::fs::remove_file(&tmp);
+    }
+    Ok(())
+}
+
+fn read_preferences(path: &Path) -> std::io::Result<Value> {
+    match std::fs::read_to_string(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(json!({})),
+        Err(e) => Err(e),
+        Ok(raw) if raw.trim().is_empty() => Ok(json!({})),
+        Ok(raw) => match serde_json::from_str::<Value>(&raw) {
+            Ok(v) if v.is_object() => Ok(v),
+            Ok(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Preferences 的最外层不是对象",
+            )),
+            Err(e) => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Preferences 不是合法的 JSON：{e}"),
+            )),
+        },
+    }
+}
+
+fn geolocation_exceptions_empty(prefs: &Value) -> bool {
+    match prefs.pointer("/profile/content_settings/exceptions/geolocation") {
+        None | Some(Value::Null) => true,
+        Some(Value::Object(o)) => o.is_empty(),
+        Some(_) => false,
+    }
+}
+
+/// 取出（或建出）一个对象字段。原来不是对象的，换成空对象——内容设置不能挂在别的类型上。
+fn ensure_object<'a>(value: &'a mut Value, key: &str) -> &'a mut Value {
+    let obj = value.as_object_mut().expect("调用方保证这里是对象");
+    let entry = obj.entry(key).or_insert_with(|| json!({}));
+    if !entry.is_object() {
+        *entry = json!({});
+    }
+    entry
+}
+
 fn default_search_keyword(user_data: &Path) -> String {
     let path = user_data.join("Default").join("Preferences");
     let Ok(raw) = std::fs::read_to_string(path) else {
@@ -1322,6 +1421,13 @@ pub async fn start_environment(
             )
             .await
             .map_err(|e| ("SPAWN_FAILED".into(), e.to_string()))?;
+            // 权限状态要在内核读配置之前写好。CDP 只能补行为，补不上 permissions.query。
+            apply_geolocation_pref(&user_data_dir, profile.geolocation.blocked()).map_err(|e| {
+                (
+                    "SPAWN_FAILED".into(),
+                    format!("定位的权限状态没写进环境：{e}"),
+                )
+            })?;
 
             let mut args = vec![
                 format!("--user-data-dir={}", user_data_dir.display()),
@@ -1707,6 +1813,91 @@ mod geolocation_tests {
         }))
         .unwrap();
         assert_eq!(profile.geolocation, Geolocation::FollowExit);
+    }
+
+    fn temp_profile() -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "enclave-geo-{}-{}",
+            std::process::id(),
+            rand::random::<u32>()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn blocking_writes_denied_and_other_modes_write_ask() {
+        let dir = temp_profile();
+        let prefs = dir.join("Default").join("Preferences");
+        std::fs::create_dir_all(prefs.parent().unwrap()).unwrap();
+        std::fs::write(
+            &prefs,
+            r#"{"default_search_provider_data":{"template_url_data":{"keyword":"duckduckgo"}},"profile":{"default_content_setting_values":{"notifications":2},"content_settings":{"exceptions":{"geolocation":{"https://shop.example:443,*":{"setting":1}},"cookies":{"https://shop.example:443,*":{"setting":1}}}}}}"#,
+        )
+        .unwrap();
+
+        apply_geolocation_pref(&dir, true).unwrap();
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(&prefs).unwrap()).unwrap();
+        assert_eq!(
+            written.pointer("/profile/default_content_setting_values/geolocation"),
+            Some(&json!(2)),
+            "禁用要写成拒绝"
+        );
+        // 通知和搜索引擎是别人的，不能跟着定位一起改掉。
+        assert_eq!(
+            written.pointer("/profile/default_content_setting_values/notifications"),
+            Some(&json!(2))
+        );
+        assert_eq!(
+            written.pointer("/default_search_provider_data/template_url_data/keyword"),
+            Some(&json!("duckduckgo"))
+        );
+        assert_eq!(
+            written.pointer("/profile/content_settings/exceptions/geolocation"),
+            Some(&json!({})),
+            "按网站允许过的定位要清掉"
+        );
+        assert!(
+            written
+                .pointer("/profile/content_settings/exceptions/cookies")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .contains_key("https://shop.example:443,*"),
+            "别的内容设置留下"
+        );
+        // 已经是拒绝、例外也空着：不再改文件。
+        let bytes = std::fs::read(&prefs).unwrap();
+        apply_geolocation_pref(&dir, true).unwrap();
+        assert_eq!(std::fs::read(&prefs).unwrap(), bytes);
+
+        apply_geolocation_pref(&dir, false).unwrap();
+        let again: Value = serde_json::from_str(&std::fs::read_to_string(&prefs).unwrap()).unwrap();
+        assert_eq!(
+            again.pointer("/profile/default_content_setting_values/geolocation"),
+            Some(&json!(3)),
+            "改回其他选项要写成询问，禁用不能留下来"
+        );
+
+        // 读不了的文件保持原样，不能盖成一份只剩定位的新文件。
+        std::fs::write(&prefs, "{这个不是 json").unwrap();
+        assert!(apply_geolocation_pref(&dir, true).is_err());
+        assert_eq!(std::fs::read_to_string(&prefs).unwrap(), "{这个不是 json");
+        let _ = std::fs::remove_dir_all(&dir);
+
+        // 还没有配置文件：直接写出拒绝。
+        let fresh = temp_profile();
+        apply_geolocation_pref(&fresh, true).unwrap();
+        let created: Value = serde_json::from_str(
+            &std::fs::read_to_string(fresh.join("Default").join("Preferences")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            created.pointer("/profile/default_content_setting_values/geolocation"),
+            Some(&json!(2))
+        );
+        let _ = std::fs::remove_dir_all(&fresh);
     }
 }
 
