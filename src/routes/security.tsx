@@ -111,7 +111,7 @@ function SecurityPage() {
         ) : null}
 
         {attention.length && passed.length ? (
-          <details className="rounded-lg border border-line bg-canvas">
+          <details className="rounded-lg border border-line bg-surface">
             <summary className="cursor-pointer px-5 py-3 text-[13px] font-medium text-muted hover:text-ink">
               已通过的检查（{passed.length}）
             </summary>

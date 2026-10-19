@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, FlaskConical, Play, Square } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge, Button, Field, Input, Panel, Select, Textarea } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, Field, Input, Panel, Select, Textarea } from "@/components/ui";
 import { EnvGlyph } from "@/components/env-glyph";
 import { ENGINE_META } from "@/lib/engines-meta";
 import { classifyFlags, type ClassifiedFlag, type EngineClass } from "@/lib/kernel/host-api";
@@ -41,6 +41,7 @@ function EnvDetail() {
   const mayEdit = canEdit(useEnclave((s) => s.session.role));
   const { folders } = useFolders();
   const [tab, setTab] = useState<"overview" | "fingerprint" | "flags" | "timeline">("overview");
+  const [pendingTab, setPendingTab] = useState<typeof tab | null>(null);
   const [flagsDirty, setFlagsDirty] = useState(false);
   const onFlagsDirty = useCallback((dirty: boolean) => setFlagsDirty(dirty), []);
   const [collect, setCollect] = useState<{ busy: boolean; note?: string; bad?: boolean }>({
@@ -90,7 +91,7 @@ function EnvDetail() {
             <div className="flex gap-2">
             {status === "running" ? (
               <Button onClick={() => void stopEnv(env.id)}>
-                <Square className="size-3" />
+                <Square className="size-3.5 fill-current" />
                 {t("stop")}
               </Button>
             ) : (
@@ -100,7 +101,7 @@ function EnvDetail() {
                 title={status === "starting" ? t("starting") : undefined}
                 onClick={() => void startEnv(env)}
               >
-                <Play className="size-3" />
+                <Play className="size-3.5 fill-current" />
                 {status === "starting" ? t("starting") : t("start")}
               </Button>
             )}
@@ -124,7 +125,8 @@ function EnvDetail() {
                 key={key}
                 onClick={() => {
                   if (tab === "flags" && flagsDirty && key !== "flags") {
-                    if (!window.confirm("启动参数还没保存，离开会丢掉这些改动。")) return;
+                    setPendingTab(key);
+                    return;
                   }
                   setTab(key);
                 }}
@@ -138,6 +140,26 @@ function EnvDetail() {
               </button>
             ))}
         </div>
+
+        {pendingTab ? (
+          <Dialog open onOpenChange={(open) => !open && setPendingTab(null)}>
+            <DialogContent title="启动参数还没保存">
+              <p className="text-sm text-muted">离开这一页会丢掉还没保存的启动参数。</p>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button onClick={() => setPendingTab(null)}>留下</Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setTab(pendingTab);
+                    setPendingTab(null);
+                  }}
+                >
+                  仍要离开
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        ) : null}
 
         {tab !== "timeline" && (status === "running" || status === "starting") ? (
           <p className="mb-3 text-[13px] text-subtle">修改会保存，停止后再启动才进入浏览器。</p>

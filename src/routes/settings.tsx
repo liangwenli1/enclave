@@ -36,7 +36,7 @@ function SettingsPage() {
           <VaultPanel />
         </div>
         {mayEdit ? <SyncPanel /> : <OperatorPanel />}
-        <details className="rounded-lg border border-line bg-canvas">
+        <details className="rounded-lg border border-line bg-surface">
           <summary className="cursor-pointer px-5 py-4 text-sm font-semibold text-ink hover:bg-surface-2">
             高级设置
           </summary>

@@ -972,7 +972,42 @@ fn apply_geolocation_pref(user_data: &Path, blocked: bool) -> std::io::Result<()
             .unwrap()
             .insert("geolocation".into(), json!({}));
     }
-    let text = serde_json::to_string(&prefs)
+    write_preferences(user_data, &prefs)
+}
+
+/// Chromium 的网络预测：2 是「从不」，DNS 预解析也在里面。
+const NETWORK_PREDICTION_NEVER: i64 = 2;
+
+/// 走代理时关掉本机预解析。
+///
+/// 网页自己的连接已经由 SOCKS5 把域名交给出口解析，不需要 `--host-resolver-rules`。
+/// 那条参数在内核的危险名单里，每个标签顶上都会出现「不受支持的命令行标记」。
+/// 预解析仍会在本机查 DNS，所以把网络预测写成「从不」。
+fn apply_proxy_dns_pref(user_data: &Path) -> std::io::Result<()> {
+    let path = user_data.join("Default").join("Preferences");
+    let mut prefs = read_preferences(&path)?;
+    if prefs
+        .pointer("/net/network_prediction_options")
+        .and_then(Value::as_i64)
+        == Some(NETWORK_PREDICTION_NEVER)
+    {
+        return Ok(());
+    }
+    ensure_object(&mut prefs, "net")
+        .as_object_mut()
+        .unwrap()
+        .insert(
+            "network_prediction_options".into(),
+            json!(NETWORK_PREDICTION_NEVER),
+        );
+    write_preferences(user_data, &prefs)
+}
+
+fn write_preferences(user_data: &Path, prefs: &Value) -> std::io::Result<()> {
+    let dir = user_data.join("Default");
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join("Preferences");
+    let text = serde_json::to_string(prefs)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     // 先写临时文件。直接盖掉的话，写到一半进程没了，整个环境的配置就空了。
     let tmp = dir.join("Preferences.enclave-tmp");
@@ -1295,6 +1330,96 @@ pub fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
+/// macOS 上不要用 Cocoa 的 `-AppleLanguages (xx-YY)` 去改 Intl。
+///
+/// Chromium 把不带 `-` 的参数当成启动网址。`(en-US)` 会打开 `http://(en-us)/`，
+/// 代理开着时就是「无法访问此网站」。语言参数只走 `--lang` 和 `--accept-lang`。
+/// Intl 另写在这个内核自己的用户默认里，见 [`apply_macos_intl_defaults`]。
+fn macos_locale_override_args(_locale: &str) -> Vec<String> {
+    Vec::new()
+}
+
+/// `en-US` 这样的语言标签。拒绝括号、空格和路径，避免写进用户默认或命令行。
+fn apple_locale_pair(locale: &str) -> Option<(String, String)> {
+    let mut parts = locale.split('-');
+    let lang = parts.next()?;
+    if !(2..=3).contains(&lang.len()) || !lang.bytes().all(|b| b.is_ascii_alphabetic()) {
+        return None;
+    }
+    let mut extra = 0;
+    for part in parts {
+        extra += 1;
+        if extra > 2
+            || !(2..=8).contains(&part.len())
+            || !part.bytes().all(|b| b.is_ascii_alphanumeric())
+        {
+            return None;
+        }
+    }
+    Some((locale.to_string(), locale.replace('-', "_")))
+}
+
+/// 从这个 `.app` 的 Info.plist 读 bundle id。只接受字母、数字、点和横线。
+fn bundle_identifier(exe: &Path) -> std::io::Result<String> {
+    let plist = exe
+        .parent()
+        .and_then(|p| p.parent())
+        .map(|p| p.join("Info.plist"))
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "没有 Info.plist"))?;
+    let text = std::fs::read_to_string(&plist)?;
+    let key = "<key>CFBundleIdentifier</key>";
+    let rest = text
+        .find(key)
+        .and_then(|i| text[i + key.len()..].find("<string>").map(|j| i + key.len() + j))
+        .map(|start| &text[start + "<string>".len()..])
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "Info.plist 里没有 bundle id")
+        })?;
+    let id = rest
+        .split_once("</string>")
+        .map(|(id, _)| id.trim())
+        .filter(|id| {
+            !id.is_empty()
+                && id.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+        })
+        .ok_or_else(|| {
+            std::io::Error::new(std::io::ErrorKind::InvalidData, "bundle id 不符合预期")
+        })?;
+    Ok(id.to_string())
+}
+
+/// macOS 上 Chromium 的 Intl 读的是这个 App 的用户默认，不读 `--lang`。
+///
+/// 系统语言是中文时，`--lang=en-US` 能让 `navigator.language` 变成 en-US，
+/// 渲染进程仍会带着 `--lang=zh-CN`，`Intl` 也就还是 zh-CN。
+/// 这里只改该内核 bundle 的 `AppleLanguages` / `AppleLocale`，不放进命令行。
+#[cfg(target_os = "macos")]
+fn apply_macos_intl_defaults(exe: &Path, locale: &str) -> std::io::Result<()> {
+    let (language, apple_locale) = apple_locale_pair(locale).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("语言标签无效：{locale}"))
+    })?;
+    let bundle = bundle_identifier(exe)?;
+    defaults_write(&bundle, "AppleLanguages", &["-array", &language])?;
+    defaults_write(&bundle, "AppleLocale", &["-string", &apple_locale])?;
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn defaults_write(domain: &str, key: &str, extra: &[&str]) -> std::io::Result<()> {
+    let output = std::process::Command::new("/usr/bin/defaults")
+        .arg("write")
+        .arg(domain)
+        .arg(key)
+        .args(extra)
+        .output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr);
+    Err(std::io::Error::other(detail.trim().to_string()))
+}
+
 async fn pick_port() -> Result<u16> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let port = listener.local_addr()?.port();
@@ -1481,9 +1606,16 @@ pub async fn start_environment(
             }
             if let Some(b) = &bridge {
                 // 浏览器只认识本机这座桥；账号密码和上游地址都不出现在它的命令行里。
+                apply_proxy_dns_pref(&user_data_dir).map_err(|e| {
+                    (
+                        "SPAWN_FAILED".into(),
+                        format!("代理的 DNS 设置没写进环境：{e}"),
+                    )
+                })?;
                 args.push(format!("--proxy-server=socks5://127.0.0.1:{}", b.port));
-                // 本机一律不做 DNS 查询（预解析也不行），域名全部交给代理出口去解析。
-                args.push("--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1".into());
+                // 不传 --host-resolver-rules。内核把它列进危险参数，标签顶上会一直
+                // 显示「不受支持的命令行标记」。SOCKS5 握手带的是域名，解析在出口完成；
+                // 预解析已在上面的配置里关掉。
                 args.push("--proxy-bypass-list=<-loopback>".into());
                 args.push("--disable-quic".into());
                 args.push("--dns-over-https-mode=off".into());
@@ -1552,12 +1684,9 @@ pub async fn start_environment(
             if cfg!(target_os = "linux") {
                 env.push(("LANGUAGE".to_string(), locale.replace('-', "_")));
             }
-            // macOS 上取的是系统语言。Cocoa 程序认命令行里的 `-AppleLanguages (xx-YY)`，
-            // 它会盖掉系统设置——**没有 Mac 真机，这一条没验过**；实验室的一致性检查会指出来。
-            if cfg!(target_os = "macos") {
-                args.push("-AppleLanguages".to_string());
-                args.push(format!("({locale})"));
-            }
+            // macOS 的 Intl 不看 --lang。语言默认写在启动前的用户默认里，
+            // 这里不再把 `-AppleLanguages` 放进参数，避免 `(en-US)` 被当成网址。
+            args.extend(macos_locale_override_args(&locale));
             (args, env, warned)
         }
         Engine::Firefox => {
@@ -1604,6 +1733,15 @@ pub async fn start_environment(
         }
     };
 
+    if cfg!(target_os = "macos") && k.engine == Engine::Chromium {
+        #[cfg(target_os = "macos")]
+        apply_macos_intl_defaults(&exe, &locale).map_err(|e| {
+            (
+                "SPAWN_FAILED".into(),
+                format!("Intl 区域没有写进内核：{e}"),
+            )
+        })?;
+    }
     let mut cmd = Command::new(&exe);
     cmd.args(&args)
         .stdin(Stdio::null())
@@ -1899,11 +2037,29 @@ mod geolocation_tests {
         );
         let _ = std::fs::remove_dir_all(&fresh);
     }
+
+    #[test]
+    fn proxy_turns_off_network_prediction_without_touching_other_prefs() {
+        let dir = temp_profile();
+        let prefs = dir.join("Default").join("Preferences");
+        std::fs::create_dir_all(prefs.parent().unwrap()).unwrap();
+        std::fs::write(&prefs, r#"{"net":{"network_prediction_options":0},"profile":{"name":"keep"}}"#).unwrap();
+
+        apply_proxy_dns_pref(&dir).unwrap();
+        let written: Value = serde_json::from_str(&std::fs::read_to_string(&prefs).unwrap()).unwrap();
+        assert_eq!(written.pointer("/net/network_prediction_options"), Some(&json!(2)));
+        assert_eq!(written.pointer("/profile/name"), Some(&json!("keep")));
+
+        let bytes = std::fs::read(&prefs).unwrap();
+        apply_proxy_dns_pref(&dir).unwrap();
+        assert_eq!(std::fs::read(&prefs).unwrap(), bytes);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]
 mod env_id_tests {
-    use super::valid_env_id;
+    use super::{apple_locale_pair, bundle_identifier, macos_locale_override_args, valid_env_id};
 
     #[test]
     fn rejects_anything_that_could_leave_the_profiles_dir() {
@@ -1927,6 +2083,57 @@ mod env_id_tests {
         for ok in ["env_mfx3k2a9b1c2d3e4", "e1", "A-b_9"] {
             assert!(valid_env_id(ok), "{ok:?} 应该通过");
         }
+    }
+
+    #[test]
+    fn macos_locale_override_is_not_a_url() {
+        let args = macos_locale_override_args("en-US");
+        assert!(
+            args.iter().all(|arg| arg.starts_with('-')),
+            "Chromium 会把 {args:?} 当成网址打开"
+        );
+        assert!(
+            args.iter().all(|arg| !arg.contains('(')),
+            "括号里的语言标签会被当成主机名：{args:?}"
+        );
+    }
+
+    #[test]
+    fn apple_locale_pair_matches_intl_and_rejects_a_url() {
+        assert_eq!(
+            apple_locale_pair("en-US"),
+            Some(("en-US".into(), "en_US".into()))
+        );
+        assert_eq!(
+            apple_locale_pair("zh-CN"),
+            Some(("zh-CN".into(), "zh_CN".into()))
+        );
+        for bad in ["", "(en-US)", "en US", "en-US/foo", "../en", "http://en-us"] {
+            assert_eq!(apple_locale_pair(bad), None, "{bad:?} 不该当成语言");
+        }
+    }
+
+    #[test]
+    fn bundle_identifier_reads_the_app_plist() {
+        let root = std::env::temp_dir().join(format!("enclave-plist-{}", std::process::id()));
+        let macos = root.join("Contents/MacOS");
+        std::fs::create_dir_all(&macos).unwrap();
+        std::fs::write(
+            root.join("Contents/Info.plist"),
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key>
+<string>org.chromium.Chromium</string>
+</dict></plist>"#,
+        )
+        .unwrap();
+        let exe = macos.join("Chromium");
+        std::fs::write(&exe, b"").unwrap();
+        assert_eq!(
+            bundle_identifier(&exe).unwrap(),
+            "org.chromium.Chromium"
+        );
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 

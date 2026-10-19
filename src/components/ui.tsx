@@ -1,10 +1,11 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { cva, type VariantProps } from "class-variance-authority";
-import { Check, Copy, X } from "lucide-react";
-import { useState } from "react";
+import { Check, ChevronDown, Copy, X } from "lucide-react";
+import { Children, isValidElement, useState } from "react";
 import type {
   ButtonHTMLAttributes,
+  ChangeEvent,
   InputHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
@@ -15,14 +16,14 @@ import { cn } from "@/lib/cn";
 /* 组件规格见 DESIGN.md。蓝色只给主操作（一屏一个）和"正在运行 / 已选中"。 */
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-1.5 rounded-md font-semibold whitespace-nowrap select-none transition-colors duration-150 disabled:cursor-not-allowed",
+  "inline-flex items-center justify-center gap-1.5 rounded-full font-semibold whitespace-nowrap select-none transition-[color,background-color,border-color,transform,box-shadow] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/35 active:translate-y-px disabled:cursor-not-allowed disabled:active:translate-y-0",
   {
     variants: {
       variant: {
         primary:
-          "bg-accent text-accent-fg hover:brightness-110 disabled:bg-accent-dim disabled:text-accent-fg disabled:hover:brightness-100",
+          "bg-accent text-accent-fg shadow-[0_6px_16px_-8px_rgb(35_107_249/0.9)] hover:brightness-110 disabled:bg-accent-dim disabled:text-accent-fg disabled:shadow-none disabled:hover:brightness-100",
         secondary:
-          "bg-canvas text-ink border border-line-strong hover:bg-surface-2 hover:border-ink disabled:text-faint disabled:border-line disabled:hover:bg-canvas",
+          "bg-surface text-ink border border-line-strong hover:bg-surface-2 hover:border-ink disabled:text-faint disabled:border-line disabled:hover:bg-surface",
         ghost:
           "text-muted hover:bg-surface hover:text-ink disabled:text-faint disabled:hover:bg-transparent disabled:hover:text-faint",
         danger:
@@ -48,15 +49,104 @@ export function Button({
 }
 
 const fieldBase =
-  "h-10 w-full rounded-md border border-line-strong bg-canvas px-3.5 text-sm text-ink placeholder:text-faint " +
+  "h-10 w-full rounded-lg border border-line-strong bg-surface px-3.5 text-sm text-ink placeholder:text-faint " +
   "focus-visible:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/30 " +
   "read-only:bg-surface-2 disabled:bg-surface-2 disabled:text-subtle";
 
-export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+function optionText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(optionText).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) return optionText(node.props.children);
+  return "";
+}
+
+/** 展开列表跟对话框同一套，不弹出系统菜单。调用方式和 <select> 一样。 */
+export function Select({
+  className,
+  children,
+  disabled,
+  value,
+  onChange,
+  id,
+  title,
+  "aria-label": ariaLabel,
+}: SelectHTMLAttributes<HTMLSelectElement>) {
+  const [open, setOpen] = useState(false);
+  const options: { value: string; label: string; disabled: boolean }[] = [];
+  Children.forEach(children, (child) => {
+    if (!isValidElement<{ value?: string | number; disabled?: boolean; children?: ReactNode }>(child))
+      return;
+    const label = optionText(child.props.children).replace(/\s+/g, " ").trim();
+    const optionValue = child.props.value === undefined ? label : String(child.props.value);
+    options.push({
+      value: optionValue,
+      label: label || optionValue || "—",
+      disabled: Boolean(child.props.disabled),
+    });
+  });
+  const current = String(value ?? "");
+  const selected = options.find((option) => option.value === current);
+  const pick = (next: string) => {
+    const event = { target: { value: next }, currentTarget: { value: next } };
+    onChange?.(event as ChangeEvent<HTMLSelectElement>);
+  };
+
   return (
-    <select className={cn(fieldBase, className)} {...props}>
-      {children}
-    </select>
+    <DropdownMenuPrimitive.Root open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenuPrimitive.Trigger
+        id={id}
+        type="button"
+        title={title}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        className={cn(
+          fieldBase,
+          "flex items-center justify-between gap-2 pr-3 text-left",
+          open && "border-accent ring-2 ring-accent/30",
+          className,
+        )}
+      >
+        <span className="min-w-0 flex-1 truncate">{selected?.label || current}</span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-subtle transition-transform duration-150",
+            open && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
+      </DropdownMenuPrimitive.Trigger>
+      <DropdownMenuPrimitive.Portal>
+        <DropdownMenuPrimitive.Content
+          align="start"
+          sideOffset={4}
+          collisionPadding={8}
+          className="enclave-menu z-[80] max-h-64 min-w-[var(--radix-dropdown-menu-trigger-width)] overflow-y-auto rounded-lg border border-line-strong bg-surface p-1 shadow-[0_16px_40px_-12px_rgb(11_27_51/0.28)]"
+        >
+          {options.length === 0 ? (
+            <div className="px-2.5 py-2 text-[13px] text-subtle">没有可选项</div>
+          ) : (
+            options.map((option, index) => {
+              const active = option.value === current;
+              return (
+                <DropdownMenuPrimitive.Item
+                  key={`${index}:${option.value}`}
+                  disabled={option.disabled}
+                  onSelect={() => pick(option.value)}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none data-[disabled]:cursor-not-allowed data-[disabled]:text-faint data-[highlighted]:bg-surface-2",
+                    active ? "font-medium text-accent-text" : "text-ink",
+                  )}
+                >
+                  <span className="min-w-0 flex-1 text-left">{option.label}</span>
+                  {active ? <Check className="size-3.5 shrink-0" aria-hidden="true" /> : null}
+                </DropdownMenuPrimitive.Item>
+              );
+            })
+          )}
+        </DropdownMenuPrimitive.Content>
+      </DropdownMenuPrimitive.Portal>
+    </DropdownMenuPrimitive.Root>
   );
 }
 
@@ -216,7 +306,7 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#070b14]/55" />
+      <DialogPrimitive.Overlay className="enclave-overlay fixed inset-0 z-50 bg-[#070b14]/55" />
       <DialogPrimitive.Content
         className={cn(
           "enclave-dialog fixed top-1/2 left-1/2 z-50 max-h-[calc(100dvh-24px)] w-[min(560px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-lg border border-line p-6",
@@ -259,7 +349,7 @@ export function MenuContent({
       <DropdownMenuPrimitive.Content
         align={align}
         sideOffset={6}
-        className="z-50 min-w-44 rounded-lg border border-ink bg-canvas p-1 shadow-[0_12px_32px_rgb(0_0_0/0.18)]"
+        className="enclave-menu z-50 min-w-44 rounded-lg border border-line-strong bg-surface p-1 shadow-[0_16px_40px_-12px_rgb(11_27_51/0.28)]"
       >
         {children}
       </DropdownMenuPrimitive.Content>
@@ -294,7 +384,7 @@ export function MenuItem({
 
 export function Panel({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <section className={cn("rounded-lg border border-line bg-canvas", className)}>
+    <section className={cn("rounded-xl border border-line bg-surface shadow-[0_10px_28px_-18px_rgb(15_35_70/0.45)]", className)}>
       {children}
     </section>
   );

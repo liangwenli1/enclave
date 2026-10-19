@@ -243,8 +243,10 @@ Instrument Sans 与 JetBrains Mono。蓝色只给这一屏的一个主按钮，�
 
 - 删掉引导里的「选择档位」（那等于让用户自己发许可证）。
 - 原来的 `apiEnabled` 开关打开后什么也不会发生；现在它背后是真的本机 API（见 4.10）。
-- 删掉工作台里的出口 IP 探测（它探的是本机网络，不是环境出口，会让人看错；
-  而且那是一个发往第三方的请求）。
+- 删掉工作台里对本机网络的出口探测（它探的不是代理出口，会让人看错）。
+  代理页每一行有「编辑」和「检测」。编辑可改名称、地址、协议、账号和国家；密码留空则保持原密码，改了用户名必须重填。检测经这条代理自己出去查出口地址，失败写在这一行。
+- 下拉框展开的是工作台自己的列表，不弹出系统菜单。移入回收站、离开未保存的启动参数，确认都用工作台对话框。
+- 工作台是浅灰页面、白色侧栏和表格、胶囊按钮。侧栏顶部的「新建环境」和每一行的「启动」用实心蓝 `#236bf9`。官网首页首屏是黑底白字，主按钮同一颗蓝。套餐、文档和账号页仍是浅色。
 - 内部状态词（`admitted` / `hash_mismatch`）换成中文，并给出下一步怎么做。
 - 删掉「没有回滚版本」这种给不出原因的灰按钮、空的选择框、模板遗留页面。
 
@@ -337,7 +339,8 @@ Instrument Sans 与 JetBrains Mono。蓝色只给这一屏的一个主按钮，�
 
 - 每个带代理的环境在 127.0.0.1 上有一个只属于它的 SOCKS5 入口，浏览器只认识这个入口；
   向上游（HTTP / HTTPS / SOCKS5）的认证由 Host 完成。账号密码不出现在浏览器的命令行里。
-- 域名原样交给上游解析，并用 `--host-resolver-rules` 禁掉本机 DNS 查询（含预解析）；
+- 域名原样交给上游解析：SOCKS5 握手里带的是域名。不再传 `--host-resolver-rules`，
+  那条参数会在每个标签顶上显示「不受支持的命令行标记」。预解析改为写入「网络预测：从不」。
   只做 TCP，UDP 关联一律拒绝。
 - 启动前先经这条路探一次。失败就拒启并给出原因：`PROXY_UNREACHABLE` / `PROXY_AUTH_FAILED` /
   `PROXY_REFUSED` / `PROXY_INVALID`。
@@ -362,7 +365,7 @@ Instrument Sans 与 JetBrains Mono。蓝色只给这一屏的一个主按钮，�
 | 平台、系统版本、品牌、核数、时区、语言 | 按启动参数生效 |
 | 内存大小、Canvas / 文字测量 / ClientRects 噪声 | 由种子决定，换种子就变 |
 | **屏幕分辨率、缩放** | **改不了**。二进制里有 `--fingerprint-screen-width/height`、`--fingerprint-device-scale-factor`，传了不生效，网页看到的始终是真实显示器 |
-| Intl 区域（日期、数字的格式） | Linux 上只看 `LANGUAGE` 环境变量，不看 `--lang`：只传 `--lang=de` 时 `navigator.language` 是 de-DE 而 Intl 还是 en-US。Windows 上 `--lang` 就够；macOS 取系统设置，启动参数改不了 |
+| Intl 区域（日期、数字的格式） | Linux 上只看 `LANGUAGE` 环境变量，不看 `--lang`：只传 `--lang=de` 时 `navigator.language` 是 de-DE 而 Intl 还是 en-US。Windows 上 `--lang` 就够。macOS 上 Intl 读这个内核自己的用户默认，不读 `--lang`；启动前把该内核的 `AppleLanguages` 和 `AppleLocale` 写成环境语言。不把 `-AppleLanguages (xx-YY)` 放进命令行，否则会打开 `http://(en-us)/` |
 
 据此：
 
@@ -816,7 +819,6 @@ iframe、多标签页、定时（Host 是随行进程，理由同批量）。
 | 支付网关 | 付费开通是人工的 | 接支付 → 回调调 admin 改档 |
 | 窗口同步 | 原套餐表里的 Pro 卖点，未实现 | 规格已定，见 [TODO.md](../TODO.md) §1 |
 | 同步还没覆盖的 | localStorage / IndexedDB / 浏览记录 / 内核存的网站密码都不上云，换电脑之后购物车是空的 | 要连内核用户目录一起打包，体量另议。代理密码已经走共用钥匙同步 |
-| macOS 上的 Intl 区域 | 内核取的是系统语言。已按 Cocoa 的 `-AppleLanguages (xx-YY)` 启动参数实装（它会盖掉系统设置）——**没有 Mac 真机，这一条没验过**；实验室的一致性检查会指出来。真机上不生效就回到「靠用户改系统语言」。 |
 | 屏幕分辨率（Chromium 类） | 内核 148 改不了，同一台电脑上所有环境相同。Firefox 类可以改 | 跟上游；自建内核时补 |
 | Firefox 类在 Windows / macOS 上 | 启动路径只在 Linux 上实测过；Windows 的 `-wait-for-browser`、macOS 的 `.app` 解包和钥匙串提示都没有真机验证 | 在两种真机上各过一遍第 5 节 |
 | win/mac 内核行为基线 | 两个平台仍在预览通道，需用户明确同意 | 在对应系统上跑 spawn/沙箱基线后转稳定 |

@@ -288,6 +288,7 @@ async fn main() {
             put(env_put).delete(env_delete),
         )
         .route("/v1/store/proxies/:id", put(proxy_put).delete(proxy_delete))
+        .route("/v1/store/proxies/:id/check", post(proxy_check))
         .route(
             "/v1/store/workflows/:id",
             put(workflow_put).delete(workflow_delete),
@@ -754,6 +755,39 @@ async fn proxy_delete(State(state): State<Arc<App>>, Path(id): Path<String>) -> 
     match state.store.delete(Kind::Proxy, &id) {
         Ok(()) => Json(json!({ "ok": true })),
         Err(e) => refuse("STORE_FAILED", format!("没删掉：{e:#}")),
+    }
+}
+
+/// 经这条代理查出口。密码留在本机服务里，页面只拿到查到的地址。
+/// 走和启动环境同一条桥：不通、账号不对，原因和启动失败是同一句。
+async fn proxy_check(State(state): State<Arc<App>>, Path(id): Path<String>) -> Json<Value> {
+    let url = {
+        let vault = state.vault.lock().await;
+        match state.store.proxy_url(vault.key(), &id) {
+            Ok(url) => url,
+            Err((code, message)) => return refuse(&code, message),
+        }
+    };
+    let upstream = match enclave_host::bridge::Upstream::parse(&url) {
+        Ok(upstream) => upstream,
+        Err(_) => return refuse("PROXY_INVALID", "代理地址不完整。"),
+    };
+    let bridge = match enclave_host::bridge::Bridge::start(upstream).await {
+        Ok(bridge) => bridge,
+        Err(e) => return refuse("SPAWN_FAILED", format!("检测没能开始：{e}")),
+    };
+    match enclave_host::bridge::probe(bridge.port).await {
+        Ok(info) => Json(json!({
+            "ok": true,
+            "ip": info.ip,
+            "country": info.country,
+            "city": info.city,
+            "timezone": info.timezone,
+        })),
+        Err(_) => match bridge.last_failure().await {
+            Some(failure) => refuse(failure.code, failure.message),
+            None => refuse("PROXY_CHECK_FAILED", "代理通了，但没有查到出口地址。"),
+        },
     }
 }
 
@@ -2901,6 +2935,7 @@ mod tests {
             (Method::POST, "/v1/vault/unlock"),
             (Method::POST, "/v1/kernel/admit"),
             (Method::GET, "/v1/session"),
+            (Method::POST, "/v1/store/proxies/prx_1/check"),
         ] {
             assert!(!operator_blocked(&m, p), "{m} {p} 不该拦");
         }

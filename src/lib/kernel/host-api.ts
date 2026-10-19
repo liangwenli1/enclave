@@ -190,6 +190,23 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 /**
  * 调本机服务的一个 JSON 接口。连不上时回一个和业务失败同样形状的结果，调用方不用到处 try/catch。
  */
+export type ProxyCheck =
+  | { ok: true; ip: string; country?: string | null; city?: string | null; timezone?: string | null }
+  | CloudFailure;
+
+/** 经这条代理查出口。比普通调用更久：上游和查询服务都可能要十几秒。 */
+export async function checkProxy(id: string): Promise<ProxyCheck> {
+  try {
+    return await call<ProxyCheck>(`/v1/store/proxies/${encodeURIComponent(id)}/check`, {
+      method: "POST",
+      body: "{}",
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch {
+    return { ok: false, code: "HOST_UNAVAILABLE", message: "无法连接本机服务。" };
+  }
+}
+
 export async function hostJson<T extends { ok: true }>(
   path: string,
   method: "GET" | "POST" | "PUT" | "DELETE" = "GET",

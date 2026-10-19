@@ -9,6 +9,7 @@ import {
   KeyRound,
   Lock,
   Menu as MenuIcon,
+  Plus,
   Puzzle,
   Search,
   Settings,
@@ -24,6 +25,7 @@ import { cn } from "@/lib/cn";
 import { configureApi, getKernelView, hostBaseUrl, type ExitInfo } from "@/lib/kernel/host-api";
 import { launchSpec, stopEnv } from "@/lib/host";
 import { t } from "@/lib/i18n";
+import { canEdit } from "@/lib/session";
 import { syncNow, useEnclave } from "@/lib/store";
 import { lockVault, resetVault, unlockVault } from "@/lib/vault";
 
@@ -74,7 +76,9 @@ function currentTitle(pathname: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   // 锁没锁只有一个事实来源：本机服务说开着应用锁、而且还没输过口令。
   const locked = useEnclave((s) => s.vault.exists && !s.vault.unlocked);
+  const mayEdit = useEnclave((s) => canEdit(s.session.role));
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const navigate = useNavigate();
   const [cmdOpen, setCmdOpen] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
 
@@ -91,11 +95,28 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-full min-h-full bg-canvas text-muted">
-      <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line bg-canvas md:flex">
+      <aside className="hidden w-[232px] shrink-0 flex-col border-r border-line bg-surface md:flex">
         <div className="flex h-14 items-center gap-2.5 px-5">
           <BrandMark />
           <span className="text-[17px] font-bold tracking-[-0.03em] text-ink">Enclave</span>
         </div>
+        {mayEdit ? (
+          <div className="px-3 pb-2">
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full"
+              onClick={() => {
+                sessionStorage.setItem("enclave-create", "1");
+                void navigate({ to: "/" });
+                window.dispatchEvent(new Event("enclave-create"));
+              }}
+            >
+              <Plus className="size-4" />
+              新建环境
+            </Button>
+          </div>
+        ) : null}
         <nav className="app-nav min-h-0 flex-1 overflow-auto">
           {NAV_GROUPS.map((group, index) => (
             <div key={group.label} className={index ? "mt-4" : undefined}>
@@ -139,7 +160,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <RecoveryBanner pathname={pathname} />
-        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-line bg-canvas px-4">
+        <header className="sticky top-0 z-10 flex h-14 items-center gap-2 border-b border-line bg-surface px-4">
           <button
             className="grid size-9 place-items-center rounded-md text-subtle hover:bg-surface-2 hover:text-ink md:hidden"
             onClick={() => setMobileNav((v) => !v)}
@@ -156,7 +177,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               onClick={() => setCmdOpen(true)}
               title={t("command")}
               aria-label={t("command")}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-line px-3 text-[13px] text-subtle hover:border-ink hover:text-ink"
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-line bg-surface px-3 text-[13px] text-subtle hover:border-ink hover:text-ink"
             >
               <Search className="size-3.5" />
               <span className="hidden sm:inline">搜索</span>
@@ -169,7 +190,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
 
         {mobileNav ? (
-          <div className="border-b border-line bg-canvas md:hidden">
+          <div className="border-b border-line bg-surface md:hidden">
             {NAV_GROUPS.map((group) => (
               <div key={group.label}>
                 <p className="px-4 pt-3 pb-1 text-[11px] font-medium tracking-wide text-faint">

@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="7" fill="#faff69"/>
-  <rect x="12" y="12" width="8" height="8" rx="2" fill="#0a0a0a"/>
+  <rect width="32" height="32" rx="8" fill="#ffffff"/>
+  <path transform="translate(3 3)" d="M16.47 12.56A3.50 3.50 0 1 1 16.09 11.35M7.01 12.64A6.00 6.00 0 0 1 13.03 7.00M17.04 8.56A6.00 6.00 0 1 1 8.77 8.74M4.77 15.12A8.50 8.50 0 0 1 20.59 9.18M20.93 16.06A8.50 8.50 0 0 1 5.40 16.80M4.50 12.91A8.50 8.50 0 0 1 16.22 5.13M14.54 2.11A11.00 11.00 0 0 1 19.63 21.78M11.97 23.95A11.00 11.00 0 0 1 9.09 2.72M16.39 2.53A11.00 11.00 0 0 1 21.81 19.59" fill="none" stroke="#236bf9" stroke-width="1.9" stroke-linecap="round"/>
 </svg>

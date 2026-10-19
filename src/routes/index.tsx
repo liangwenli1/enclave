@@ -49,6 +49,7 @@ function EnvironmentsPage() {
   const [trash, setTrash] = useState(false);
   const [wizard, setWizard] = useState(false);
   const [purging, setPurging] = useState<{ id: string; name: string; error?: string } | null>(null);
+  const [trashing, setTrashing] = useState<{ id: string; name: string } | null>(null);
   // 批量选中的环境。换搜索、进出回收站都清空——选了看不见的东西最容易出事。
   const [picked, setPicked] = useState<string[]>([]);
   const { folders, reload: reloadFolders } = useFolders();
@@ -73,6 +74,17 @@ function EnvironmentsPage() {
   useEffect(() => {
     setPicked([]);
   }, [query, trash, folderFilter]);
+
+  useEffect(() => {
+    const open = () => {
+      if (sessionStorage.getItem("enclave-create") !== "1") return;
+      sessionStorage.removeItem("enclave-create");
+      if (canEdit(useEnclave.getState().session.role)) setWizard(true);
+    };
+    open();
+    window.addEventListener("enclave-create", open);
+    return () => window.removeEventListener("enclave-create", open);
+  }, []);
 
   // 芯片上的数量来自服务器登记。环境在第一次启动时才登记上，所以环境数或运行数一变就重取，
   // 不然刚跑完流程还显示「默认 0」。
@@ -305,16 +317,17 @@ function EnvironmentsPage() {
                             <>
                               {status === "running" ? (
                                 <Button onClick={() => void stopEnv(env.id)}>
-                                  <Square className="size-3" />
+                                  <Square className="size-3.5 fill-current" />
                                   {t("stop")}
                                 </Button>
                               ) : (
                                 <Button
+                                  variant="primary"
                                   disabled={status === "starting"}
                                   title={status === "starting" ? t("starting") : undefined}
                                   onClick={() => void startEnv(env)}
                                 >
-                                  <Play className="size-3" />
+                                  <Play className="size-3.5 fill-current" />
                                   {status === "starting" ? t("starting") : t("start")}
                                 </Button>
                               )}
@@ -324,15 +337,7 @@ function EnvironmentsPage() {
                                 title="移入回收站"
                                 aria-label="移入回收站"
                                 className="ml-1 text-subtle hover:text-bad"
-                                onClick={() => {
-                                  if (
-                                    !window.confirm(
-                                      `把「${env.name}」移入回收站？正在运行的浏览器会先停止。`,
-                                    )
-                                  )
-                                    return;
-                                  void trashEnv(env.id);
-                                }}
+                                onClick={() => setTrashing({ id: env.id, name: env.name })}
                               >
                                 <Trash2 className="size-3.5" />
                               </Button>
@@ -361,6 +366,27 @@ function EnvironmentsPage() {
             {t("goKernels")}
           </Link>
         </div>
+      ) : null}
+
+      {trashing ? (
+        <Dialog open onOpenChange={(o) => !o && setTrashing(null)}>
+          <DialogContent title={`把「${trashing.name}」移入回收站？`}>
+            <p className="text-sm text-muted">正在运行的浏览器会先停止。之后可以在回收站恢复。</p>
+            <div className="mt-6 flex justify-end gap-2">
+              <Button onClick={() => setTrashing(null)}>{t("cancel")}</Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  const id = trashing.id;
+                  setTrashing(null);
+                  void trashEnv(id);
+                }}
+              >
+                移入回收站
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {purging ? (
@@ -556,22 +582,35 @@ function CreateWizard({
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent title={t("createTitle")}>
-        <div className="mb-5 flex items-center gap-2">
+        <ol className="mb-5 flex items-center gap-2">
           {steps.map((label, i) => (
-            <span
-              key={label}
-              className={
-                i === step
-                  ? "rounded-full bg-accent-wash px-3 py-1 text-xs font-semibold text-accent-text"
-                  : i < step
-                    ? "rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-ink"
-                    : "rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-subtle"
-              }
-            >
-              {i + 1} {label}
-            </span>
+            <li key={label} className="flex items-center gap-2">
+              {i > 0 ? <span className="h-px w-5 bg-line-strong" aria-hidden="true" /> : null}
+              <span
+                className={
+                  i === step
+                    ? "inline-flex items-center gap-1.5 text-[13px] font-semibold text-accent-text"
+                    : i < step
+                      ? "inline-flex items-center gap-1.5 text-[13px] font-medium text-ink"
+                      : "inline-flex items-center gap-1.5 text-[13px] font-medium text-subtle"
+                }
+              >
+                <span
+                  className={
+                    i === step
+                      ? "grid size-5 place-items-center rounded-full border border-accent bg-accent-wash text-[11px] font-semibold text-accent-text"
+                      : i < step
+                        ? "grid size-5 place-items-center rounded-full bg-accent-wash text-[11px] font-semibold text-accent-text"
+                        : "grid size-5 place-items-center rounded-full bg-surface-2 text-[11px] font-semibold text-subtle"
+                  }
+                >
+                  {i + 1}
+                </span>
+                {label}
+              </span>
+            </li>
           ))}
-        </div>
+        </ol>
 
         {step === 0 ? (
           <div className="grid grid-cols-2 gap-2">
@@ -783,7 +822,7 @@ function CreateWizard({
 
         {error ? <p className="mt-4 text-[13px] text-bad">{error}</p> : null}
 
-        <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 mt-6 flex justify-between border-t border-line bg-canvas px-6 py-4">
+        <div className="sticky -bottom-6 z-10 -mx-6 -mb-6 mt-6 flex justify-between border-t border-line bg-surface px-6 py-4">
           <Button type="button" onClick={step === 0 ? onClose : () => setStep((s) => s - 1)}>
             {step === 0 ? t("cancel") : t("back")}
           </Button>

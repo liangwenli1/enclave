@@ -13,6 +13,7 @@ import {
   Select,
 } from "@/components/ui";
 import { PageHeader } from "@/components/ui";
+import { checkProxy } from "@/lib/kernel/host-api";
 import { t } from "@/lib/i18n";
 import { makeId, type ProxyItem } from "@/lib/schema";
 import { canEdit } from "@/lib/session";
@@ -24,12 +25,27 @@ export const Route = createFileRoute("/network")({ component: NetworkPage });
 function NetworkPage() {
   const proxies = useEnclave((s) => s.proxies);
   const environments = useEnclave((s) => s.environments);
-  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<ProxyItem | "new" | null>(null);
   const vault = useEnclave((s) => s.vault);
   // 操作员：代理是团队配好的，他只管用。改不了，也看不到密码存没存。
   const mayEdit = canEdit(useEnclave((s) => s.session.role));
   const [filling, setFilling] = useState<ProxyItem | null>(null);
   const [removing, setRemoving] = useState<{ id: string; name: string; used: number } | null>(null);
+  const [checks, setChecks] = useState<
+    Record<string, { pending: true } | { pending: false; ok: boolean; text: string }>
+  >({});
+
+  const check = async (id: string) => {
+    setChecks((current) => ({ ...current, [id]: { pending: true } }));
+    const res = await checkProxy(id);
+    const place = res.ok ? [res.city, res.country].filter(Boolean).join(" ") : "";
+    setChecks((current) => ({
+      ...current,
+      [id]: res.ok
+        ? { pending: false, ok: true, text: place ? `${res.ip} · ${place}` : res.ip }
+        : { pending: false, ok: false, text: res.message },
+    }));
+  };
 
   const remove = (id: string) => {
     const name = proxies.find((p) => p.id === id)?.name ?? id;
@@ -48,7 +64,7 @@ function NetworkPage() {
         status={`${proxies.length} 个代理`}
         actions={
           proxies.length > 0 && mayEdit ? (
-            <Button variant="primary" onClick={() => setOpen(true)}>
+            <Button variant="primary" onClick={() => setForm("new")}>
               {t("addProxy")}
             </Button>
           ) : undefined
@@ -67,7 +83,7 @@ function NetworkPage() {
             }
             action={
               mayEdit ? (
-                <Button variant="primary" onClick={() => setOpen(true)}>
+                <Button variant="primary" onClick={() => setForm("new")}>
                   {t("addProxy")}
                 </Button>
               ) : undefined
@@ -90,6 +106,7 @@ function NetworkPage() {
                   const used = environments.filter(
                     (e) => !e.deletedAt && e.proxyId === p.id,
                   ).length;
+                  const result = checks[p.id];
                   return (
                     <tr key={p.id}>
                       <td className="wrap">
@@ -98,6 +115,13 @@ function NetworkPage() {
                       </td>
                       <td className="wrap app-mono text-xs">
                         {p.protocol}://{p.host}:{p.port}
+                        {result?.pending ? (
+                          <div className="mt-1 font-sans text-subtle">正在经这条代理查询出口…</div>
+                        ) : result ? (
+                          <div className={`mt-1 font-sans ${result.ok ? "text-ink" : "text-bad"}`}>
+                            {result.ok ? `出口 ${result.text}` : result.text}
+                          </div>
+                        ) : null}
                       </td>
                       <td>
                         {!p.auth?.username ? (
@@ -118,6 +142,12 @@ function NetworkPage() {
                       <td className="text-subtle">{used ? `${used} 个环境` : "未使用"}</td>
                       <td>
                         <div className="flex justify-end gap-1.5">
+                          {mayEdit ? (
+                            <Button onClick={() => setForm(p)}>编辑</Button>
+                          ) : null}
+                          <Button disabled={result?.pending} onClick={() => void check(p.id)}>
+                            {result?.pending ? "检测中" : "检测"}
+                          </Button>
                           {!mayEdit || !p.auth?.username ? null : (
                             <Button
                               disabled={!vault.unlocked}
@@ -149,7 +179,12 @@ function NetworkPage() {
         )}
       </Panel>
 
-      {open ? <ProxyDialog onClose={() => setOpen(false)} /> : null}
+      {form ? (
+        <ProxyDialog
+          proxy={form === "new" ? undefined : form}
+          onClose={() => setForm(null)}
+        />
+      ) : null}
       {filling ? <PasswordDialog proxy={filling} onClose={() => setFilling(null)} /> : null}
 
       {removing ? (
@@ -234,15 +269,15 @@ function PasswordDialog({ proxy, onClose }: { proxy: ProxyItem; onClose: () => v
   );
 }
 
-function ProxyDialog({ onClose }: { onClose: () => void }) {
+function ProxyDialog({ proxy, onClose }: { proxy?: ProxyItem; onClose: () => void }) {
   const [draft, setDraft] = useState({
-    name: "",
-    protocol: "http" as ProxyItem["protocol"],
-    host: "",
-    port: "8080",
-    username: "",
+    name: proxy?.name ?? "",
+    protocol: proxy?.protocol ?? ("http" as ProxyItem["protocol"]),
+    host: proxy?.host ?? "",
+    port: proxy ? String(proxy.port) : "8080",
+    username: proxy?.auth?.username ?? "",
     password: "",
-    country: "",
+    country: proxy?.country ?? "",
   });
   const [errors, setErrors] = useState<{
     host?: string;
@@ -267,28 +302,45 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
       found.port = "请填写 1–65535 之间的整数。";
     if (draft.password && !username) found.username = "填写密码时需同时填写用户名。";
     if (draft.password && !canStorePassword) found.password = "应用锁已锁定，请先解锁。";
+    const usernameChanged = username !== (proxy?.auth?.username ?? "");
+    if (proxy?.auth?.hasPassword && usernameChanged && username && !draft.password) {
+      found.password = "用户名改了，请重新填写密码。";
+    }
     setErrors(found);
     if (Object.keys(found).length) return;
-    const id = makeId("prx");
-    if (draft.password) {
+    const id = proxy?.id ?? makeId("prx");
+    let hasPassword = Boolean(proxy?.auth?.hasPassword && username && !usernameChanged);
+    if (!username) {
+      if (proxy?.auth?.hasPassword) {
+        try {
+          await removeSecret(`proxy:${id}`);
+        } catch (err) {
+          setErrors({ password: err instanceof Error ? err.message : "旧密码没有清掉。" });
+          return;
+        }
+      }
+      hasPassword = false;
+    } else if (draft.password) {
       try {
         await putSecret(`proxy:${id}`, draft.password);
       } catch (err) {
         setErrors({ password: err instanceof Error ? err.message : "密码没有保存。" });
         return;
       }
+      hasPassword = true;
     }
-    useEnclave.getState().upsertProxy({
+    const store = useEnclave.getState();
+    store.upsertProxy({
       id,
       name: draft.name.trim() || `${host}:${port}`,
       protocol: draft.protocol,
       host,
       port,
       country: draft.country.trim() || undefined,
-      auth: username ? { username, hasPassword: Boolean(draft.password) } : undefined,
+      auth: username ? { username, hasPassword } : undefined,
     });
-    useEnclave.getState().addAudit({
-      action: "proxy_add",
+    store.addAudit({
+      action: proxy ? "proxy_edit" : "proxy_add",
       target: id,
       level: "info",
       detail: `${draft.protocol}://${host}:${port}${draft.password ? "，密码已保存" : ""}`,
@@ -298,7 +350,7 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title={t("addProxy")}>
+      <DialogContent title={proxy ? "编辑代理" : t("addProxy")}>
         <div className="grid gap-4">
           <Field label={t("name")}>
             <Input
@@ -345,9 +397,11 @@ function ProxyDialog({ onClose }: { onClose: () => void }) {
             label={t("password")}
             error={errors.password}
             hint={
-              canStorePassword
-                ? "仅以密文保存在本机，保存后页面无法读回明文；启动环境时由本机服务直接取用"
-                : "应用锁已锁定，解锁后方可保存密码"
+              !canStorePassword
+                ? "应用锁已锁定，解锁后方可保存密码"
+                : proxy?.auth?.hasPassword
+                  ? "留空则保持已保存的密码。仅以密文存在本机，页面读不回明文。"
+                  : "仅以密文保存在本机，保存后页面无法读回明文；启动环境时由本机服务直接取用"
             }
           >
             <Input

@@ -45,23 +45,24 @@
   --color-warn: var(--enclave-warn);
   --color-bad: var(--enclave-bad);
 
-  /* 方一点。圆角只有这两档：控件 3px，容器 4px。 */
-  --radius-xs: 2px;
-  --radius-sm: 3px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
-  --radius-xl: 4px;
-  --radius-2xl: 4px;
+  /* 控件 8px，面板 12px。按钮在组件里做成胶囊。 */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
 }
 
 :root {
   color-scheme: light;
 
-  --enclave-canvas: #ffffff;
+  /* 页面是浅灰，侧栏、顶栏、表格和对话框是白的。 */
+  --enclave-canvas: #f3f6fb;
   --enclave-soft: #f7f9fc;
   --enclave-surface: #ffffff;
-  --enclave-surface-2: #eff3f9;
-  --enclave-surface-3: #e3e9f2;
+  --enclave-surface-2: #eef3f9;
+  --enclave-surface-3: #e3eaf3;
 
   /* 字是海军蓝，不是纯黑；灰也偏一点蓝，和官网是同一套。 */
   --enclave-ink: #0b1b33;
@@ -72,14 +73,14 @@
   --enclave-line: #e1e7f0;
   --enclave-line-strong: #c9d3e2;
 
-  /* 蓝只有两个用处：要点的那个按钮，和"正在运行 / 已选中 / 没问题"。 */
-  --enclave-accent: #1d3cff;
+  /* 实心蓝给主按钮和每一行的「启动」。选中、运行中用浅蓝底。 */
+  --enclave-accent: #236bf9;
   --enclave-accent-fg: #ffffff;
-  --enclave-accent-dim: #b8c4ff;
-  --enclave-accent-text: #1d3cff;
-  --enclave-accent-wash: #e8eeff;
+  --enclave-accent-dim: #9dbbff;
+  --enclave-accent-text: #236bf9;
+  --enclave-accent-wash: #e8f1ff;
 
-  --enclave-ok: #1d3cff;
+  --enclave-ok: #236bf9;
   --enclave-warn: #9a5b00;
   --enclave-bad: #c42b1c;
 
@@ -90,23 +91,23 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --enclave-canvas: #070b14;
+    --enclave-canvas: #0b1018;
     --enclave-soft: #0b111c;
-    --enclave-surface: #070b14;
-    --enclave-surface-2: #111a28;
-    --enclave-surface-3: #1a2436;
+    --enclave-surface: #121a28;
+    --enclave-surface-2: #1a2436;
+    --enclave-surface-3: #243044;
     --enclave-ink: #eef2fb;
     --enclave-muted: #c3cddd;
     --enclave-subtle: #8a98ae;
     --enclave-faint: #56647a;
     --enclave-line: #1c2638;
     --enclave-line-strong: #2d3a52;
-    --enclave-accent: #3553ff;
+    --enclave-accent: #3d7bff;
     --enclave-accent-fg: #ffffff;
-    --enclave-accent-dim: #1a2a66;
-    --enclave-accent-text: #8ea3ff;
-    --enclave-accent-wash: #101b40;
-    --enclave-ok: #8ea3ff;
+    --enclave-accent-dim: #1a3366;
+    --enclave-accent-text: #9cb8ff;
+    --enclave-accent-wash: #15284a;
+    --enclave-ok: #9cb8ff;
     --enclave-warn: #f0a53a;
     --enclave-bad: #ff6b6b;
   }
@@ -114,23 +115,23 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --enclave-canvas: #070b14;
+  --enclave-canvas: #0b1018;
   --enclave-soft: #0b111c;
-  --enclave-surface: #070b14;
-  --enclave-surface-2: #111a28;
-  --enclave-surface-3: #1a2436;
+  --enclave-surface: #121a28;
+  --enclave-surface-2: #1a2436;
+  --enclave-surface-3: #243044;
   --enclave-ink: #eef2fb;
   --enclave-muted: #c3cddd;
   --enclave-subtle: #8a98ae;
   --enclave-faint: #56647a;
   --enclave-line: #1c2638;
   --enclave-line-strong: #2d3a52;
-  --enclave-accent: #3553ff;
+  --enclave-accent: #3d7bff;
   --enclave-accent-fg: #ffffff;
-  --enclave-accent-dim: #1a2a66;
-  --enclave-accent-text: #8ea3ff;
-  --enclave-accent-wash: #101b40;
-  --enclave-ok: #8ea3ff;
+  --enclave-accent-dim: #1a3366;
+  --enclave-accent-text: #9cb8ff;
+  --enclave-accent-wash: #15284a;
+  --enclave-ok: #9cb8ff;
   --enclave-warn: #f0a53a;
   --enclave-bad: #ff6b6b;
 }
@@ -198,9 +199,9 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 36px;
+  min-height: 40px;
   padding: 0 12px;
-  border-radius: 3px;
+  border-radius: 8px;
   color: var(--enclave-muted);
   font-size: 14px;
   font-weight: 500;
@@ -214,11 +215,10 @@ body {
   background: var(--enclave-surface-2);
 }
 
-/* 当前页：浅蓝底、蓝字，左边一道蓝线。和"已选中"是同一种蓝，只回答"在哪一页"。 */
+/* 当前页：整行浅蓝底、蓝字。 */
 .app-nav a[data-active="true"] {
   color: var(--enclave-accent-text);
   background: var(--enclave-accent-wash);
-  box-shadow: inset 2px 0 0 var(--enclave-accent);
   font-weight: 600;
 }
 
@@ -241,7 +241,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--enclave-canvas);
+  background: var(--enclave-surface);
   border-bottom: 1px solid var(--enclave-line);
   padding: 10px 16px;
   text-align: left;
@@ -284,7 +284,7 @@ body {
   position: sticky;
   right: 0;
   z-index: 2;
-  background: var(--enclave-canvas);
+  background: var(--enclave-surface);
   border-left: 1px solid var(--enclave-line);
 }
 
@@ -300,13 +300,129 @@ body {
 
 /* ── 对话框 ───────────────────────────────────────────── */
 
+.enclave-overlay[data-state="open"] {
+  animation: enclave-fade var(--quick) var(--ease);
+}
+
 .enclave-dialog {
   color: var(--enclave-ink);
-  background: var(--enclave-canvas);
+  background: var(--enclave-surface);
   border-color: var(--enclave-line-strong);
   box-shadow:
     0 24px 48px -12px rgb(11 27 51 / 0.28),
     0 4px 10px rgb(11 27 51 / 0.08);
+}
+
+.enclave-dialog[data-state="open"] {
+  animation: enclave-pop var(--quick) var(--ease) both;
+}
+
+.enclave-menu[data-state="open"] {
+  animation: enclave-menu-in var(--quick) var(--ease);
+}
+
+@keyframes enclave-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes enclave-pop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes enclave-menu-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 复选框和折叠标题跟按钮同一套形状，不露出系统默认控件。 */
+input[type="checkbox"] {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--enclave-line-strong);
+  border-radius: 3px;
+  background: var(--enclave-surface);
+  display: inline-grid;
+  place-content: center;
+  vertical-align: -2px;
+  flex: none;
+}
+
+input[type="checkbox"]:checked {
+  background: var(--enclave-accent);
+  border-color: var(--enclave-accent);
+}
+
+input[type="checkbox"]:checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid var(--enclave-accent-fg);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+input[type="checkbox"]:indeterminate {
+  background: var(--enclave-accent);
+  border-color: var(--enclave-accent);
+}
+
+input[type="checkbox"]:indeterminate::after {
+  content: "";
+  width: 8px;
+  height: 1.5px;
+  background: var(--enclave-accent-fg);
+  transform: none;
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--enclave-accent) 40%, transparent);
+  outline-offset: 2px;
+}
+
+details > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+
+details > summary::-webkit-details-marker {
+  display: none;
+}
+
+details > summary::after {
+  content: "";
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  flex: none;
+  background-color: currentColor;
+  opacity: 0.72;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>")
+    center / 16px 16px no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>")
+    center / 16px 16px no-repeat;
+  transition: transform var(--quick) var(--ease);
+}
+
+details[open] > summary::after {
+  transform: rotate(180deg);
 }
 
 /* ── 滚动条 ───────────────────────────────────────────── */
